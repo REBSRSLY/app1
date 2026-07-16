@@ -241,6 +241,30 @@ def load_player_names() -> dict[str, str]:
     return names
 
 
+# Display-only English labels for the raw (Italian) role values below.
+ROLE_LABELS = {
+    "Palleggio": "Setter",
+    "Opposto": "Opposite",
+    "Centro": "Middle Blocker",
+    "Banda": "Outside Hitter",
+    "Libero": "Libero",
+}
+
+
+@st.cache_data(show_spinner="Loading scouting data...")
+def load_player_roles() -> dict[str, str]:
+    """Map player code -> role (Italian, from Anagrafica), women's A1 team only.
+
+    Covers all 15 players (unlike roster.py, which only has standalone
+    entries for 13 — Heyrman and Daalderop appear there only as another
+    player's "alt", with no role of their own).
+    """
+    an = pd.read_excel(WELLNESS_FILE, sheet_name="Anagrafica")
+    f = an[an["Squadra"] == "A1F"].copy()
+    f["code"] = f["Atleta"].str.replace("player ", "", regex=False).str.strip()
+    return dict(zip(f["code"], f["Ruolo"]))
+
+
 @st.cache_data(show_spinner="Loading scouting data...")
 def load_scout_data() -> pd.DataFrame:
     """Load and normalize all scout sheets (season total + every match)."""
