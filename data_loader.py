@@ -1,9 +1,9 @@
-"""Caricamento e parsing dei dati grezzi di scouting (Data Volley) e wellness.
+"""Loading and parsing of raw scouting (Data Volley) and wellness data.
 
-I fogli di ``anonymized_matches_F.xlsx`` replicano l'export "per fondamentale"
-di Data Volley: blocchi ripetuti di righe (Fondamentale -> Palla -> Giocatore)
-separati da righe delimitatore (-1 / 0). Questo modulo normalizza tutto in
-DataFrame "long" facili da filtrare e plottare.
+The sheets in ``anonymized_matches_F.xlsx`` replicate Data Volley's "by
+fundamental" export: repeated blocks of rows (Fundamental -> Ball type ->
+Player) separated by delimiter rows (-1 / 0). This module normalizes
+everything into "long" DataFrames that are easy to filter and plot.
 """
 
 from __future__ import annotations
@@ -14,17 +14,45 @@ import streamlit as st
 MATCHES_FILE = "anonymized_matches_F.xlsx"
 WELLNESS_FILE = "anonymized_wellness_file.xlsx"
 
-SEASON_LABEL = "Stagione (Totale)"
+SEASON_LABEL = "Season (Total)"
 
-# Ordine categorico fisso per il tipo di alzata: usato ovunque per colori/assi coerenti.
+# Fixed categorical order for the set type: used everywhere for consistent colors/axes.
+# NOTE: these are the literal values parsed from the source Excel files (Italian in
+# the raw data) — do not rename them, they're used for filtering. See PALLA_LABELS
+# below for the English display mapping.
 PALLA_ORDER = ["Alta", "Media", "Veloce", "Tesa", "Other", "Totale"]
 
 FONDAMENTALI_CON_PALLA = ["Attacco", "Att dopo Ricez", "Contrattacco", "Muro"]
 
-# Mappa colonna Excel (0-indexed) -> nome campo, replicando l'header a riga 2
-# di ogni foglio scout ('Fondam.', 'Palla', 'Giocatore', 'P', 'Set', Ind, *E%, Tot, =, %, BP, pC, /, %, BP, pC, -, %, !, %, +, %, #, %, BP, pC).
-# I nomi dei campi seguono il SIMBOLO Data Volley (non il suo significato, che è
-# specifico per fondamentale — vedi GLOSSARIO più sotto e "istruzioni simbologia.txt").
+# Display-only English labels for the raw (Italian) categorical values above.
+# Keep the raw values untouched anywhere they're used for filtering/matching;
+# apply these mappings only when rendering text, chart axes, or legends.
+FONDAMENTALE_LABELS = {
+    "Battuta": "Serve",
+    "Ricezione": "Reception",
+    "Attacco": "Attack",
+    "Att dopo Ricez": "Attack after Reception",
+    "Contrattacco": "Counter-attack",
+    "Muro": "Block",
+    "Difesa": "Dig",
+    "Free ball": "Free Ball",
+    "Alzata": "Set",
+}
+
+PALLA_LABELS = {
+    "Alta": "High",
+    "Media": "Medium",
+    "Veloce": "Quick",
+    "Tesa": "Shoot",
+    "Other": "Other",
+    "Totale": "Total",
+}
+
+# Excel column (0-indexed) -> field name, replicating the header at row 2 of
+# every scout sheet ('Fondam.', 'Palla', 'Giocatore', 'P', 'Set', Ind, *E%, Tot,
+# =, %, BP, pC, /, %, BP, pC, -, %, !, %, +, %, #, %, BP, pC).
+# Field names follow the Data Volley SYMBOL (not its meaning, which is specific
+# to each fundamental — see GLOSSARY below and "istruzioni simbologia.txt").
 SCOUT_COLS = {
     3: "P",
     4: "Set",
@@ -41,95 +69,97 @@ SCOUT_COLS = {
     19: "Slash_pC",
     21: "Neg",  # "-"
     22: "Neg_pct",
-    24: "Neutro",  # "!"
-    25: "Neutro_pct",
+    24: "Neutral",  # "!"
+    25: "Neutral_pct",
     27: "Pos",  # "+"
     28: "Pos_pct",
-    30: "Perfetto",  # "#"
-    31: "Perfetto_pct",
-    32: "Perfetto_BP",
-    33: "Perfetto_pC",
+    30: "Perfect",  # "#"
+    31: "Perfect_pct",
+    32: "Perfect_BP",
+    33: "Perfect_pC",
 }
 
 NUMERIC_COLS = list(SCOUT_COLS.values())
 
 # ---------------------------------------------------------------------------
-# Glossario simbologia scout, da "istruzioni simbologia.txt".
-# Stessi simboli (=, -, !, +, #, /) hanno significato diverso per fondamentale:
-# qui mappiamo ogni fondamentale al nome corretto delle sue due grade "headline"
-# (# = miglior esito, = = errore) più la legenda completa per i tooltip/caption.
-# "Att dopo Ricez" e "Contrattacco" sono varianti di attacco e condividono la
-# stessa grading table di "Attacco".
+# Scouting symbol glossary, from "istruzioni simbologia.txt".
+# The same symbols (=, -, !, +, #, /) mean different things per fundamental:
+# this maps each fundamental to the correct name for its two "headline" grades
+# (# = best outcome, = = error) plus the full legend for tooltips/captions.
+# Dict KEYS stay Italian (they must match the raw `fondamentale` values parsed
+# from Excel); dict VALUES are pure display text and are in English.
+# "Att dopo Ricez" and "Contrattacco" are attack variants and share Attacco's
+# grading table.
 # ---------------------------------------------------------------------------
 GLOSSARIO = {
     "Battuta": {
         "perfetto": "Ace",
-        "errore": "Errore (rete/fuori)",
+        "errore": "Error (net/out)",
         "legenda": [
-            ("=", "Errore", "Battuta in rete o fuori."),
-            ("-", "Scarso", "Battuta facile che permette una ricezione perfetta all'avversario."),
-            ("!", "Neutro", "Battuta normale (es. float) che mantiene il gioco in equilibrio."),
-            ("+", "Buono", "Battuta insidiosa che mette in difficoltà la ricezione avversaria."),
-            ("#", "Ace", "Punto diretto al servizio."),
+            ("=", "Error", "Serve into the net or out."),
+            ("-", "Poor", "Easy serve that allows a perfect reception."),
+            ("!", "Neutral", "Normal serve (e.g. float) that keeps play balanced."),
+            ("+", "Good", "Tricky serve that puts the opposing reception in trouble."),
+            ("#", "Ace", "Direct point on serve."),
         ],
     },
     "Ricezione": {
-        "perfetto": "Ricezione eccellente",
-        "errore": "Errore / Ace subìto",
+        "perfetto": "Perfect reception",
+        "errore": "Error / Ace conceded",
         "legenda": [
-            ("=", "Errore / Ace subìto", "La ricezione fallisce e l'avversario fa punto."),
-            ("-", "Scarso", "Ricezione molto staccata da rete o imprecisa."),
-            ("!", "Sufficiente", "Ricezione media: il palleggiatore deve correre ma la palla è rigiocabile."),
-            ("+", "Buono", "Ricezione positiva che permette molteplici scelte d'attacco."),
-            ("#", "Eccellente", 'Ricezione perfetta "in testa" al palleggiatore.'),
-            ("/", "Slash", "Ricezione pessima che torna direttamente nel campo avversario a filo rete."),
+            ("=", "Error / Ace conceded", "The reception fails and the opponent scores."),
+            ("-", "Poor", "Reception far from the net or imprecise."),
+            ("!", "Fair", "Average reception: the setter has to run but the ball is playable."),
+            ("+", "Good", "Positive reception that allows multiple attack choices."),
+            ("#", "Perfect", 'Reception perfect "on target" to the setter.'),
+            ("/", "Slash", "Very poor reception that goes straight back into the opposing court along the net."),
         ],
     },
     "Attacco": {
-        "perfetto": "Punto",
-        "errore": "Errore",
+        "perfetto": "Point",
+        "errore": "Error",
         "legenda": [
-            ("=", "Errore", "Attacco spedito direttamente fuori o in rete."),
-            ("!", "Neutro", "Attacco tenuto dalla difesa avversaria (palla difesa e rigiocata)."),
-            ("#", "Punto", "Attacco vincente che mette a terra la palla o fa mani-out."),
+            ("=", "Error", "Attack sent straight out or into the net."),
+            ("!", "Neutral", "Attack dug by the opposing defense (ball dug and replayed)."),
+            ("#", "Point", "Winning attack that lands the ball or forces a hitting error."),
         ],
     },
     "Muro": {
-        "perfetto": "Muro punto",
-        "errore": "Errore",
+        "perfetto": "Block point",
+        "errore": "Error",
         "legenda": [
-            ("=", "Errore", "Errore al muro (es. tocco di rete o invasione)."),
-            ("-", "Invasione / tocco negativo", "Muro che tocca la palla ma la devia agevolando l'avversario."),
-            ("!", "Neutro", "Tocco di contenimento: il muro smorza la palla e la squadra può difenderla."),
-            ("#", "Muro punto", "Blocco vincente che rispedisce la palla a terra nel campo avversario."),
+            ("=", "Error", "Blocking error (e.g. net touch or invasion)."),
+            ("-", "Invasion / negative touch", "Block that touches the ball but deflects it in the opponent's favor."),
+            ("!", "Neutral", "Containment touch: the block slows the ball down and the team can dig it."),
+            ("#", "Block point", "Winning block that sends the ball straight down into the opposing court."),
         ],
     },
     "Difesa": {
-        "perfetto": "Difesa eccellente",
-        "errore": "Errore",
+        "perfetto": "Perfect dig",
+        "errore": "Error",
         "legenda": [
-            ("=", "Errore", "Difesa fallita (la palla cade a terra o vola via senza controllo)."),
-            ("-", "Scarso", "Difesa difettosa che non permette una ricostruzione pulita."),
-            ("!", "Neutro", "Difesa che tiene la palla alta e rigiocabile, anche se staccata."),
-            ("+", "Buono", "Ottima difesa che permette al palleggiatore di ricostruire un contrattacco."),
-            ("#", "Eccellente", "Difesa perfetta posizionata direttamente nella zona del palleggiatore."),
+            ("=", "Error", "Failed dig (the ball hits the floor or flies off with no control)."),
+            ("-", "Poor", "Flawed dig that doesn't allow a clean rebuild."),
+            ("!", "Neutral", "Dig that keeps the ball high and playable, even if off-target."),
+            ("+", "Good", "Great dig that lets the setter build a counter-attack."),
+            ("#", "Perfect", "Perfect dig placed directly in the setter's zone."),
         ],
     },
     "Free ball": {
-        "perfetto": "Eccellente",
-        "errore": "Errore",
+        "perfetto": "Perfect",
+        "errore": "Error",
         "legenda": [
-            ("=", "Errore", "Clamoroso errore su palla facile (es. palla che cade per malinteso)."),
-            ("+ / #", "Positivo / Eccellente", "Free ball appoggiata alla perfezione al palleggiatore."),
+            ("=", "Error", "Blatant error on an easy ball (e.g. ball dropped due to miscommunication)."),
+            ("+ / #", "Good / Perfect", "Free ball delivered perfectly to the setter."),
         ],
     },
     "Alzata": {
-        "perfetto": "Alzata eccellente",
-        "errore": "Errore",
+        "perfetto": "Perfect set",
+        "errore": "Error",
         "legenda": [
-            ("=", "Errore", "Fallo di palleggio (es. doppia, trattenuta) o alzata completamente fuori misura."),
-            ("-", "Scarso", "Alzata imprecisa che mette in netta difficoltà l'attaccante."),
-            ("#", "Eccellente", "Alzata perfetta."),
+            ("=", "Error", "Setting fault (e.g. double contact, held ball) or set completely off target."),
+            ("-", "Poor", "Imprecise set that puts the hitter in real trouble."),
+            ("#", "Perfect", "Perfect set."),
         ],
     },
 }
@@ -138,22 +168,22 @@ GLOSSARIO["Contrattacco"] = GLOSSARIO["Attacco"]
 
 
 def perfetto_label(fondamentale: str) -> str:
-    """Nome del miglior esito (simbolo '#') per il fondamentale dato."""
-    return GLOSSARIO.get(fondamentale, {}).get("perfetto", "Perfetto")
+    """Name of the best outcome (symbol '#') for the given fundamental."""
+    return GLOSSARIO.get(fondamentale, {}).get("perfetto", "Perfect")
 
 
 def errore_label(fondamentale: str) -> str:
-    """Nome dell'errore (simbolo '=') per il fondamentale dato."""
-    return GLOSSARIO.get(fondamentale, {}).get("errore", "Errore")
+    """Name of the error (symbol '=') for the given fundamental."""
+    return GLOSSARIO.get(fondamentale, {}).get("errore", "Error")
 
 
 def legenda_fondamentale(fondamentale: str) -> list[tuple[str, str, str]]:
-    """Legenda completa (simbolo, nome, descrizione) per il fondamentale dato."""
+    """Full legend (symbol, name, description) for the given fundamental."""
     return GLOSSARIO.get(fondamentale, {}).get("legenda", [])
 
 
 def _parse_scout_sheet(df: pd.DataFrame, match_label: str) -> list[dict]:
-    """Trasforma un foglio scout grezzo (header=None) in righe 'long'."""
+    """Turn a raw scout sheet (header=None) into 'long' rows."""
     rows = []
     fondamentale = None
     palla = None
@@ -165,9 +195,9 @@ def _parse_scout_sheet(df: pd.DataFrame, match_label: str) -> list[dict]:
 
         if isinstance(c0, str) and c0 != "Fondam.":
             fondamentale = c0
-            palla = None  # nuovo fondamentale -> si riparte dal blocco 'Totale'
+            palla = None  # new fundamental -> restart from the 'Total' block
         elif c0 in (-1, 0) and pd.isna(c2):
-            continue  # riga delimitatore tra blocchi
+            continue  # delimiter row between blocks
 
         if fondamentale is None or pd.isna(c2):
             continue
@@ -200,20 +230,20 @@ def _parse_scout_sheet(df: pd.DataFrame, match_label: str) -> list[dict]:
     return rows
 
 
-@st.cache_data(show_spinner="Carico i dati di scouting...")
+@st.cache_data(show_spinner="Loading scouting data...")
 def load_player_names() -> dict[str, str]:
-    """Mappa codice giocatrice -> nome reale, solo squadra A1 Femminile."""
+    """Map player code -> real name, women's A1 team only."""
     an = pd.read_excel(WELLNESS_FILE, sheet_name="Anagrafica")
     f = an[an["Squadra"] == "A1F"].copy()
     f["code"] = f["Atleta"].str.replace("player ", "", regex=False).str.strip()
     names = dict(zip(f["code"], f["Unnamed: 3"]))
-    names["UNKNOWN"] = "Sconosciuta"
+    names["UNKNOWN"] = "Unknown"
     return names
 
 
-@st.cache_data(show_spinner="Carico i dati di scouting...")
+@st.cache_data(show_spinner="Loading scouting data...")
 def load_scout_data() -> pd.DataFrame:
-    """Carica e normalizza tutti i fogli scout (Totale stagione + ogni partita)."""
+    """Load and normalize all scout sheets (season total + every match)."""
     xl = pd.ExcelFile(MATCHES_FILE)
     all_rows: list[dict] = []
 
@@ -227,23 +257,23 @@ def load_scout_data() -> pd.DataFrame:
 
     names = load_player_names()
     data["player_name"] = data["player_code"].map(names)
-    data.loc[data["is_team"], "player_name"] = "Squadra"
+    data.loc[data["is_team"], "player_name"] = "Team"
 
     data["palla"] = pd.Categorical(data["palla"], categories=PALLA_ORDER, ordered=True)
     return data
 
 
-@st.cache_data(show_spinner="Carico il calendario partite...")
+@st.cache_data(show_spinner="Loading match calendar...")
 def load_match_list() -> list[str]:
-    """Elenco date partita (esclusa la Stagione), ordine cronologico decrescente."""
+    """List of match dates (season total excluded), reverse chronological order."""
     xl = pd.ExcelFile(MATCHES_FILE)
     dates = [s for s in xl.sheet_names if s != "TOTALE 23-24"]
     return sorted(dates, reverse=True)
 
 
-@st.cache_data(show_spinner="Carico i dati wellness...")
+@st.cache_data(show_spinner="Loading wellness data...")
 def load_wellness_data() -> dict[str, pd.DataFrame]:
-    """Carica i fogli wellness/RPE/salti della squadra femminile con nomi reali."""
+    """Load the women's team wellness/RPE/jump sheets with real names."""
     names = load_player_names()
 
     rpe = pd.read_excel(WELLNESS_FILE, sheet_name="Rpe TL F")

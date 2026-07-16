@@ -5,16 +5,16 @@ from ui_helpers import section_header
 
 
 def render():
-    section_header("Formazioni", "Sestetto titolare, rotazioni e alternanze per ruolo, con lo stato di recupero di chi è in campo.")
+    section_header("Lineups", "Starting six, rotations and alternates by role, with recovery status for players on court.")
 
-    # Rappresentazione del campo da gioco (3x2 per il sestetto attivo)
-    st.subheader("Disposizione in Campo (Sestetto)")
+    # Court layout (3x2 for the active starting six)
+    st.subheader("Court Layout (Starting Six)")
 
-    campo_titolari = [p for p in titolari if p["pos"] != "L"]
+    court_starters = [p for p in titolari if p["pos"] != "L"]
 
-    # Divisione in 3 colonne per simulare la griglia del campo da gioco
+    # Split into 3 columns to simulate the court grid
     cols = st.columns(3)
-    for i, p in enumerate(campo_titolari):
+    for i, p in enumerate(court_starters):
         col_index = i % 3
         with cols[col_index]:
             alt_text = f"\n↔ {p['alt']}" if "alt" in p else ""

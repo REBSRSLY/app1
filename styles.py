@@ -1,10 +1,10 @@
-"""CSS personalizzato per replicare lo stile pulito del mockup React."""
+"""Custom CSS replicating the clean style of the React mockup."""
 
 import streamlit as st
 
 CUSTOM_CSS = """
     <style>
-        /* Variabili e stili generali */
+        /* General variables and styles */
         :root {
             --accent: #c0392b;
             --accent-bg: #fbeceb;
@@ -12,7 +12,7 @@ CUSTOM_CSS = """
             --line: #e6e6e6;
         }
 
-        /* Stile sidebar */
+        /* Sidebar style */
         .css-1d391kg { padding-top: 2rem; }
         .brand-title {
             font-size: 1.1rem;
@@ -26,7 +26,7 @@ CUSTOM_CSS = """
             margin-bottom: 1.5rem;
         }
 
-        /* Box Bozze di lavoro */
+        /* Draft/work-in-progress box */
         .draft-block {
             border: 1px dashed #c6c6c6;
             border-radius: 10px;
@@ -49,7 +49,7 @@ CUSTOM_CSS = """
         }
         .ph-line:last-child { margin-bottom: 0; }
 
-        /* Card di Allerta (TQR) */
+        /* Alert card (TQR) */
         .alert-card {
             background-color: #fff6ea;
             border: 1px solid #f0dcb4;
@@ -63,21 +63,7 @@ CUSTOM_CSS = """
             gap: 10px;
         }
 
-        /* Badge di Capitano */
-        .cap-tag {
-            display: inline-block;
-            margin-left: 8px;
-            font-size: 10px;
-            font-style: normal;
-            text-transform: uppercase;
-            color: #c0392b;
-            border: 1px solid #e6bdb8;
-            border-radius: 4px;
-            padding: 1px 5px;
-            font-weight: bold;
-        }
-
-        /* Chips per le date delle partite */
+        /* Match date chips */
         .chip-container {
             display: flex;
             flex-wrap: wrap;
@@ -92,6 +78,40 @@ CUSTOM_CSS = """
             font-family: monospace;
             color: #444;
             background-color: #ffffff;
+        }
+
+        /* Dossier-style player cards (Players page) */
+        .dossier-tab {
+            height: 6px;
+            border-radius: 6px 6px 0 0;
+            margin: -1px -1px 12px -1px;
+        }
+        .dossier-tab.starter { background: var(--accent); }
+        .dossier-tab.bench { background: var(--muted); }
+        .dossier-id {
+            font-family: monospace;
+            font-size: 11px;
+            letter-spacing: 0.08em;
+            color: var(--muted);
+            text-transform: uppercase;
+        }
+        .dossier-name {
+            font-size: 1.15rem;
+            font-weight: 700;
+        }
+        .stamp-captain {
+            display: inline-block;
+            margin-left: 8px;
+            font-size: 10px;
+            font-family: monospace;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--accent);
+            border: 1.5px solid var(--accent);
+            border-radius: 3px;
+            padding: 1px 6px;
+            font-weight: bold;
+            transform: rotate(-4deg);
         }
     </style>
 """

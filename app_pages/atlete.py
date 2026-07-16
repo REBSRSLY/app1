@@ -4,39 +4,37 @@ from roster import titolari, panchina
 from ui_helpers import section_header
 
 
-def _render_atleta_row(p, is_titolare=True):
-    pos_str = f"**{p['pos']}**" if is_titolare else "—"
-    tag_html = f'<span class="cap-tag">{p["tag"]}</span>' if "tag" in p else ""
-    alt_str = f" *(alterna con {p['alt']})*" if "alt" in p else ""
+def _render_dossier_card(p, is_starter=True):
+    file_id = f"FILE · {p['pos']} · {p['code']}" if "pos" in p else f"FILE · {p['code']}"
+    tab_class = "starter" if is_starter else "bench"
+    captain_html = '<span class="stamp-captain">Captain</span>' if "tag" in p else ""
 
-    col1, col2, col3, col4 = st.columns([1, 4, 3, 2])
-    with col1:
-        st.markdown(pos_str)
-    with col2:
-        st.markdown(f"**{p['name']}** {tag_html}", unsafe_allow_html=True)
-    with col3:
-        st.write(p['role'])
-    with col4:
-        st.code(p['code'])
+    with st.container(border=True):
+        st.markdown(f'<div class="dossier-tab {tab_class}"></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="dossier-id">{file_id}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="dossier-name">{p["name"]}{captain_html}</div>', unsafe_allow_html=True)
+        st.caption(p["role"])
+        if "alt" in p:
+            st.caption(f"Alternates with: {p['alt']}")
 
-    if alt_str:
-        st.caption(alt_str)
-    st.write("---")
+
+def _render_grid(players, is_starter):
+    cols = st.columns(3)
+    for i, p in enumerate(players):
+        with cols[i % 3]:
+            _render_dossier_card(p, is_starter=is_starter)
 
 
 def render():
-    section_header("Atlete", "Rosa completa. Ogni riga apre la scheda individuale con wellness + rendimento incrociati.")
+    section_header("Players", "Full roster. Each file summarizes role, position and rotation notes.")
 
-    search_query = st.text_input("🔍 Cerca atleta...", placeholder="Inserisci il nome...")
+    search_query = st.text_input("🔍 Search player...", placeholder="Type a name...")
 
-    st.subheader("Titolari")
-    st.write("---")
-    for p in titolari:
-        if not search_query or search_query.lower() in p['name'].lower():
-            _render_atleta_row(p, is_titolare=True)
+    def _matches(p):
+        return not search_query or search_query.lower() in p["name"].lower()
 
-    st.subheader("Panchina")
-    st.write("---")
-    for p in panchina:
-        if not search_query or search_query.lower() in p['name'].lower():
-            _render_atleta_row(p, is_titolare=False)
+    st.subheader("Starting Roster")
+    _render_grid([p for p in titolari if _matches(p)], is_starter=True)
+
+    st.subheader("Bench")
+    _render_grid([p for p in panchina if _matches(p)], is_starter=False)

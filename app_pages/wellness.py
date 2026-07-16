@@ -5,16 +5,16 @@ from ui_helpers import section_header
 
 def render():
     section_header(
-        "Carico & Wellness",
-        "Monitoraggio giornaliero: questionario wellness (Fatica, Sonno, Doms, Stress, Mood, TQR), "
-        "RPE/Training Load, conteggio salti — per squadra o singola atleta.",
+        "Load & Wellness",
+        "Daily monitoring: wellness questionnaire (Fatigue, Sleep, Doms, Stress, Mood, TQR), "
+        "RPE/Training Load, jump count — for the team or an individual player.",
     )
 
     st.markdown("""
         <div class="draft-block">
-            <div class="draft-label">Bozza di lavoro</div>
-            <div class="ph-line">📈 <b>Vista squadra:</b> trend TQR medio nel tempo (già in bozza nel primo mockup)</div>
-            <div class="ph-line">👤 <b>Vista atleta:</b> stesso trend filtrato + confronto con carico (RPE × durata) e salti giornalieri</div>
-            <div class="ph-line">⚙️ Soglie di allerta configurabili (es. TQR sotto una certa media)</div>
+            <div class="draft-label">Work in progress</div>
+            <div class="ph-line">📈 <b>Team view:</b> average TQR trend over time (already drafted in the first mockup)</div>
+            <div class="ph-line">👤 <b>Player view:</b> same trend filtered + comparison with load (RPE × duration) and daily jumps</div>
+            <div class="ph-line">⚙️ Configurable alert thresholds (e.g. TQR below a certain average)</div>
         </div>
     """, unsafe_allow_html=True)

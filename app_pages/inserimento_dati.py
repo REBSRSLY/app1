@@ -5,15 +5,15 @@ from ui_helpers import section_header
 
 def render():
     section_header(
-        "Inserimento dati",
-        "Caricamento nuovi dati: wellness/RPE/salti giornalieri per atleta, oppure scouting di una nuova partita.",
+        "Data Entry",
+        "Upload new data: daily wellness/RPE/jumps per player, or scouting for a new match.",
     )
 
     st.markdown("""
         <div class="draft-block">
-            <div class="draft-label">Bozza di lavoro</div>
-            <div class="ph-line">📝 <b>Form wellness giornaliero:</b> seleziona atleta + data → Fatica, Sonno, Doms, Stress, Mood (calcolo TQR automatico)</div>
-            <div class="ph-line">⏱️ <b>Form RPE/salti:</b> seleziona sessione (AM/PM) → RPE, durata, numero salti</div>
-            <div class="ph-line">📥 <b>Import scouting partita:</b> caricamento da file esterno (formato da definire) oppure inserimento manuale per fondamentale</div>
+            <div class="draft-label">Work in progress</div>
+            <div class="ph-line">📝 <b>Daily wellness form:</b> select player + date → Fatigue, Sleep, Doms, Stress, Mood (automatic TQR calculation)</div>
+            <div class="ph-line">⏱️ <b>RPE/jumps form:</b> select session (AM/PM) → RPE, duration, jump count</div>
+            <div class="ph-line">📥 <b>Match scouting import:</b> upload from an external file (format TBD) or manual entry per fundamental</div>
         </div>
     """, unsafe_allow_html=True)

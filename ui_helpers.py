@@ -1,4 +1,4 @@
-"""Piccole utility di UI condivise tra le sezioni dell'app."""
+"""Small UI utilities shared across the app's sections."""
 
 import streamlit as st
 

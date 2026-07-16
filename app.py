@@ -1,13 +1,13 @@
-"""Punto di ingresso configurato su Streamlit Cloud (Main file path: app.py).
+"""Entry point configured on Streamlit Cloud (Main file path: app.py).
 
-La struttura reale dell'app vive in Main_activity.py: questo file esiste solo
-per non dover cambiare il "Main file path" nelle impostazioni di deploy.
+The app's real structure lives in Main_activity.py: this file exists only so
+we don't have to change the "Main file path" in the deploy settings.
 
-Nota: usiamo runpy invece di un semplice `import Main_activity` perché Python
-importa un modulo una sola volta per processo. Streamlit invece deve
-rieseguire l'intero script ad ogni interazione (ogni rerun): con un import
-semplice, Main_activity si eseguirebbe solo al primo caricamento e le
-interazioni successive risulterebbero in una pagina vuota.
+Note: we use runpy instead of a plain `import Main_activity` because Python
+only imports a module once per process. Streamlit, however, needs to re-run
+the entire script on every interaction (every rerun): with a plain import,
+Main_activity would only execute on the first load, and later interactions
+would result in a blank page.
 """
 
 import runpy
