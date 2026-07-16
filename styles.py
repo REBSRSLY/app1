@@ -7,17 +7,16 @@ CUSTOM_CSS = """
         /* General variables and styles */
         :root {
             --accent: #c0392b;
-            --accent-bg: #fbeceb;
-            --muted: #8a8a8a;
-            --line: #e6e6e6;
+            --accent-bg: rgba(192, 57, 43, 0.12);
+            --surface: #181818;
+            --muted: #9a9a9a;
+            --line: #2a2a2a;
         }
 
         /* Sidebar style */
-        .css-1d391kg { padding-top: 2rem; }
         .brand-title {
             font-size: 1.1rem;
             font-weight: 700;
-            color: #1a1a1a;
             margin-bottom: 0px;
         }
         .brand-subtitle {
@@ -28,22 +27,22 @@ CUSTOM_CSS = """
 
         /* Draft/work-in-progress box */
         .draft-block {
-            border: 1px dashed #c6c6c6;
+            border: 1px dashed var(--line);
             border-radius: 10px;
             padding: 16px;
-            background-color: #fcfcfc;
+            background-color: var(--surface);
             margin-bottom: 15px;
         }
         .draft-label {
             font-size: 11px;
             text-transform: uppercase;
             letter-spacing: 0.08em;
-            color: #8a8a8a;
+            color: var(--muted);
             font-weight: bold;
             margin-bottom: 10px;
         }
         .ph-line {
-            color: #555555;
+            color: var(--muted);
             font-size: 13.5px;
             margin-bottom: 8px;
         }
@@ -51,12 +50,11 @@ CUSTOM_CSS = """
 
         /* Alert card (TQR) */
         .alert-card {
-            background-color: #fff6ea;
-            border: 1px solid #f0dcb4;
+            background-color: rgba(240, 166, 0, 0.1);
+            border: 1px solid rgba(240, 166, 0, 0.35);
             border-radius: 8px;
             padding: 12px;
             font-size: 13px;
-            color: #1a1a1a;
             margin-bottom: 15px;
             display: flex;
             align-items: center;
@@ -71,13 +69,13 @@ CUSTOM_CSS = """
             margin-top: 10px;
         }
         .date-chip {
-            border: 1px solid #e6e6e6;
+            border: 1px solid var(--line);
             border-radius: 7px;
             padding: 4px 10px;
             font-size: 12.5px;
             font-family: monospace;
-            color: #444;
-            background-color: #ffffff;
+            color: var(--muted);
+            background-color: var(--surface);
         }
 
         /* Dossier-style player cards (Players page) */
