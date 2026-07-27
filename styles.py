@@ -61,23 +61,6 @@ CUSTOM_CSS = """
             gap: 10px;
         }
 
-        /* Match date chips */
-        .chip-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin-top: 10px;
-        }
-        .date-chip {
-            border: 1px solid var(--line);
-            border-radius: 7px;
-            padding: 4px 10px;
-            font-size: 12.5px;
-            font-family: monospace;
-            color: var(--muted);
-            background-color: var(--surface);
-        }
-
         /* Dossier-style player cards (Players page) */
         .dossier-tab {
             height: 6px;

@@ -41,6 +41,6 @@ def render():
             <div class="draft-label">Quick access</div>
             <div class="ph-line">📊 <b>Scout & Stats</b> — per-fundamental statistics and attack game distribution</div>
             <div class="ph-line">💤 <b>Load & Wellness</b> — wellness radars, jump load and RPE/training load trends</div>
-            <div class="ph-line">📅 Next commitment (match/training) — no calendar data source connected yet</div>
+            <div class="ph-line">📅 <b>Matches</b> — season calendar by competition and championship standings</div>
         </div>
     """, unsafe_allow_html=True)

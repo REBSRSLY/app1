@@ -71,23 +71,56 @@ def _toggle_sidebar():
 
 expanded = st.session_state.sidebar_expanded
 
-if not expanded:
-    # Shrink the native sidebar container to a narrow rail and hide the nav
-    # button labels (kept in the DOM for accessibility, just visually hidden)
-    # so only the icons remain visible.
-    st.markdown(
-        """
-        <style>
-            [data-testid="stSidebar"] { width: 64px !important; min-width: 64px !important; }
-            [data-testid="stSidebar"] [class*="st-key-navrail_"] button p,
-            [data-testid="stSidebar"] [class*="st-key-expand_toggle"] button p { display: none; }
-            [data-testid="stSidebar"] [class*="st-key-navrail_"] button,
-            [data-testid="stSidebar"] [class*="st-key-expand_toggle"] button { justify-content: center; padding-left: 0; padding-right: 0; }
-            [data-testid="stSidebarCollapseButton"] { display: none; }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
+# Streamlit's own native collapse control is always disabled: this app only
+# ever collapses to the icon rail via the custom button below, driven purely
+# by our own session_state. Streamlit's native collapsed/expanded state
+# (aria-expanded) is NOT a reliable signal to build on: it persists on its
+# own across page reloads (independently of our session_state, seemingly via
+# the browser rather than the Python session) and can end up stuck on the
+# opposite value from what was just clicked. So rather than reading it, we
+# unconditionally force the sidebar's width to whatever OUR state says it
+# should be, in both directions, every rerun -- that's the only way to keep
+# the visible width in sync with session_state regardless of whatever the
+# native attribute happens to be doing underneath.
+#
+# Streamlit's native sidebar width transition also keeps a live Web
+# Animation running on transform/min-width/max-width that overrides even
+# !important values for as long as it's "running" (a CSS-transitions-vs-
+# !important quirk); disabling the transition outright is what makes our
+# own width override actually stick instead of being silently ignored.
+if expanded:
+    _sidebar_width_css = """
+        [data-testid="stSidebar"] {
+            min-width: 300px !important;
+            max-width: 300px !important;
+            width: 300px !important;
+            transform: none !important;
+        }
+    """
+else:
+    _sidebar_width_css = """
+        [data-testid="stSidebar"] {
+            min-width: 64px !important;
+            max-width: 64px !important;
+            width: 64px !important;
+            transform: none !important;
+        }
+        [data-testid="stSidebar"] [class*="st-key-navrail_"] button p,
+        [data-testid="stSidebar"] [class*="st-key-expand_toggle"] button p { display: none; }
+        [data-testid="stSidebar"] [class*="st-key-navrail_"] button,
+        [data-testid="stSidebar"] [class*="st-key-expand_toggle"] button { justify-content: center; padding-left: 0; padding-right: 0; }
+    """
+
+st.markdown(
+    f"""
+    <style>
+        [data-testid="stSidebarCollapseButton"] {{ display: none; }}
+        [data-testid="stSidebar"] {{ transition: none !important; }}
+        {_sidebar_width_css}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 with st.sidebar:
     if expanded:

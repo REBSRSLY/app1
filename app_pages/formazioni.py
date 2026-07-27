@@ -27,4 +27,4 @@ def render():
 
     st.write("---")
     libero = next(p for p in titolari if p["pos"] == "L")
-    st.write(f"🛡️ **Libero:** {libero['name']} (`{libero['code']}`)")
+    st.write(f"🛡️ **Libero:** {libero['name']}")

@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 import data_loader as dl
+import match_calendar as mc
 from ui_helpers import section_header
 
 # Fixed colors for set type: same color everywhere in the app, order never cycled.
@@ -28,6 +29,9 @@ def render():
     palla_tipi = [p for p in dl.PALLA_ORDER if p != "Totale"]
     palla_tipi_en = [dl.PALLA_LABELS[p] for p in palla_tipi]
 
+    def format_partita_option(opt: str) -> str:
+        return opt if opt == dl.SEASON_LABEL else mc.match_label(opt)
+
     tab_generale, tab_distribuzione = st.tabs(["General stats", "Game distribution"])
 
     # ------------------------------------------------------------------
@@ -36,7 +40,7 @@ def render():
     with tab_generale:
         col_partita, col_fond = st.columns(2)
         with col_partita:
-            partita_sel = st.selectbox("Match", partita_options, key="gen_partita")
+            partita_sel = st.selectbox("Match", partita_options, key="gen_partita", format_func=format_partita_option)
         with col_fond:
             fondamentali = sorted(scout["fondamentale"].unique())
             fond_sel = st.selectbox(
@@ -126,7 +130,7 @@ def render():
 
         col_partita, col_fond, col_metrica = st.columns(3)
         with col_partita:
-            partita_sel2 = st.selectbox("Match", partita_options, key="dist_partita")
+            partita_sel2 = st.selectbox("Match", partita_options, key="dist_partita", format_func=format_partita_option)
         with col_fond:
             fond_sel2 = st.selectbox(
                 "Fundamental", dl.FONDAMENTALI_CON_PALLA,

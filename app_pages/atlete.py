@@ -5,7 +5,7 @@ from ui_helpers import section_header
 
 
 def _render_dossier_card(p, is_starter=True):
-    file_id = f"FILE · {p['pos']} · {p['code']}" if "pos" in p else f"FILE · {p['code']}"
+    file_id = f"FILE · {p['pos']}" if "pos" in p else f"FILE · {p['role']}"
     tab_class = "starter" if is_starter else "bench"
     captain_html = '<span class="stamp-captain">Captain</span>' if "tag" in p else ""
 
