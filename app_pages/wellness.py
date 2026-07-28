@@ -67,14 +67,21 @@ def render():
                 else:
                     lo, hi = PARAM_RANGE[param]
                     is_negative = param in NEGATIVE_PARAMS
-                    r, theta = close_polygon(list(team_avg.values), list(team_avg.index))
+                    # Same inversion as the individual radar below: these
+                    # params are 1-5 with high = worse, so plotting the raw
+                    # value would make a *bad* score look bigger on the
+                    # chart. Flip to lo+hi-x so bigger always means better,
+                    # like Tqr (and the individual chart) already do.
+                    values = [lo + hi - v for v in team_avg.values] if is_negative else list(team_avg.values)
+                    r, theta = close_polygon(values, list(team_avg.index))
                     fig = go.Figure(go.Scatterpolar(
                         r=r, theta=theta, fill="toself",
-                        line_color="#c0392b" if is_negative else "#2ecc71",
-                        fillcolor="rgba(192,57,43,0.25)" if is_negative else "rgba(46,204,113,0.25)",
+                        line_color="#2ecc71", fillcolor="rgba(46,204,113,0.25)",
                     ))
                     fig.update_layout(**dark_polar_layout([lo, hi]))
                     st.plotly_chart(fig, width="stretch", theme=None)
+                    if is_negative:
+                        st.caption("Axis inverted so bigger = better.")
 
         with col_player:
             with st.container(border=True):
