@@ -19,7 +19,7 @@ BASE_CARD_CSS = """
     [class*="st-key-playercard_"] button {
         width: 100%;
         min-width: 92px;
-        height: 100px !important;
+        height: 118px !important;
         margin: 0 auto;
         font-weight: 600;
         font-size: 10px;
@@ -33,8 +33,8 @@ BASE_CARD_CSS = """
         text-align: left !important;
         position: relative;
         overflow: hidden;
-        padding: 5px 26px 5px 8px !important;
-        line-height: 1.28;
+        padding: 5px 40px 5px 8px !important;
+        line-height: 1.18;
         white-space: normal;
         word-break: normal;
         overflow-wrap: normal;
@@ -47,6 +47,11 @@ BASE_CARD_CSS = """
            our First/SURNAME/Score/Conv lines onto a single overflowing line.
            pre-line is what actually makes each "\\n" a real line break. */
         white-space: pre-line;
+    }
+    /* Name (First / SURNAME, wrapped in **bold** markdown) gets a bigger
+       font than the Score/Conv lines. */
+    [class*="st-key-playercard_"] button p strong {
+        font-size: 14px;
     }
     [class*="st-key-playercard_"] button div[data-testid="stMarkdownContainer"] {
         position: relative;
@@ -109,8 +114,8 @@ def _role_border_css() -> str:
 
 def _player_card_css() -> str:
     """Per-player background gradient (surface -> her color, left to right)
-    and a large jersey-number watermark, both keyed off the button's
-    auto-generated st-key class."""
+    and a large jersey number pinned to the right edge, both keyed off the
+    button's auto-generated st-key class."""
     rules = []
     for p in pg.ALL_PLAYERS:
         color = pc.color_for(p["surname"])
@@ -120,9 +125,10 @@ def _player_card_css() -> str:
             f'background: linear-gradient(90deg, var(--surface) 0%, {rgba_from_hex(color, 0.55)} 100%) !important; '
             f'}} '
             f'[class*="st-key-playercard_{p["surname"]}"] button::after {{ '
-            f'content: "{number_content}"; position: absolute; right: 3px; bottom: 3px; '
-            f'font-size: 1.15rem; font-weight: 800; color: var(--surface); z-index: 0; '
-            f'line-height: 1; pointer-events: none; }}'
+            f'content: "{number_content}"; position: absolute; right: 6px; top: 50%; '
+            f'transform: translateY(-50%); font-size: 1.9rem; font-weight: 800; '
+            f'color: rgba(255,255,255,0.92); text-shadow: 0 1px 4px rgba(0,0,0,0.6); '
+            f'z-index: 0; line-height: 1; pointer-events: none; }}'
         )
     return f"<style>{''.join(rules)}</style>"
 
@@ -142,8 +148,11 @@ def _render_player_card(player: dict, stats, selected: str):
     # visible surface is clickable, not just a caption underneath a photo.
     # Each field on its own short line (rather than combined) so long names
     # and the score/appearances numbers never wrap mid-word inside the card.
+    # Name/surname are bold so the "button p strong" CSS rule can give them
+    # a bigger font than the Score/Conv lines; the jersey number itself is
+    # drawn separately (pinned right) via the ::after in _player_card_css.
     st.button(
-        f"{cap_badge}{player['first']}\n{player['last'].upper()}\nScore: {score}\nConv: {caps}",
+        f"{cap_badge}**{player['first']}**\n**{player['last'].upper()}**\nScore: {score}\nConv: {caps}",
         key=f"playercard_{player['surname']}",
         on_click=_select_player,
         args=(player["surname"],),
@@ -178,6 +187,8 @@ def _recent_matches(surname: str, n: int = RECENT_MATCHES_N) -> pd.DataFrame:
 
 
 def _performance_bar(recent: pd.DataFrame, value_col: str, title: str, color: str, is_percent: bool):
+    """Mean +/- std bars: used for Ind, which is a plain non-negative count
+    per fundamental so a single mean+spread bar reads cleanly."""
     agg = recent.groupby("fondamentale", observed=True).agg(
         mean=(value_col, "mean"), std=(value_col, "std"), tot=("Tot", "sum"),
     ).reset_index()
@@ -196,8 +207,35 @@ def _performance_bar(recent: pd.DataFrame, value_col: str, title: str, color: st
     )
     if is_percent:
         fig.update_layout(xaxis_tickformat=".0%")
-    fig.update_layout(height=210, margin=dict(l=0, r=10, t=10, b=10))
+    fig.update_layout(height=190, margin=dict(l=0, r=10, t=25, b=10), title=dict(text=title, font=dict(size=12)))
     fig.update_traces(error_x=dict(thickness=1, width=3))
+    st.plotly_chart(fig, width="stretch")
+
+
+def _performance_box(recent: pd.DataFrame, value_col: str, title: str, color: str, is_percent: bool):
+    """Horizontal box plot: used for E%, which can go negative (errors
+    outweighing points), so a box/whiskers view reads better than a mean+std
+    bar that would visually imply a single-signed magnitude."""
+    d = recent[recent["Tot"] > 0].copy()
+    if d.empty:
+        st.info(f"No {title.lower()} data in the last {RECENT_MATCHES_N} matches.")
+        return
+
+    d["Fundamental"] = d["fondamentale"].map(dl.FONDAMENTALE_LABELS)
+    order = d.groupby("Fundamental")[value_col].median().sort_values().index.tolist()
+    fig = px.box(
+        d, x=value_col, y="Fundamental", orientation="h", points="all",
+        category_orders={"Fundamental": order},
+        labels={value_col: title, "Fundamental": ""},
+        color_discrete_sequence=[color],
+    )
+    if is_percent:
+        fig.update_layout(xaxis_tickformat=".0%")
+    fig.update_layout(
+        height=190, margin=dict(l=0, r=10, t=25, b=10), showlegend=False,
+        title=dict(text=title, font=dict(size=12)),
+    )
+    fig.update_traces(marker=dict(size=4, opacity=0.75), line=dict(width=1.5))
     st.plotly_chart(fig, width="stretch")
 
 
@@ -207,8 +245,8 @@ def _render_performance(surname: str, color: str):
         st.info("No scouting data for this player.")
         return
 
-    st.caption(f"Last {RECENT_MATCHES_N} matches · bars show the mean, whiskers show the standard deviation.")
-    _performance_bar(recent, "E_pct", "Efficiency E%", color, is_percent=True)
+    st.caption(f"Last {RECENT_MATCHES_N} matches, by fundamental.")
+    _performance_box(recent, "E_pct", "Efficiency E%", color, is_percent=True)
     _performance_bar(recent, "Ind", "Index", color, is_percent=False)
 
 
@@ -250,11 +288,17 @@ def _render_overview(surname: str):
                 row = stats.loc[surname]
                 st.markdown(f"🏐 **{row['points']}** pts · **{row['appearances']}** matches")
 
-        st.markdown("**Performance** · by fundamental")
-        _render_performance(surname, color)
-
-        st.markdown("**Wellness**")
-        _render_wellness_radar(surname, color)
+        # Performance and Wellness share one toggle-switched section
+        # (rather than both stacked) so the whole overview box stays short
+        # enough to fit without scrolling the page.
+        view = st.segmented_control(
+            "Detail view", ["Performance", "Wellness"],
+            default="Performance", key="players_detail_view",
+        )
+        if view == "Wellness":
+            _render_wellness_radar(surname, color)
+        else:
+            _render_performance(surname, color)
 
 
 def render():

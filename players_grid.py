@@ -8,12 +8,14 @@ another player's "alt" in roster.py) comes from data_loader.load_player_roles(),
 which reads the real Anagrafica sheet.
 """
 
+# Same hue families as player_colors.PLAYER_COLORS, so a role box's border
+# echoes the color of every card inside it.
 ROLE_COLORS = {
-    "Setter": "#4C78A8",
-    "Opposite": "#B279A2",
-    "Outside Hitter": "#54A24B",
-    "Middle Blocker": "#E45756",
-    "Libero": "#F58518",
+    "Setter": "#64B5F6",
+    "Opposite": "#66BB6A",
+    "Outside Hitter": "#FDD835",
+    "Middle Blocker": "#F06292",
+    "Libero": "#FFFFFF",
 }
 
 # "surname" must match the values from data_loader.load_player_names() (used
