@@ -147,10 +147,7 @@ def render_sidebar_tools():
     st.markdown('<div class="brand-subtitle">Technical Staff · A1 Women\'s</div>', unsafe_allow_html=True)
 
     st.selectbox("Season", mc.SEASONS, key="flt_season", on_change=_on_season_change)
-    st.selectbox(
-        "Competition", [ALL_COMPETITIONS] + mc.COMPETITION_ORDER, key="flt_competition",
-        format_func=lambda c: c if c == ALL_COMPETITIONS else f"{mc.COMPETITIONS[c]['icon']} {c}",
-    )
+    st.selectbox("Competition", [ALL_COMPETITIONS] + mc.COMPETITION_ORDER, key="flt_competition")
 
     st.markdown("**Period**")
     with st.container(border=True):

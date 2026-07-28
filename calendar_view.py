@@ -19,19 +19,19 @@ WEEKDAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 # Same win-margin colour scale everywhere a result is shown (box rows,
 # standings "last 5" dots): 3pt = clear win, 2pt = tie-break win,
 # 1pt = tie-break loss, 0pt = clear loss.
-_RESULT_COLORS = {3: "#2E7D32", 2: "#8BC34A", 1: "#FFA726", 0: "#E53935"}
+RESULT_COLORS = {3: "#2E7D32", 2: "#8BC34A", 1: "#FFA726", 0: "#E53935"}
 
 CALENDAR_CSS = """
 <style>
     .cal-legend { display:flex; flex-wrap:wrap; gap:14px; margin-bottom:14px; font-size:12.5px; color:var(--muted); }
     .cal-legend-item { display:flex; align-items:center; gap:6px; }
     .cal-legend-swatch { width:10px; height:10px; border-radius:3px; display:inline-block; }
-    .cal-grid { display:grid; grid-template-columns: repeat(7, 1fr); gap:6px; margin-bottom:4px; }
+    .cal-grid { display:grid; grid-template-columns: repeat(7, 1fr); gap:5px; margin-bottom:4px; }
     .cal-weekday { text-align:center; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.04em; padding-bottom:6px; }
-    .cal-day { border:1px solid var(--line); border-radius:8px; min-height:92px; padding:6px; background:var(--surface); }
+    .cal-day { border:1px solid var(--line); border-radius:7px; min-height:52px; padding:4px 5px; background:var(--surface); }
     .cal-day.cal-empty { border:none; background:transparent; }
-    .cal-daynum { font-size:12px; color:var(--muted); margin-bottom:5px; font-weight:600; }
-    .cal-event { font-size:10.5px; line-height:1.3; border-radius:5px; padding:2px 5px; margin-bottom:3px; color:#ffffff; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .cal-daynum { font-size:11px; color:var(--muted); margin-bottom:3px; font-weight:600; }
+    .cal-event { font-size:10px; line-height:1.25; border-radius:4px; padding:1px 5px; margin-bottom:2px; color:#ffffff; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .cal-jump-dot { display:inline-block; width:7px; height:7px; border-radius:50%; margin-top:2px; }
 </style>
 """
@@ -97,23 +97,22 @@ def render_month_calendar(matches: list[dict], year: int, month: int, salti_date
 BOX_CSS = """
 <style>
     .comp-box {
-        border: 1px solid var(--line);
-        border-top: 3px solid var(--box-accent, var(--accent));
+        border: 2px solid var(--box-accent, var(--accent));
         border-radius: 12px;
         background: var(--surface);
-        padding: 16px 18px 14px;
-        margin-bottom: 20px;
+        padding: 14px 16px 12px;
+        margin-bottom: 12px;
     }
-    .comp-box-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; gap:10px; }
-    .comp-box-title { font-size:1.05rem; font-weight:700; display:flex; align-items:center; gap:8px; }
+    .comp-box-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; }
+    .comp-box-title { font-size:1.05rem; font-weight:700; color:var(--box-accent, var(--accent)); }
     .comp-box-record {
         font-size:11.5px; color:var(--muted); background:rgba(255,255,255,0.05);
         border:1px solid var(--line); border-radius:20px; padding:3px 10px; white-space:nowrap;
     }
-    .comp-results { max-height:280px; overflow-y:auto; padding-right:6px; }
+    .comp-results { height:246px; overflow-y:auto; padding-right:6px; }
     .result-row { display:flex; align-items:center; gap:10px; padding:6px 2px; border-bottom:1px solid var(--line); font-size:12.5px; }
     .result-row:last-child { border-bottom:none; }
-    .result-date { color:var(--muted); width:58px; flex-shrink:0; font-variant-numeric: tabular-nums; }
+    .result-date { color:var(--muted); width:54px; flex-shrink:0; font-variant-numeric: tabular-nums; white-space:nowrap; }
     .result-opponent { flex:1; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .result-venue { color:var(--muted); font-size:10.5px; width:34px; flex-shrink:0; }
     .result-round { color:var(--muted); font-size:10.5px; flex-shrink:0; max-width:110px; text-align:right;
@@ -124,13 +123,19 @@ BOX_CSS = """
 """
 
 
+def fmt_date(sheet_date: str) -> str:
+    """'23-10-08' -> '08/10/23' (dd/mm/yy)."""
+    yy, mm, dd = sheet_date.split("-")
+    return f"{dd}/{mm}/{yy}"
+
+
 def _result_row_html(m: dict, show_round: bool) -> str:
-    color = _RESULT_COLORS[mc.result_points(m)]
+    color = RESULT_COLORS[mc.result_points(m)]
     venue = "Home" if m["home"] else "Away"
     round_html = f'<div class="result-round">{mc.round_label(m["round"])}</div>' if show_round else ""
     return (
         '<div class="result-row">'
-        f'<div class="result-date">{m["date"]}</div>'
+        f'<div class="result-date">{fmt_date(m["date"])}</div>'
         f'<div class="result-opponent">{m["opponent"]}</div>'
         f'<div class="result-venue">{venue}</div>'
         f'{round_html}'
@@ -139,12 +144,13 @@ def _result_row_html(m: dict, show_round: bool) -> str:
     )
 
 
-def render_box(title: str, icon: str, color: str, body_html: str, record_html: str = "") -> str:
-    """Generic accent-bordered card: icon+title header (+ optional record chip) and a body."""
+def render_box(title: str, color: str, body_html: str, record_html: str = "") -> str:
+    """Generic color-bordered card (title colored to match, like the Players
+    page's role boxes) with an optional record chip and a body."""
     return (
         f'<div class="comp-box" style="--box-accent:{color}">'
         f'<div class="comp-box-header">'
-        f'<div class="comp-box-title">{icon} {title}</div>'
+        f'<div class="comp-box-title">{title}</div>'
         f'{record_html}'
         f'</div>'
         f'{body_html}'
@@ -153,25 +159,25 @@ def render_box(title: str, icon: str, color: str, body_html: str, record_html: s
 
 
 def render_competition_box(comp_key: str, matches: list[dict], show_round: bool = True) -> str:
-    """Self-contained box: header (icon, name, W-L record) + scrollable results list."""
+    """Self-contained box: header (name, W-L record) + scrollable results list."""
     conf = mc.COMPETITIONS[comp_key]
     comp_matches = sorted((m for m in matches if m["competition"] == comp_key), key=lambda m: m["date"])
 
     if not comp_matches:
-        return render_box(comp_key, conf["icon"], conf["color"], '<div class="comp-empty">No matches yet.</div>')
+        return render_box(comp_key, conf["color"], '<div class="comp-empty">No matches yet.</div>')
 
     wins = sum(1 for m in comp_matches if mc.is_win(m))
     losses = len(comp_matches) - wins
     record_html = f'<div class="comp-box-record">{wins}W – {losses}L · {len(comp_matches)} played</div>'
     rows = "".join(_result_row_html(m, show_round) for m in comp_matches)
     body = f'<div class="comp-results">{rows}</div>'
-    return render_box(comp_key, conf["icon"], conf["color"], body, record_html)
+    return render_box(comp_key, conf["color"], body, record_html)
 
 
 def render_standings_box(standings: list[dict], title: str = "Standings", color: str = "#4C78A8") -> str:
     # No max-height/scroll here (unlike comp-results): the standings table
     # is meant to be fully visible at a glance, not truncated.
-    return render_box(title, "📊", color, render_standings(standings))
+    return render_box(title, color, render_standings(standings))
 
 
 # ---------------------------------------------------------------------------
@@ -201,7 +207,7 @@ def render_standings(standings: list[dict]) -> str:
     for row in standings:
         cls = "std-us" if row["is_us"] else ""
         dots = "".join(
-            f'<span class="std-dot" style="background:{_RESULT_COLORS[p]}"></span>'
+            f'<span class="std-dot" style="background:{RESULT_COLORS[p]}"></span>'
             for p in row["last5"]
         )
         rows.append(

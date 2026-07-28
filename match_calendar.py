@@ -63,12 +63,12 @@ MATCH_BY_DATE = {m["date"]: m for m in MATCHES}
 # colors live in one place.
 # ---------------------------------------------------------------------------
 COMPETITIONS = {
-    "Serie A1": {"label": "Championship match", "color": "#4C78A8", "icon": "🏐"},
-    "Playoff scudetto": {"label": "Championship playoffs", "color": "#E45756", "icon": "🏆"},
-    "Coppa Italia": {"label": "Cup match (Coppa Italia)", "color": "#F58518", "icon": "🎖️"},
-    "Champions League": {"label": "Champions League", "color": "#54A24B", "icon": "🌍"},
-    "Supercoppa Italiana": {"label": "Supercoppa", "color": "#B279A2", "icon": "⭐"},
-    "Jump session": {"label": "Jump session", "color": "#9D9D9D", "icon": "🦵"},
+    "Serie A1": {"label": "Championship match", "color": "#4C78A8"},
+    "Playoff scudetto": {"label": "Championship playoffs", "color": "#E45756"},
+    "Coppa Italia": {"label": "Cup match (Coppa Italia)", "color": "#F58518"},
+    "Champions League": {"label": "Champions League", "color": "#54A24B"},
+    "Supercoppa Italiana": {"label": "Supercoppa", "color": "#B279A2"},
+    "Jump session": {"label": "Jump session", "color": "#9D9D9D"},
 }
 
 # Display order for the per-competition boxes: main league first, then the
