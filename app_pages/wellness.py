@@ -31,6 +31,14 @@ PARAM_RANGE = {
 }
 
 
+def _player_role_map() -> dict[str, str]:
+    """player_name (short name) -> English role label, for the Team radar's
+    role filter."""
+    names = dl.load_player_names()
+    roles = dl.load_player_roles()
+    return {names[code]: dl.ROLE_LABELS.get(r, r) for code, r in roles.items() if code in names}
+
+
 def _player_radar(p_period, use_icons=False, height=None):
     """Same 'Individual player' radar (TQR-colored, axes inverted so bigger =
     better) for one player's data in the current date range, or None if empty."""
@@ -64,14 +72,24 @@ def render():
 
     col_team, col_player = st.columns(2)
 
+    role_map = _player_role_map()
+
     with col_team:
         with st.container(border=True):
             st.markdown("**Team · by parameter**")
-            param = st.selectbox(
-                "Parameter", list(PARAM_LABELS.keys()),
-                format_func=lambda p: PARAM_LABELS[p], key="team_param",
-            )
+            col_param, col_role = st.columns(2)
+            with col_param:
+                param = st.selectbox(
+                    "Parameter", list(PARAM_LABELS.keys()),
+                    format_func=lambda p: PARAM_LABELS[p], key="team_param",
+                )
+            with col_role:
+                role_sel = st.selectbox(
+                    "Role", ["All roles"] + sorted(set(role_map.values())), key="team_role",
+                )
             players = sorted(period["player_name"].unique())
+            if role_sel != "All roles":
+                players = [p for p in players if role_map.get(p) == role_sel]
             team_avg = period.groupby("player_name")[param].mean().reindex(players)
 
             if team_avg.empty:

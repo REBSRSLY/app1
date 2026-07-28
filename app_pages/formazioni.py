@@ -1,30 +1,73 @@
 import streamlit as st
 
-from roster import titolari
+import data_loader as dl
+import player_colors as pc
+from roster import panchina, titolari
 from ui_helpers import section_header
+
+RECOVERY_THRESHOLD = 15  # same threshold as the Home page's recovery alert
+GOOD_COLOR = "#54A24B"
+LOW_COLOR = "#E45756"
+
+CARD_CSS = """
+<style>
+    .lineup-role { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; font-weight:700; }
+    .lineup-name { font-size:1.05rem; font-weight:700; margin:2px 0 4px; }
+    .lineup-tqr { font-size:12.5px; font-weight:600; }
+</style>
+"""
+
+
+def _latest_tqr() -> dict[str, float]:
+    """Most recent TQR reading per player, from the latest wellness survey
+    day available (same reference day the Home page's recovery alert uses)."""
+    wellness = dl.load_wellness_data()["wellness"]
+    if wellness.empty:
+        return {}
+    last_day = wellness[wellness["Data"] == wellness["Data"].max()]
+    return dict(zip(last_day["player_name"], last_day["Tqr"]))
+
+
+def _card_border_css(players: list[dict]) -> str:
+    rules = []
+    for p in players:
+        color = pc.color_for(p["name"])
+        rules.append(f'[class*="st-key-lineup_card_{p["name"]}"] {{ border-color:{color} !important; }}')
+    return f"<style>{''.join(rules)}</style>"
+
+
+def _render_player_card(p: dict, tqr_by_player: dict, position_label: str):
+    tqr = tqr_by_player.get(p["name"])
+    with st.container(border=True, key=f"lineup_card_{p['name']}"):
+        st.markdown(f'<div class="lineup-role">{position_label}</div>', unsafe_allow_html=True)
+        cap = " · C" if p.get("tag") == "Captain" else ""
+        st.markdown(f'<div class="lineup-name">{p["name"]}{cap}</div>', unsafe_allow_html=True)
+        if "alt" in p:
+            st.caption(f"Alt: {p['alt']}")
+        if tqr is None:
+            st.caption("No recent wellness data")
+        else:
+            color = LOW_COLOR if tqr < RECOVERY_THRESHOLD else GOOD_COLOR
+            status = "Low recovery" if tqr < RECOVERY_THRESHOLD else "Recovered"
+            st.markdown(f'<div class="lineup-tqr" style="color:{color}">TQR {tqr:.1f} · {status}</div>', unsafe_allow_html=True)
 
 
 def render():
-    section_header("Lineups", "Starting six, rotations and alternates by role, with recovery status for players on court.")
+    section_header("Lineups", "Starting six and bench by role, with each player's latest recovery status.")
+    st.markdown(CARD_CSS, unsafe_allow_html=True)
+    st.markdown(_card_border_css(titolari + panchina), unsafe_allow_html=True)
 
-    # Court layout (3x2 for the active starting six)
-    st.subheader("Court Layout (Starting Six)")
+    tqr_by_player = _latest_tqr()
 
-    court_starters = [p for p in titolari if p["pos"] != "L"]
+    st.markdown("**Starting six**")
+    cols = st.columns(4)
+    for i, p in enumerate(titolari):
+        with cols[i % 4]:
+            label = "Libero" if p["pos"] == "L" else f"{p['pos']} · {p['role']}"
+            _render_player_card(p, tqr_by_player, label)
 
-    # Split into 3 columns to simulate the court grid
-    cols = st.columns(3)
-    for i, p in enumerate(court_starters):
-        col_index = i % 3
-        with cols[col_index]:
-            alt_text = f"\n↔ {p['alt']}" if "alt" in p else ""
-            st.metric(
-                label=f"{p['pos']} - {p['role']}",
-                value=p['name'],
-                delta=alt_text if alt_text else None,
-                delta_color="off"
-            )
-
-    st.write("---")
-    libero = next(p for p in titolari if p["pos"] == "L")
-    st.write(f"🛡️ **Libero:** {libero['name']}")
+    st.markdown("**Bench**")
+    cols = st.columns(4)
+    for i, p in enumerate(panchina):
+        with cols[i % 4]:
+            _render_player_card(p, tqr_by_player, p["role"])
