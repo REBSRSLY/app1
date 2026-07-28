@@ -9,40 +9,44 @@ import match_calendar as mc
 from ui_helpers import section_header
 
 
-def _render_calendar_tab():
+def _render_by_competition(season: str, season_matches: list[dict]):
+    st.markdown(cv.BOX_CSS, unsafe_allow_html=True)
+
+    present = [c for c in mc.COMPETITION_ORDER if any(m["competition"] == c for m in season_matches)]
+    if "Serie A1" not in present:
+        st.info("No championship matches recorded for this season yet.")
+    else:
+        col_results, col_standings = st.columns([1, 1.2])
+        with col_results:
+            st.markdown(cv.render_competition_box("Serie A1", season_matches, show_round=False), unsafe_allow_html=True)
+        with col_standings:
+            st.markdown(
+                cv.render_standings_box(mc.SEASON_STANDINGS.get(season, []), color=mc.COMPETITIONS["Serie A1"]["color"]),
+                unsafe_allow_html=True,
+            )
+
+    secondary = [c for c in present if c != "Serie A1"]
+    for i in range(0, len(secondary), 2):
+        cols = st.columns(2)
+        for col, comp in zip(cols, secondary[i:i + 2]):
+            with col:
+                st.markdown(cv.render_competition_box(comp, season_matches), unsafe_allow_html=True)
+
+
+def _render_full_calendar(season: str, season_matches: list[dict]):
     st.markdown(cv.CALENDAR_CSS, unsafe_allow_html=True)
     st.markdown(cv.render_legend(), unsafe_allow_html=True)
 
     salti_dates = sorted(dl.load_wellness_data()["salti"]["Data"].dt.date.unique())
+    months = mc.season_months(season)
+    if not months:
+        st.info("No matches to show on the calendar for this season.")
+        return
 
-    year_tabs = st.tabs([str(y) for y in mc.SEASON_YEARS])
-    for year, tab in zip(mc.SEASON_YEARS, year_tabs):
-        with tab:
-            year_matches = mc.matches_for_year(year)
-            if not year_matches and not any(d.year == year for d in salti_dates):
-                st.info(f"No matches or sessions recorded for {year}.")
-                continue
-
-            available_months = cv.months_with_data(year, salti_dates)
-            default_month = available_months[0] if available_months else 1
-            month = st.selectbox(
-                "Month",
-                options=list(range(1, 13)),
-                index=list(range(1, 13)).index(default_month),
-                format_func=lambda m: cv.MONTH_NAMES[m],
-                key=f"month_{year}",
-            )
-            st.markdown(cv.render_month_calendar(year, month, salti_dates), unsafe_allow_html=True)
-            st.caption(f"{len(year_matches)} matches recorded in {year} (hover an event for details).")
-
-    st.write("---")
-    st.subheader("Standings · Serie A1 2023/24")
-    st.caption(
-        "Computed from the real results of the 26 championship rounds: "
-        "3-0/3-1 win = 3pt, 3-2 win = 2pt, 2-3 loss = 1pt, 0-3/1-3 loss = 0pt. "
-        "Playoffs, Coppa Italia and Champions League don't count towards these standings."
-    )
-    st.markdown(cv.render_standings(mc.STANDINGS_2023_24), unsafe_allow_html=True)
+    labels = [f"{cv.MONTH_NAMES[m]} {y}" for y, m in months]
+    picked = st.selectbox("Month", options=list(range(len(months))), format_func=lambda i: labels[i], key=f"month_{season}")
+    year, month = months[picked]
+    st.markdown(cv.render_month_calendar(season_matches, year, month, salti_dates), unsafe_allow_html=True)
 
 
 def _render_list_tab():
@@ -71,12 +75,24 @@ def _render_list_tab():
 
 
 def render():
-    section_header("Matches", "Full 2023/24 calendar and results (45 matches across Serie A1, Coppa Italia, Supercoppa, Champions League and playoffs).")
+    section_header("Matches", "Results and standings by competition, plus the full season calendar.")
 
-    tab_calendar, tab_list = st.tabs(["Calendar", "List"])
-    with tab_calendar:
-        _render_calendar_tab()
-    with tab_list:
+    season = st.selectbox("Season", mc.SEASONS, index=0, key="season_select")
+    season_matches = mc.matches_for_season(season)
+
+    if not season_matches:
+        st.info(f"No matches recorded yet for the {season} season.")
+        return
+
+    st.subheader("By competition")
+    _render_by_competition(season, season_matches)
+
+    st.write("---")
+    st.subheader("Full calendar")
+    _render_full_calendar(season, season_matches)
+
+    st.write("---")
+    with st.expander("All matches (searchable list)"):
         _render_list_tab()
 
     st.caption("Score is always written as Milano–opponent sets. For per-fundamental scouting statistics of each match, filterable by individual player, go to **Scout & Stats**.")

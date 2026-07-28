@@ -1,4 +1,4 @@
-"""Month-grid calendar + standings table renderers for the Matches page.
+"""Competition boxes + month-grid calendar + standings table for the Matches page.
 
 Plain HTML/CSS (no extra dependency), styled to match the app's dark theme
 (styles.py CSS variables) rather than introducing a second design language.
@@ -15,6 +15,11 @@ MONTH_NAMES = [
     "July", "August", "September", "October", "November", "December",
 ]
 WEEKDAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+# Same win-margin colour scale everywhere a result is shown (box rows,
+# standings "last 5" dots): 3pt = clear win, 2pt = tie-break win,
+# 1pt = tie-break loss, 0pt = clear loss.
+_RESULT_COLORS = {3: "#2E7D32", 2: "#8BC34A", 1: "#FFA726", 0: "#E53935"}
 
 CALENDAR_CSS = """
 <style>
@@ -41,11 +46,11 @@ def render_legend() -> str:
     return f'<div class="cal-legend">{items}</div>'
 
 
-def _events_for_month(year: int, month: int) -> dict[int, list[dict]]:
+def _events_for_month(matches: list[dict], year: int, month: int) -> dict[int, list[dict]]:
     events: dict[int, list[dict]] = {}
-    for m in mc.matches_for_year(year):
+    for m in matches:
         d = m["pdate"]
-        if d.month != month:
+        if d.year != year or d.month != month:
             continue
         comp = mc.COMPETITIONS[m["competition"]]
         vs = f"{'vs' if m['home'] else '@'} {m['opponent']}"
@@ -56,13 +61,10 @@ def _events_for_month(year: int, month: int) -> dict[int, list[dict]]:
     return events
 
 
-def _jump_days(year: int, month: int, salti_dates: list) -> set[int]:
-    return {d.day for d in salti_dates if d.year == year and d.month == month}
-
-
-def render_month_calendar(year: int, month: int, salti_dates: list) -> str:
-    events = _events_for_month(year, month)
-    jump_days = _jump_days(year, month, salti_dates)
+def render_month_calendar(matches: list[dict], year: int, month: int, salti_dates: list) -> str:
+    """`matches` is a list of match dicts that already carry a parsed `pdate`."""
+    events = _events_for_month(matches, year, month)
+    jump_days = {d.day for d in salti_dates if d.year == year and d.month == month}
 
     weeks = _calendar.Calendar(firstweekday=0).monthdayscalendar(year, month)
     header = "".join(f'<div class="cal-weekday">{w}</div>' for w in WEEKDAY_NAMES)
@@ -88,36 +90,118 @@ def render_month_calendar(year: int, month: int, salti_dates: list) -> str:
     return f'<div class="cal-grid">{header}{"".join(cells)}</div>'
 
 
-def months_with_data(year: int, salti_dates: list) -> list[int]:
-    """Months (1-12) with at least one match or jump session in that year."""
-    months = {m["pdate"].month for m in mc.matches_for_year(year)}
-    months |= {d.month for d in salti_dates if d.year == year}
-    return sorted(months)
+# ---------------------------------------------------------------------------
+# Per-competition boxes
+# ---------------------------------------------------------------------------
 
-
-STANDINGS_CSS = """
+BOX_CSS = """
 <style>
-    .std-table { width:100%; border-collapse:collapse; font-size:13.5px; }
-    .std-table th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;
-        color:var(--muted); font-weight:600; padding:6px 8px; border-bottom:1px solid var(--line); }
-    .std-table td { padding:7px 8px; border-bottom:1px solid var(--line); }
-    .std-table tr.std-us { background-color:var(--accent-bg); }
-    .std-table tr.std-us td { color:var(--accent); font-weight:700; }
-    .std-pos { color:var(--muted); width:26px; }
-    .std-dots { display:flex; gap:4px; }
-    .std-dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
+    .comp-box {
+        border: 1px solid var(--line);
+        border-top: 3px solid var(--box-accent, var(--accent));
+        border-radius: 12px;
+        background: var(--surface);
+        padding: 16px 18px 14px;
+        margin-bottom: 20px;
+    }
+    .comp-box-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; gap:10px; }
+    .comp-box-title { font-size:1.05rem; font-weight:700; display:flex; align-items:center; gap:8px; }
+    .comp-box-record {
+        font-size:11.5px; color:var(--muted); background:rgba(255,255,255,0.05);
+        border:1px solid var(--line); border-radius:20px; padding:3px 10px; white-space:nowrap;
+    }
+    .comp-results { max-height:280px; overflow-y:auto; padding-right:6px; }
+    .result-row { display:flex; align-items:center; gap:10px; padding:6px 2px; border-bottom:1px solid var(--line); font-size:12.5px; }
+    .result-row:last-child { border-bottom:none; }
+    .result-date { color:var(--muted); width:58px; flex-shrink:0; font-variant-numeric: tabular-nums; }
+    .result-opponent { flex:1; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .result-venue { color:var(--muted); font-size:10.5px; width:34px; flex-shrink:0; }
+    .result-round { color:var(--muted); font-size:10.5px; flex-shrink:0; max-width:110px; text-align:right;
+        overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .result-score { font-weight:700; width:34px; text-align:center; flex-shrink:0; border-radius:5px; padding:1px 0; }
+    .comp-empty { color:var(--muted); font-size:12.5px; padding:8px 0; }
 </style>
 """
 
-_LAST5_COLORS = {3: "#2E7D32", 2: "#8BC34A", 1: "#FFA726", 0: "#E53935"}
+
+def _result_row_html(m: dict, show_round: bool) -> str:
+    color = _RESULT_COLORS[mc.result_points(m)]
+    venue = "Home" if m["home"] else "Away"
+    round_html = f'<div class="result-round">{mc.round_label(m["round"])}</div>' if show_round else ""
+    return (
+        '<div class="result-row">'
+        f'<div class="result-date">{m["date"]}</div>'
+        f'<div class="result-opponent">{m["opponent"]}</div>'
+        f'<div class="result-venue">{venue}</div>'
+        f'{round_html}'
+        f'<div class="result-score" style="color:{color}">{m["score"]}</div>'
+        '</div>'
+    )
+
+
+def render_box(title: str, icon: str, color: str, body_html: str, record_html: str = "") -> str:
+    """Generic accent-bordered card: icon+title header (+ optional record chip) and a body."""
+    return (
+        f'<div class="comp-box" style="--box-accent:{color}">'
+        f'<div class="comp-box-header">'
+        f'<div class="comp-box-title">{icon} {title}</div>'
+        f'{record_html}'
+        f'</div>'
+        f'{body_html}'
+        f'</div>'
+    )
+
+
+def render_competition_box(comp_key: str, matches: list[dict], show_round: bool = True) -> str:
+    """Self-contained box: header (icon, name, W-L record) + scrollable results list."""
+    conf = mc.COMPETITIONS[comp_key]
+    comp_matches = sorted((m for m in matches if m["competition"] == comp_key), key=lambda m: m["date"])
+
+    if not comp_matches:
+        return render_box(comp_key, conf["icon"], conf["color"], '<div class="comp-empty">No matches yet.</div>')
+
+    wins = sum(1 for m in comp_matches if mc.is_win(m))
+    losses = len(comp_matches) - wins
+    record_html = f'<div class="comp-box-record">{wins}W – {losses}L · {len(comp_matches)} played</div>'
+    rows = "".join(_result_row_html(m, show_round) for m in comp_matches)
+    body = f'<div class="comp-results">{rows}</div>'
+    return render_box(comp_key, conf["icon"], conf["color"], body, record_html)
+
+
+def render_standings_box(standings: list[dict], title: str = "Standings", color: str = "#4C78A8") -> str:
+    # No max-height/scroll here (unlike comp-results): the standings table
+    # is meant to be fully visible at a glance, not truncated.
+    return render_box(title, "📊", color, render_standings(standings))
+
+
+# ---------------------------------------------------------------------------
+# Standings table
+# ---------------------------------------------------------------------------
+
+STANDINGS_CSS = """
+<style>
+    .std-table { width:100%; border-collapse:collapse; font-size:13px; }
+    .std-table th { text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:0.05em;
+        color:var(--muted); font-weight:600; padding:6px 7px; border-bottom:1px solid var(--line); }
+    .std-table td { padding:6px 7px; border-bottom:1px solid var(--line); }
+    .std-table tr.std-us { background-color:var(--accent-bg); }
+    .std-table tr.std-us td { color:var(--accent); font-weight:700; }
+    .std-pos { color:var(--muted); width:22px; }
+    .std-dots { display:flex; gap:3px; }
+    .std-dot { width:9px; height:9px; border-radius:50%; display:inline-block; }
+</style>
+"""
 
 
 def render_standings(standings: list[dict]) -> str:
+    if not standings:
+        return '<div class="comp-empty">No standings yet.</div>'
+
     rows = []
     for row in standings:
         cls = "std-us" if row["is_us"] else ""
         dots = "".join(
-            f'<span class="std-dot" style="background:{_LAST5_COLORS[p]}"></span>'
+            f'<span class="std-dot" style="background:{_RESULT_COLORS[p]}"></span>'
             for p in row["last5"]
         )
         rows.append(

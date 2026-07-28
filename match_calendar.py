@@ -8,47 +8,47 @@ Score is always written as Milano-Opponent sets.
 
 MATCHES = [
     {"date": "23-10-08", "competition": "Serie A1", "round": "andata", "opponent": "Busto Arsizio", "home": True, "score": "3-0"},
-    {"date": "23-10-14", "competition": "Serie A1", "round": "andata", "opponent": "Trentino", "home": False, "score": "1-3"},
+    {"date": "23-10-14", "competition": "Serie A1", "round": "andata", "opponent": "Trentino", "home": False, "score": "3-1"},
     {"date": "23-10-22", "competition": "Serie A1", "round": "andata", "opponent": "Scandicci", "home": True, "score": "3-2"},
     {"date": "23-10-28", "competition": "Supercoppa Italiana", "round": "finale", "opponent": "Conegliano", "home": False, "score": "1-3"},
-    {"date": "23-11-01", "competition": "Serie A1", "round": "andata", "opponent": "Bergamo", "home": False, "score": "1-3"},
-    {"date": "23-11-05", "competition": "Serie A1", "round": "andata", "opponent": "Conegliano", "home": False, "score": "1-3"},
+    {"date": "23-11-01", "competition": "Serie A1", "round": "andata", "opponent": "Bergamo", "home": False, "score": "3-1"},
+    {"date": "23-11-05", "competition": "Serie A1", "round": "andata", "opponent": "Conegliano", "home": True, "score": "1-3"},
     {"date": "23-11-09", "competition": "Champions League", "round": "girone", "opponent": "Jedinstvo Stara Pazova", "home": True, "score": "3-0"},
-    {"date": "23-11-12", "competition": "Serie A1", "round": "andata", "opponent": "Novara", "home": False, "score": "1-3"},
-    {"date": "23-11-14", "competition": "Champions League", "round": "girone", "opponent": "Mulhouse", "home": False, "score": "0-3"},
+    {"date": "23-11-12", "competition": "Serie A1", "round": "andata", "opponent": "Novara", "home": False, "score": "3-1"},
+    {"date": "23-11-14", "competition": "Champions League", "round": "girone", "opponent": "Mulhouse", "home": False, "score": "3-0"},
     {"date": "23-11-19", "competition": "Serie A1", "round": "andata", "opponent": "Pinerolo", "home": True, "score": "3-0"},
-    {"date": "23-11-22", "competition": "Serie A1", "round": "andata", "opponent": "Chieri", "home": False, "score": "3-0"},
-    {"date": "23-11-26", "competition": "Serie A1", "round": "andata", "opponent": "Roma", "home": False, "score": "0-3"},
-    {"date": "23-11-29", "competition": "Champions League", "round": "girone", "opponent": "VakıfBank", "home": False, "score": "0-3"},
-    {"date": "23-12-03", "competition": "Serie A1", "round": "andata", "opponent": "Casalmaggiore", "home": False, "score": "3-2"},
+    {"date": "23-11-22", "competition": "Serie A1", "round": "andata", "opponent": "Chieri", "home": True, "score": "3-0"},
+    {"date": "23-11-26", "competition": "Serie A1", "round": "andata", "opponent": "Roma", "home": False, "score": "3-0"},
+    {"date": "23-11-29", "competition": "Champions League", "round": "girone", "opponent": "VakıfBank", "home": False, "score": "3-0"},
+    {"date": "23-12-03", "competition": "Serie A1", "round": "andata", "opponent": "Casalmaggiore", "home": True, "score": "3-2"},
     {"date": "23-12-06", "competition": "Champions League", "round": "girone", "opponent": "Mulhouse", "home": True, "score": "3-1"},
-    {"date": "23-12-10", "competition": "Serie A1", "round": "andata", "opponent": "Cuneo", "home": False, "score": "0-3"},
-    {"date": "23-12-17", "competition": "Serie A1", "round": "andata", "opponent": "Firenze", "home": False, "score": "0-3"},
+    {"date": "23-12-10", "competition": "Serie A1", "round": "andata", "opponent": "Cuneo", "home": False, "score": "3-0"},
+    {"date": "23-12-17", "competition": "Serie A1", "round": "andata", "opponent": "Firenze", "home": False, "score": "3-0"},
     {"date": "23-12-23", "competition": "Serie A1", "round": "andata", "opponent": "Megavolley", "home": True, "score": "3-0"},
-    {"date": "23-12-26", "competition": "Serie A1", "round": "ritorno", "opponent": "Busto Arsizio", "home": False, "score": "1-3"},
+    {"date": "23-12-26", "competition": "Serie A1", "round": "ritorno", "opponent": "Busto Arsizio", "home": False, "score": "3-1"},
     {"date": "24-01-07", "competition": "Serie A1", "round": "ritorno", "opponent": "Trentino", "home": True, "score": "3-0"},
-    {"date": "24-01-10", "competition": "Champions League", "round": "girone", "opponent": "Jedinstvo Stara Pazova", "home": False, "score": "0-3"},
-    {"date": "24-01-13", "competition": "Serie A1", "round": "ritorno", "opponent": "Scandicci", "home": False, "score": "0-3"},
+    {"date": "24-01-10", "competition": "Champions League", "round": "girone", "opponent": "Jedinstvo Stara Pazova", "home": False, "score": "3-0"},
+    {"date": "24-01-13", "competition": "Serie A1", "round": "ritorno", "opponent": "Scandicci", "home": False, "score": "3-0"},
     {"date": "24-01-16", "competition": "Champions League", "round": "girone", "opponent": "VakıfBank", "home": True, "score": "2-3"},
-    {"date": "24-01-21", "competition": "Serie A1", "round": "ritorno", "opponent": "Chieri", "home": False, "score": "2-3"},
+    {"date": "24-01-21", "competition": "Serie A1", "round": "ritorno", "opponent": "Chieri", "home": False, "score": "3-2"},
     {"date": "24-01-24", "competition": "Coppa Italia", "round": "quarti", "opponent": "Roma", "home": True, "score": "3-0"},
     {"date": "24-01-28", "competition": "Serie A1", "round": "ritorno", "opponent": "Bergamo", "home": True, "score": "3-1"},
-    {"date": "24-02-04", "competition": "Serie A1", "round": "ritorno", "opponent": "Conegliano", "home": False, "score": "3-0"},
+    {"date": "24-02-04", "competition": "Serie A1", "round": "ritorno", "opponent": "Conegliano", "home": False, "score": "0-3"},
     {"date": "24-02-10", "competition": "Serie A1", "round": "ritorno", "opponent": "Novara", "home": True, "score": "2-3"},
     {"date": "24-02-17", "competition": "Coppa Italia", "round": "semifinale", "opponent": "Scandicci", "home": True, "score": "3-2"},
     {"date": "24-02-18", "competition": "Coppa Italia", "round": "finale", "opponent": "Conegliano", "home": False, "score": "2-3"},
-    {"date": "24-02-20", "competition": "Champions League", "round": "quarti andata", "opponent": "ŁKS Łódź", "home": False, "score": "1-3"},
-    {"date": "24-02-25", "competition": "Serie A1", "round": "ritorno", "opponent": "Pinerolo", "home": False, "score": "2-3"},
+    {"date": "24-02-20", "competition": "Champions League", "round": "quarti andata", "opponent": "ŁKS Łódź", "home": False, "score": "3-1"},
+    {"date": "24-02-25", "competition": "Serie A1", "round": "ritorno", "opponent": "Pinerolo", "home": False, "score": "3-2"},
     {"date": "24-02-29", "competition": "Champions League", "round": "quarti ritorno", "opponent": "ŁKS Łódź", "home": True, "score": "3-0"},
-    {"date": "24-03-03", "competition": "Serie A1", "round": "ritorno", "opponent": "Roma", "home": False, "score": "3-2"},
-    {"date": "24-03-06", "competition": "Serie A1", "round": "ritorno", "opponent": "Casalmaggiore", "home": False, "score": "3-2"},
-    {"date": "24-03-09", "competition": "Serie A1", "round": "ritorno", "opponent": "Cuneo", "home": False, "score": "3-0"},
+    {"date": "24-03-03", "competition": "Serie A1", "round": "ritorno", "opponent": "Roma", "home": True, "score": "3-2"},
+    {"date": "24-03-06", "competition": "Serie A1", "round": "ritorno", "opponent": "Casalmaggiore", "home": False, "score": "2-3"},
+    {"date": "24-03-09", "competition": "Serie A1", "round": "ritorno", "opponent": "Cuneo", "home": True, "score": "3-0"},
     {"date": "24-03-12", "competition": "Champions League", "round": "semifinale andata", "opponent": "Fenerbahçe", "home": True, "score": "3-0"},
     {"date": "24-03-16", "competition": "Serie A1", "round": "ritorno", "opponent": "Firenze", "home": True, "score": "3-1"},
-    {"date": "24-03-19", "competition": "Champions League", "round": "semifinale ritorno", "opponent": "Fenerbahçe", "home": False, "score": "3-1"},
-    {"date": "24-03-24", "competition": "Serie A1", "round": "ritorno", "opponent": "Megavolley", "home": False, "score": "3-0"},
+    {"date": "24-03-19", "competition": "Champions League", "round": "semifinale ritorno", "opponent": "Fenerbahçe", "home": False, "score": "1-3"},
+    {"date": "24-03-24", "competition": "Serie A1", "round": "ritorno", "opponent": "Megavolley", "home": False, "score": "0-3"},
     {"date": "24-03-27", "competition": "Playoff scudetto", "round": "quarti gara 1", "opponent": "Pinerolo", "home": True, "score": "3-2"},
-    {"date": "24-03-31", "competition": "Playoff scudetto", "round": "quarti gara 2", "opponent": "Pinerolo", "home": False, "score": "1-3"},
+    {"date": "24-03-31", "competition": "Playoff scudetto", "round": "quarti gara 2", "opponent": "Pinerolo", "home": False, "score": "3-1"},
     {"date": "24-04-06", "competition": "Playoff scudetto", "round": "semifinale gara 1", "opponent": "Scandicci", "home": False, "score": "0-3"},
     {"date": "24-04-10", "competition": "Playoff scudetto", "round": "semifinale gara 2", "opponent": "Scandicci", "home": True, "score": "0-3"},
     {"date": "24-05-05", "competition": "Champions League", "round": "finale", "opponent": "Conegliano", "home": False, "score": "2-3"},
@@ -63,13 +63,51 @@ MATCH_BY_DATE = {m["date"]: m for m in MATCHES}
 # colors live in one place.
 # ---------------------------------------------------------------------------
 COMPETITIONS = {
-    "Serie A1": {"label": "Championship match", "color": "#4C78A8"},
-    "Playoff scudetto": {"label": "Championship playoffs", "color": "#E45756"},
-    "Coppa Italia": {"label": "Cup match (Coppa Italia)", "color": "#F58518"},
-    "Champions League": {"label": "Champions League", "color": "#54A24B"},
-    "Supercoppa Italiana": {"label": "Supercoppa", "color": "#B279A2"},
-    "Jump session": {"label": "Jump session", "color": "#9D9D9D"},
+    "Serie A1": {"label": "Championship match", "color": "#4C78A8", "icon": "🏐"},
+    "Playoff scudetto": {"label": "Championship playoffs", "color": "#E45756", "icon": "🏆"},
+    "Coppa Italia": {"label": "Cup match (Coppa Italia)", "color": "#F58518", "icon": "🎖️"},
+    "Champions League": {"label": "Champions League", "color": "#54A24B", "icon": "🌍"},
+    "Supercoppa Italiana": {"label": "Supercoppa", "color": "#B279A2", "icon": "⭐"},
+    "Jump session": {"label": "Jump session", "color": "#9D9D9D", "icon": "🦵"},
 }
+
+# Display order for the per-competition boxes: main league first, then the
+# knockout competitions in roughly chronological/importance order.
+COMPETITION_ORDER = ["Serie A1", "Playoff scudetto", "Coppa Italia", "Champions League", "Supercoppa Italiana"]
+
+# Italian round tokens (as stored on each match) -> clean English box labels.
+ROUND_LABELS = {
+    "andata": "Round 1", "ritorno": "Round 2",
+    "girone": "Group stage",
+    "quarti": "Quarterfinal",
+    "quarti andata": "QF · Leg 1", "quarti ritorno": "QF · Leg 2",
+    "quarti gara 1": "QF · Game 1", "quarti gara 2": "QF · Game 2",
+    "semifinale": "Semifinal",
+    "semifinale andata": "SF · Leg 1", "semifinale ritorno": "SF · Leg 2",
+    "semifinale gara 1": "SF · Game 1", "semifinale gara 2": "SF · Game 2",
+    "finale": "Final",
+}
+
+
+def round_label(round_raw: str) -> str:
+    return ROUND_LABELS.get(round_raw, round_raw.title())
+
+
+def is_win(m: dict) -> bool:
+    my, opp = (int(x) for x in m["score"].split("-"))
+    return my > opp
+
+
+def result_points(m: dict) -> int:
+    """3/2/1/0 points for the match result, same scale as the standings rule."""
+    my, opp = (int(x) for x in m["score"].split("-"))
+    if (my, opp) in ((3, 0), (3, 1)):
+        return 3
+    if (my, opp) == (3, 2):
+        return 2
+    if (my, opp) == (2, 3):
+        return 1
+    return 0
 
 
 def parsed_date(sheet_date: str):
@@ -113,14 +151,35 @@ STANDINGS_2023_24 = [
     {"pos": 14, "team": "Trentino", "pts": 11, "p": 26, "w": 3, "l": 23, "sf": 21, "sa": 73, "last5": [0, 1, 3, 0, 0], "is_us": False},
 ]
 
-SEASON_YEARS = [2023, 2024, 2025]
+# One real season so far (2023/24); 2024/25 is a placeholder with no data
+# yet, kept selectable so the season picker doesn't have to change shape
+# once results start coming in.
+SEASONS = ["2023-24", "2024-25"]
+SEASON_MATCHES = {
+    "2023-24": MATCHES,
+    "2024-25": [],
+}
+SEASON_STANDINGS = {
+    "2023-24": STANDINGS_2023_24,
+    "2024-25": [],
+}
 
 
-def matches_for_year(year: int) -> list[dict]:
-    """All match dicts (with a parsed `pdate`) whose calendar year is `year`."""
-    out = []
-    for m in MATCHES:
-        pdate = parsed_date(m["date"])
-        if pdate.year == year:
-            out.append({**m, "pdate": pdate})
-    return out
+def matches_for_season(season: str) -> list[dict]:
+    """All match dicts for the given season, each with a parsed `pdate`."""
+    return [{**m, "pdate": parsed_date(m["date"])} for m in SEASON_MATCHES.get(season, [])]
+
+
+def season_months(season: str) -> list[tuple[int, int]]:
+    """Chronological (year, month) pairs spanning the season's matches."""
+    matches = matches_for_season(season)
+    if not matches:
+        return []
+    dates = sorted(m["pdate"] for m in matches)
+    months, seen = [], set()
+    for d in dates:
+        key = (d.year, d.month)
+        if key not in seen:
+            seen.add(key)
+            months.append(key)
+    return months
