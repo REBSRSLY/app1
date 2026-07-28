@@ -196,8 +196,8 @@ def _performance_bar(recent: pd.DataFrame, value_col: str, title: str, color: st
     )
     if is_percent:
         fig.update_layout(xaxis_tickformat=".0%")
-    fig.update_layout(height=210, margin=dict(l=0, r=10, t=10, b=10), showlegend=False)
-    fig.update_traces(marker=dict(size=4, opacity=0.75), line=dict(width=1.5), boxmean=False)
+    fig.update_layout(height=210, margin=dict(l=0, r=10, t=10, b=10))
+    fig.update_traces(error_x=dict(thickness=1, width=3))
     st.plotly_chart(fig, width="stretch")
 
 
