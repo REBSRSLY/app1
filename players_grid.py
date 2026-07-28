@@ -18,30 +18,32 @@ ROLE_COLORS = {
 
 # "surname" must match the values from data_loader.load_player_names() (used
 # to look up season stats); "first"/"last" must match the "First Last.png"
-# filenames under PHOTO_DIR exactly.
+# filenames under PHOTO_DIR exactly. "number" is the real jersey number, read
+# directly off each player's photo (Parrocchiale's photo is a mismatched
+# non-Vero-Volley kit with no number visible, hence None).
 GRID_ROWS = [
     [
-        {"first": "Alessia", "last": "Orro", "surname": "Orro", "role": "Setter", "captain": True},
-        {"first": "Vittoria", "last": "Prandi", "surname": "Prandi", "role": "Setter"},
-        {"first": "Paola", "last": "Egonu", "surname": "Egonu", "role": "Opposite"},
-        {"first": "Adhouljok", "last": "Malual", "surname": "Malual", "role": "Opposite"},
+        {"first": "Alessia", "last": "Orro", "surname": "Orro", "role": "Setter", "captain": True, "number": 8},
+        {"first": "Vittoria", "last": "Prandi", "surname": "Prandi", "role": "Setter", "number": 11},
+        {"first": "Paola", "last": "Egonu", "surname": "Egonu", "role": "Opposite", "number": 18},
+        {"first": "Adhouljok", "last": "Malual", "surname": "Malual", "role": "Opposite", "number": 3},
     ],
     [
-        {"first": "Myriam", "last": "Sylla", "surname": "Sylla", "role": "Outside Hitter"},
-        {"first": "Helena", "last": "Cazaute", "surname": "Cazaute", "role": "Outside Hitter"},
-        {"first": "Nika", "last": "Daalderop", "surname": "Daalderop", "role": "Outside Hitter"},
-        {"first": "Kara", "last": "Bajema", "surname": "Bajema", "role": "Outside Hitter"},
+        {"first": "Myriam", "last": "Sylla", "surname": "Sylla", "role": "Outside Hitter", "number": 17},
+        {"first": "Helena", "last": "Cazaute", "surname": "Cazaute", "role": "Outside Hitter", "number": 1},
+        {"first": "Nika", "last": "Daalderop", "surname": "Daalderop", "role": "Outside Hitter", "number": 19},
+        {"first": "Kara", "last": "Bajema", "surname": "Bajema", "role": "Outside Hitter", "number": 15},
     ],
     [
-        {"first": "Raphaela", "last": "Folie", "surname": "Folie", "role": "Middle Blocker"},
-        {"first": "Laura", "last": "Heyrman", "surname": "Heyrman", "role": "Middle Blocker"},
-        {"first": "Dana", "last": "Rettke", "surname": "Rettke", "role": "Middle Blocker"},
-        {"first": "Sonia", "last": "Candi", "surname": "Candi", "role": "Middle Blocker"},
+        {"first": "Raphaela", "last": "Folie", "surname": "Folie", "role": "Middle Blocker", "number": 7},
+        {"first": "Laura", "last": "Heyrman", "surname": "Heyrman", "role": "Middle Blocker", "number": 5},
+        {"first": "Dana", "last": "Rettke", "surname": "Rettke", "role": "Middle Blocker", "number": 14},
+        {"first": "Sonia", "last": "Candi", "surname": "Candi", "role": "Middle Blocker", "number": 28},
     ],
     [
-        {"first": "Brenda", "last": "Castillo", "surname": "Castillo", "role": "Libero"},
-        {"first": "Beatrice", "last": "Parrocchiale", "surname": "Parrocchiale", "role": "Libero"},
-        {"first": "Teodora", "last": "Pusic", "surname": "Pusic", "role": "Libero"},
+        {"first": "Brenda", "last": "Castillo", "surname": "Castillo", "role": "Libero", "number": 55},
+        {"first": "Beatrice", "last": "Parrocchiale", "surname": "Parrocchiale", "role": "Libero", "number": None},
+        {"first": "Teodora", "last": "Pusic", "surname": "Pusic", "role": "Libero", "number": 12},
         None,  # club crest, not a player
     ],
 ]

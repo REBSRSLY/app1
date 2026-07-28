@@ -15,17 +15,34 @@ RECENT_MATCHES_N = 5
 BASE_CARD_CSS = """
 <style>
     [class*="st-key-playercard_"] button {
-        width: 100%;
+        width: 80px !important;
+        height: 78px !important;
+        margin: 0 auto;
         font-weight: 600;
+        font-size: 10px;
         color: #ffffff !important;
-        text-shadow: 0 1px 3px rgba(0,0,0,0.7);
+        text-shadow: 0 1px 3px rgba(0,0,0,0.8);
         border: 1px solid rgba(255,255,255,0.15) !important;
+        display: flex !important;
+        flex-direction: column;
+        justify-content: center !important;
+        align-items: flex-start !important;
+        text-align: left !important;
+        position: relative;
+        overflow: hidden;
+        padding: 6px 30px 6px 8px !important;
+        line-height: 1.25;
+        white-space: normal;
+    }
+    [class*="st-key-playercard_"] button p { text-align: left !important; font-size: 11px; }
+    [class*="st-key-playercard_"] button div[data-testid="stMarkdownContainer"] {
+        position: relative;
+        z-index: 1;
     }
     [class*="st-key-playercard_"] button[kind="primary"] {
         border: 2px solid #ffffff !important;
         box-shadow: 0 0 0 2px rgba(255,255,255,0.25);
     }
-    .role-box { margin-bottom: 12px; }
     .role-label {
         writing-mode: vertical-rl;
         transform: rotate(180deg);
@@ -35,11 +52,23 @@ BASE_CARD_CSS = """
         letter-spacing: 0.08em;
         text-transform: uppercase;
         color: var(--muted);
-        height: 100%;
-        min-height: 64px;
         display: flex;
         align-items: center;
         justify-content: center;
+    }
+    /* Streamlit stretches every st.columns() row to the tallest sibling's
+       height (flexbox align-items:stretch), which cascades down through
+       nested columns/containers -- without this, each role box would
+       stretch to match the much taller overview panel next to the grid
+       instead of hugging its own 1-row-of-cards content. */
+    div[data-testid="stVerticalBlock"]:has(> div .role-label) {
+        height: auto !important;
+        flex-grow: 0 !important;
+        align-self: flex-start !important;
+    }
+    div[data-testid="stHorizontalBlock"]:has(> div .role-label) {
+        height: auto !important;
+        align-items: flex-start !important;
     }
     .overview-name { font-size: 1.2rem; font-weight: 700; }
     .overview-role { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
@@ -47,17 +76,22 @@ BASE_CARD_CSS = """
 """
 
 
-def _player_gradient_css() -> str:
-    """One background-gradient rule per player, keyed off their button's
-    auto-generated st-key class -- this is what makes each card read as
-    "that player's color" instead of a flat per-role accent."""
+def _player_card_css() -> str:
+    """Per-player background gradient (surface -> her color, left to right)
+    and a large jersey-number watermark, both keyed off the button's
+    auto-generated st-key class."""
     rules = []
     for p in pg.ALL_PLAYERS:
         color = pc.color_for(p["surname"])
+        number_content = str(p["number"]) if p["number"] is not None else ""
         rules.append(
             f'[class*="st-key-playercard_{p["surname"]}"] button {{ '
-            f'background: linear-gradient(135deg, {color}, {rgba_from_hex(color, 0.45)}) !important; '
-            f'}}'
+            f'background: linear-gradient(90deg, var(--surface) 0%, {rgba_from_hex(color, 0.55)} 100%) !important; '
+            f'}} '
+            f'[class*="st-key-playercard_{p["surname"]}"] button::after {{ '
+            f'content: "{number_content}"; position: absolute; right: 2px; bottom: -4px; '
+            f'font-size: 1.7rem; font-weight: 800; color: var(--surface); z-index: 0; '
+            f'line-height: 1; pointer-events: none; }}'
         )
     return f"<style>{''.join(rules)}</style>"
 
@@ -69,14 +103,14 @@ def _select_player(surname: str):
 def _render_player_card(player: dict, stats, selected: str):
     if player["surname"] in stats.index:
         row = stats.loc[player["surname"]]
-        label = f"{row['points']} pts · {row['appearances']} m"
+        score, caps = row["points"], row["appearances"]
     else:
-        label = "No data"
-    cap = "👑 " if player.get("captain") else ""
+        score, caps = "—", "—"
+    cap_badge = "👑 " if player.get("captain") else ""
     # The button *is* the card (no separate image/container), so the whole
     # visible surface is clickable, not just a caption underneath a photo.
     st.button(
-        f"{cap}**{player['first']} {player['last']}**\n{label}",
+        f"{cap_badge}{player['first']} {player['last'].upper()}\nScore: {score}\nConvocazioni: {caps}",
         key=f"playercard_{player['surname']}",
         on_click=_select_player,
         args=(player["surname"],),
@@ -87,7 +121,7 @@ def _render_player_card(player: dict, stats, selected: str):
 
 def _render_role_group(role: str, group_players: list[dict], stats, selected: str):
     with st.container(border=True):
-        col_label, col_cards = st.columns([0.3, 4])
+        col_label, col_cards = st.columns([0.14, 4])
         with col_label:
             st.markdown(f'<div class="role-label">{role}</div>', unsafe_allow_html=True)
         with col_cards:
@@ -192,21 +226,36 @@ def _render_overview(surname: str):
 def render():
     section_header("Players", "Click a player for her season overview.")
     st.markdown(BASE_CARD_CSS, unsafe_allow_html=True)
-    st.markdown(_player_gradient_css(), unsafe_allow_html=True)
+    st.markdown(_player_card_css(), unsafe_allow_html=True)
 
     st.session_state.setdefault("selected_player", "Orro")
     selected = st.session_state["selected_player"]
     stats = dl.load_player_stats()
+    groups = {role: list(g) for role, g in groupby(pg.ALL_PLAYERS, key=lambda p: p["role"])}
 
-    col_grid, col_overview = st.columns([3, 2])
+    col_grid, col_overview = st.columns([4, 3])
 
     with col_grid:
-        for role, group in groupby(pg.ALL_PLAYERS, key=lambda p: p["role"]):
-            _render_role_group(role, list(group), stats, selected)
+        # Row 1: Setter + Opposite side by side, in separate boxes (2 cards
+        # each, so equal-width columns keep every card the same size).
+        col_setter, col_opposite = st.columns(2)
+        with col_setter:
+            _render_role_group("Setter", groups["Setter"], stats, selected)
+        with col_opposite:
+            _render_role_group("Opposite", groups["Opposite"], stats, selected)
 
-        col_a, col_b, col_c = st.columns([2, 1, 2])
-        with col_b:
-            st.image(pg.CREST_PATH, width="stretch")
+        # Rows 2-3: Outside Hitter and Middle Blocker, 4 cards each, full width.
+        _render_role_group("Outside Hitter", groups["Outside Hitter"], stats, selected)
+        _render_role_group("Middle Blocker", groups["Middle Blocker"], stats, selected)
+
+        # Row 4: Libero (3 cards) + crest, kept at a 3:1 width ratio so the
+        # Libero cards stay exactly as wide as every other card above.
+        col_libero, col_crest = st.columns([3, 1])
+        with col_libero:
+            _render_role_group("Libero", groups["Libero"], stats, selected)
+        with col_crest:
+            with st.container(border=True):
+                st.image(pg.CREST_PATH, width="stretch")
 
     with col_overview:
         _render_overview(selected)
