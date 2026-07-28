@@ -14,9 +14,12 @@ RECENT_MATCHES_N = 5
 
 BASE_CARD_CSS = """
 <style>
+    /* Wide/short (not square) so First name, SURNAME, Score and Conv. each
+       sit on their own line without wrapping mid-word or clipping. */
     [class*="st-key-playercard_"] button {
-        width: 80px !important;
-        height: 78px !important;
+        width: 100%;
+        min-width: 92px;
+        height: 82px !important;
         margin: 0 auto;
         font-weight: 600;
         font-size: 10px;
@@ -30,14 +33,25 @@ BASE_CARD_CSS = """
         text-align: left !important;
         position: relative;
         overflow: hidden;
-        padding: 6px 30px 6px 8px !important;
-        line-height: 1.25;
+        padding: 5px 26px 5px 8px !important;
+        line-height: 1.28;
         white-space: normal;
+        word-break: normal;
+        overflow-wrap: normal;
     }
-    [class*="st-key-playercard_"] button p { text-align: left !important; font-size: 11px; }
+    [class*="st-key-playercard_"] button p {
+        text-align: left !important;
+        font-size: 10px;
+        /* st.button doesn't turn "\\n" into <br> -- it's literal text inside
+           one <p>, so plain "normal"/"nowrap" whitespace handling collapses
+           our First/SURNAME/Score/Conv lines onto a single overflowing line.
+           pre-line is what actually makes each "\\n" a real line break. */
+        white-space: pre-line;
+    }
     [class*="st-key-playercard_"] button div[data-testid="stMarkdownContainer"] {
         position: relative;
         z-index: 1;
+        width: 100%;
     }
     [class*="st-key-playercard_"] button[kind="primary"] {
         border: 2px solid #ffffff !important;
@@ -65,6 +79,7 @@ BASE_CARD_CSS = """
         height: auto !important;
         flex-grow: 0 !important;
         align-self: flex-start !important;
+        border-width: 2px !important;
     }
     div[data-testid="stHorizontalBlock"]:has(> div .role-label) {
         height: auto !important;
@@ -74,6 +89,22 @@ BASE_CARD_CSS = """
     .overview-role { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
 </style>
 """
+
+
+def _role_border_css() -> str:
+    """Colors each role box's border (and its side label) with that role's
+    color from players_grid.ROLE_COLORS, via the same :has() trick used
+    above to fix the box height -- st.container(border=True) has no color
+    parameter of its own."""
+    rules = []
+    for role, color in pg.ROLE_COLORS.items():
+        slug = role.lower().replace(" ", "-")
+        rules.append(
+            f'div[data-testid="stVerticalBlock"]:has(> div .role-label-{slug}) {{ '
+            f'border-color: {color} !important; }} '
+            f'.role-label-{slug} {{ color: {color} !important; }}'
+        )
+    return f"<style>{''.join(rules)}</style>"
 
 
 def _player_card_css() -> str:
@@ -89,8 +120,8 @@ def _player_card_css() -> str:
             f'background: linear-gradient(90deg, var(--surface) 0%, {rgba_from_hex(color, 0.55)} 100%) !important; '
             f'}} '
             f'[class*="st-key-playercard_{p["surname"]}"] button::after {{ '
-            f'content: "{number_content}"; position: absolute; right: 2px; bottom: -4px; '
-            f'font-size: 1.7rem; font-weight: 800; color: var(--surface); z-index: 0; '
+            f'content: "{number_content}"; position: absolute; right: 3px; bottom: 3px; '
+            f'font-size: 1.15rem; font-weight: 800; color: var(--surface); z-index: 0; '
             f'line-height: 1; pointer-events: none; }}'
         )
     return f"<style>{''.join(rules)}</style>"
@@ -109,8 +140,10 @@ def _render_player_card(player: dict, stats, selected: str):
     cap_badge = "👑 " if player.get("captain") else ""
     # The button *is* the card (no separate image/container), so the whole
     # visible surface is clickable, not just a caption underneath a photo.
+    # Each field on its own short line (rather than combined) so long names
+    # and the score/appearances numbers never wrap mid-word inside the card.
     st.button(
-        f"{cap_badge}{player['first']} {player['last'].upper()}\nScore: {score}\nConvocazioni: {caps}",
+        f"{cap_badge}{player['first']}\n{player['last'].upper()}\nScore: {score}\nConv: {caps}",
         key=f"playercard_{player['surname']}",
         on_click=_select_player,
         args=(player["surname"],),
@@ -120,10 +153,11 @@ def _render_player_card(player: dict, stats, selected: str):
 
 
 def _render_role_group(role: str, group_players: list[dict], stats, selected: str):
+    slug = role.lower().replace(" ", "-")
     with st.container(border=True):
         col_label, col_cards = st.columns([0.14, 4])
         with col_label:
-            st.markdown(f'<div class="role-label">{role}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="role-label role-label-{slug}">{role}</div>', unsafe_allow_html=True)
         with col_cards:
             cols = st.columns(len(group_players))
             for col, player in zip(cols, group_players):
@@ -143,27 +177,27 @@ def _recent_matches(surname: str, n: int = RECENT_MATCHES_N) -> pd.DataFrame:
     return rows[rows["match"].isin(recent_matches)]
 
 
-def _performance_bar(recent: pd.DataFrame, value_col: str, title: str, color: str, is_percent: bool):
-    agg = recent.groupby("fondamentale", observed=True).agg(
-        mean=(value_col, "mean"), std=(value_col, "std"), tot=("Tot", "sum"),
-    ).reset_index()
-    agg["std"] = agg["std"].fillna(0)
-    agg = agg[agg["tot"] > 0].sort_values("mean")
-
-    if agg.empty:
+def _performance_box(recent: pd.DataFrame, value_col: str, title: str, color: str, is_percent: bool):
+    """Horizontal box plot: one box per fundamental, built directly from the
+    per-match values in the last RECENT_MATCHES_N matches (no pre-aggregated
+    mean/std -- the box/whiskers/points show the real match-to-match spread)."""
+    d = recent[recent["Tot"] > 0].copy()
+    if d.empty:
         st.info(f"No {title.lower()} data in the last {RECENT_MATCHES_N} matches.")
         return
 
-    agg["Fundamental"] = agg["fondamentale"].map(dl.FONDAMENTALE_LABELS)
-    fig = px.bar(
-        agg, x="mean", y="Fundamental", orientation="h", error_x="std",
-        labels={"mean": title, "Fundamental": ""},
+    d["Fundamental"] = d["fondamentale"].map(dl.FONDAMENTALE_LABELS)
+    order = d.groupby("Fundamental")[value_col].median().sort_values().index.tolist()
+    fig = px.box(
+        d, x=value_col, y="Fundamental", orientation="h", points="all",
+        category_orders={"Fundamental": order},
+        labels={value_col: title, "Fundamental": ""},
         color_discrete_sequence=[color],
     )
     if is_percent:
         fig.update_layout(xaxis_tickformat=".0%")
-    fig.update_layout(height=210, margin=dict(l=0, r=10, t=10, b=10))
-    fig.update_traces(error_x=dict(thickness=1, width=3))
+    fig.update_layout(height=210, margin=dict(l=0, r=10, t=10, b=10), showlegend=False)
+    fig.update_traces(marker=dict(size=4, opacity=0.75), line=dict(width=1.5), boxmean=False)
     st.plotly_chart(fig, width="stretch")
 
 
@@ -173,9 +207,9 @@ def _render_performance(surname: str, color: str):
         st.info("No scouting data for this player.")
         return
 
-    st.caption(f"Last {RECENT_MATCHES_N} matches · bars show the mean, whiskers show the standard deviation.")
-    _performance_bar(recent, "E_pct", "Efficiency E%", color, is_percent=True)
-    _performance_bar(recent, "Ind", "Index", color, is_percent=False)
+    st.caption(f"Last {RECENT_MATCHES_N} matches · box shows the spread across matches, dots are individual match values.")
+    _performance_box(recent, "E_pct", "Efficiency E%", color, is_percent=True)
+    _performance_box(recent, "Ind", "Index", color, is_percent=False)
 
 
 def _render_wellness_radar(surname: str, color: str):
@@ -226,6 +260,7 @@ def _render_overview(surname: str):
 def render():
     section_header("Players", "Click a player for her season overview.")
     st.markdown(BASE_CARD_CSS, unsafe_allow_html=True)
+    st.markdown(_role_border_css(), unsafe_allow_html=True)
     st.markdown(_player_card_css(), unsafe_allow_html=True)
 
     st.session_state.setdefault("selected_player", "Orro")
@@ -233,7 +268,11 @@ def render():
     stats = dl.load_player_stats()
     groups = {role: list(g) for role, g in groupby(pg.ALL_PLAYERS, key=lambda p: p["role"])}
 
-    col_grid, col_overview = st.columns([4, 3])
+    # Grid gets more than half the width: the Setter/Opposite boxes each
+    # only fit 2 cards side by side, so per-card space is tighter there than
+    # in the 4-card rows -- a wider grid column is what keeps every card
+    # readable instead of being squeezed by the overview panel next to it.
+    col_grid, col_overview = st.columns([3, 2])
 
     with col_grid:
         # Row 1: Setter + Opposite side by side, in separate boxes (2 cards

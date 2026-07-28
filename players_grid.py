@@ -20,7 +20,8 @@ ROLE_COLORS = {
 # to look up season stats); "first"/"last" must match the "First Last.png"
 # filenames under PHOTO_DIR exactly. "number" is the real jersey number, read
 # directly off each player's photo (Parrocchiale's photo is a mismatched
-# non-Vero-Volley kit with no number visible, hence None).
+# non-Vero-Volley kit with no number visible; her number 23 was provided
+# directly rather than read off the photo).
 GRID_ROWS = [
     [
         {"first": "Alessia", "last": "Orro", "surname": "Orro", "role": "Setter", "captain": True, "number": 8},
@@ -42,7 +43,7 @@ GRID_ROWS = [
     ],
     [
         {"first": "Brenda", "last": "Castillo", "surname": "Castillo", "role": "Libero", "number": 55},
-        {"first": "Beatrice", "last": "Parrocchiale", "surname": "Parrocchiale", "role": "Libero", "number": None},
+        {"first": "Beatrice", "last": "Parrocchiale", "surname": "Parrocchiale", "role": "Libero", "number": 23},
         {"first": "Teodora", "last": "Pusic", "surname": "Pusic", "role": "Libero", "number": 12},
         None,  # club crest, not a player
     ],
