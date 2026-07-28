@@ -31,6 +31,18 @@ def close_polygon(r, theta):
     return list(r) + [r[0]], list(theta) + [theta[0]]
 
 
+# Wellness questionnaire items shown as icons instead of text labels on radar
+# charts. Same 1-5, high = worse items used team-wide (see wellness.py).
+WELLNESS_ICONS = {"Fatica": "🔋", "Sonno": "😴", "Doms": "💪", "Stress": "😌", "Mood": "🙂"}
+
+
+def rgba_from_hex(hex_color: str, alpha: float) -> str:
+    """'#64B5F6' -> 'rgba(100,181,246,0.3)' (plotly rejects 8-digit hex+alpha)."""
+    h = hex_color.lstrip("#")
+    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+    return f"rgba({r},{g},{b},{alpha})"
+
+
 def dark_polar_layout(radial_range):
     """Shared dark-themed go.Figure layout for radar/polar charts."""
     return dict(

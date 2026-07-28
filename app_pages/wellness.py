@@ -3,7 +3,8 @@ import plotly.graph_objects as go
 import streamlit as st
 
 import data_loader as dl
-from ui_helpers import close_polygon, dark_polar_layout, date_range_picker, section_header
+import players_grid as pg
+from ui_helpers import WELLNESS_ICONS, close_polygon, dark_polar_layout, date_range_picker, section_header
 
 # Wellness questionnaire items: all 1-5, high = worse (confirmed by negative
 # correlation with Tqr, which is 6-20 with high = better).
@@ -27,6 +28,26 @@ PARAM_RANGE = {
     "Fatica": (1, 5), "Sonno": (1, 5), "Doms": (1, 5),
     "Stress": (1, 5), "Mood": (1, 5), "Tqr": (6, 20),
 }
+
+
+def _player_radar(p_period, use_icons=False, height=None):
+    """Same 'Individual player' radar (TQR-colored, axes inverted so bigger =
+    better) for one player's data in the current date range, or None if empty."""
+    if p_period.empty:
+        return None, None
+
+    inverted = [6 - p_period[p].mean() for p in NEGATIVE_PARAMS]
+    labels = list(WELLNESS_ICONS.values()) if use_icons else [INVERTED_LABELS[p] for p in NEGATIVE_PARAMS]
+    tqr_avg = p_period["Tqr"].mean()
+    t = max(0.0, min(1.0, (tqr_avg - 6) / (20 - 6)))
+    color = pcolors.sample_colorscale("RdYlGn", [t])[0]
+    fill = color.replace("rgb", "rgba").replace(")", ", 0.35)")
+    r, theta = close_polygon(inverted, labels)
+    fig = go.Figure(go.Scatterpolar(r=r, theta=theta, fill="toself", line_color=color, fillcolor=fill))
+    fig.update_layout(**dark_polar_layout([1, 5]))
+    if height is not None:
+        fig.update_layout(height=height, margin=dict(l=10, r=10, t=10, b=10))
+    return fig, tqr_avg
 
 
 def render():
@@ -58,11 +79,11 @@ def render():
             else:
                 lo, hi = PARAM_RANGE[param]
                 is_negative = param in NEGATIVE_PARAMS
-                # Same inversion as the individual radar below: these
+                # Same inversion as the individual radars below: these
                 # params are 1-5 with high = worse, so plotting the raw
                 # value would make a *bad* score look bigger on the
                 # chart. Flip to lo+hi-x so bigger always means better,
-                # like Tqr (and the individual chart) already do.
+                # like Tqr (and the individual charts) already do.
                 values = [lo + hi - v for v in team_avg.values] if is_negative else list(team_avg.values)
                 r, theta = close_polygon(values, list(team_avg.index))
                 fig = go.Figure(go.Scatterpolar(
@@ -81,17 +102,28 @@ def render():
             player_sel = st.selectbox("Player", all_players, key="wellness_player")
             p_period = period[period["player_name"] == player_sel]
 
-            if p_period.empty:
+            fig, tqr_avg = _player_radar(p_period)
+            if fig is None:
                 st.info("No data for this player in this date range.")
             else:
-                inverted = [6 - p_period[p].mean() for p in NEGATIVE_PARAMS]
-                labels = [INVERTED_LABELS[p] for p in NEGATIVE_PARAMS]
-                tqr_avg = p_period["Tqr"].mean()
-                t = max(0.0, min(1.0, (tqr_avg - 6) / (20 - 6)))
-                color = pcolors.sample_colorscale("RdYlGn", [t])[0]
-                fill = color.replace("rgb", "rgba").replace(")", ", 0.35)")
-                r, theta = close_polygon(inverted, labels)
-                fig = go.Figure(go.Scatterpolar(r=r, theta=theta, fill="toself", line_color=color, fillcolor=fill))
-                fig.update_layout(**dark_polar_layout([1, 5]))
                 st.plotly_chart(fig, width="stretch", theme=None)
                 st.caption(f"Axes inverted so bigger = feeling better. Fill color reflects average TQR: {tqr_avg:.1f}/20.")
+
+    st.write("---")
+    st.markdown("**All players**")
+    for row in pg.GRID_ROWS:
+        cols = st.columns(4)
+        for col, player in zip(cols, row):
+            with col:
+                if player is None:
+                    with st.container(border=True):
+                        st.image(pg.CREST_PATH, width="stretch")
+                    continue
+                with st.container(border=True):
+                    st.caption(player["last"])
+                    p_period = period[period["player_name"] == player["surname"]]
+                    fig, tqr_avg = _player_radar(p_period, use_icons=True, height=170)
+                    if fig is None:
+                        st.caption("No data")
+                    else:
+                        st.plotly_chart(fig, width="stretch", theme=None, key=f"radar_{player['surname']}")

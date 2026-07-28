@@ -6,7 +6,7 @@ import streamlit as st
 import data_loader as dl
 import player_colors as pc
 import players_grid as pg
-from ui_helpers import close_polygon, dark_polar_layout, section_header
+from ui_helpers import WELLNESS_ICONS, close_polygon, dark_polar_layout, rgba_from_hex, section_header
 
 CARD_CSS = """
 <style>
@@ -16,10 +16,6 @@ CARD_CSS = """
     .overview-role { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
 </style>
 """
-
-# Wellness questionnaire items shown as icons instead of text labels (see
-# wellness.py for the same 1-5, high = worse items used team-wide).
-WELLNESS_ICONS = {"Fatica": "🔋", "Sonno": "😴", "Doms": "💪", "Stress": "😌", "Mood": "🙂"}
 
 
 def _select_player(surname: str):
@@ -70,12 +66,6 @@ def _render_performance(surname: str, color: str):
     st.plotly_chart(fig, width="stretch")
 
 
-def _rgba(hex_color: str, alpha: float) -> str:
-    h = hex_color.lstrip("#")
-    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
-    return f"rgba({r},{g},{b},{alpha})"
-
-
 def _render_wellness_radar(surname: str, color: str):
     wellness = dl.load_wellness_data()["wellness"]
     p = wellness[wellness["player_name"] == surname]
@@ -87,7 +77,7 @@ def _render_wellness_radar(surname: str, color: str):
     values = [6 - recent[param].mean() for param in WELLNESS_ICONS]
     icons = list(WELLNESS_ICONS.values())
     r, theta = close_polygon(values, icons)
-    fig = go.Figure(go.Scatterpolar(r=r, theta=theta, fill="toself", line_color=color, fillcolor=_rgba(color, 0.3)))
+    fig = go.Figure(go.Scatterpolar(r=r, theta=theta, fill="toself", line_color=color, fillcolor=rgba_from_hex(color, 0.3)))
     fig.update_layout(**dark_polar_layout([1, 5]))
     fig.update_layout(height=230, margin=dict(l=20, r=20, t=10, b=10))
     st.plotly_chart(fig, width="stretch", theme=None)
