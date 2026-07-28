@@ -40,7 +40,8 @@ def render():
         <div class="draft-block">
             <div class="draft-label">Quick access</div>
             <div class="ph-line">📊 <b>Scout & Stats</b> — per-fundamental statistics and attack game distribution</div>
-            <div class="ph-line">💤 <b>Load & Wellness</b> — wellness radars, jump load and RPE/training load trends</div>
+            <div class="ph-line">💤 <b>Wellness</b> — daily questionnaire radars, team and individual</div>
+            <div class="ph-line">🏋️ <b>Loads</b> — jump count and RPE/training load trends</div>
             <div class="ph-line">📅 <b>Matches</b> — season calendar by competition and championship standings</div>
         </div>
     """, unsafe_allow_html=True)
