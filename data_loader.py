@@ -265,6 +265,40 @@ def load_player_roles() -> dict[str, str]:
     return dict(zip(f["code"], f["Ruolo"]))
 
 
+# Fundamentals whose "Perfect" (#) outcome is an actual scored point (serve
+# ace, every attack variant, block point) -- as opposed to e.g. a perfect
+# reception or dig, which don't put a point on the board by themselves.
+POINT_FONDAMENTALI = ["Battuta", "Attacco", "Att dopo Ricez", "Contrattacco", "Muro"]
+
+
+@st.cache_data(show_spinner="Loading scouting data...")
+def load_player_stats() -> pd.DataFrame:
+    """Per-player season totals: points scored and matches played.
+
+    Indexed by player_name (the same short name used everywhere else, e.g.
+    "Egonu"). Points come from the season-aggregate sheet (summed once, not
+    re-derived from every match sheet, to avoid double-counting). Matches
+    played = number of distinct match sheets the player appears in at all
+    (any fundamental), excluding the season-aggregate sheet itself.
+    """
+    scout = load_scout_data()
+
+    season = scout[(scout["match"] == SEASON_LABEL) & (scout["palla"] == "Totale") & (~scout["is_team"])]
+    points = (
+        season[season["fondamentale"].isin(POINT_FONDAMENTALI)]
+        .groupby("player_code")["Perfect"].sum()
+    )
+
+    per_match = scout[(scout["match"] != SEASON_LABEL) & (scout["palla"] == "Totale") & (~scout["is_team"])]
+    appearances = per_match.groupby("player_code")["match"].nunique()
+
+    df = pd.DataFrame({"points": points, "appearances": appearances}).fillna(0)
+    df["points"] = df["points"].astype(int)
+    df["appearances"] = df["appearances"].astype(int)
+    df["player_name"] = df.index.map(load_player_names())
+    return df.set_index("player_name")
+
+
 @st.cache_data(show_spinner="Loading scouting data...")
 def load_scout_data() -> pd.DataFrame:
     """Load and normalize all scout sheets (season total + every match)."""

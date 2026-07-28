@@ -1,40 +1,62 @@
 import streamlit as st
 
-from roster import titolari, panchina
+import data_loader as dl
+import players_grid as pg
 from ui_helpers import section_header
 
+CARD_CSS = """
+<style>
+    .roster-photo-wrap {
+        border-radius: 8px;
+        overflow: hidden;
+        margin-bottom: 8px;
+        background: #f2f2f2;
+        line-height: 0;
+    }
+    .roster-name { font-weight: 700; font-size: 1rem; text-align: center; }
+    .roster-role {
+        font-size: 11px; color: var(--muted); text-transform: uppercase;
+        letter-spacing: 0.05em; text-align: center; margin-bottom: 6px;
+    }
+    .roster-stats { font-size: 12px; color: var(--muted); text-align: center; }
+    .roster-crest-cell { display: flex; align-items: center; justify-content: center; height: 100%; padding: 20px 0; }
+</style>
+"""
 
-def _render_dossier_card(p, is_starter=True):
-    file_id = f"FILE · {p['pos']}" if "pos" in p else f"FILE · {p['role']}"
-    tab_class = "starter" if is_starter else "bench"
-    captain_html = '<span class="stamp-captain">Captain</span>' if "tag" in p else ""
 
+def _render_player_card(player: dict, stats):
+    color = pg.ROLE_COLORS[player["role"]]
     with st.container(border=True):
-        st.markdown(f'<div class="dossier-tab {tab_class}"></div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="dossier-id">{file_id}</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="dossier-name">{p["name"]}{captain_html}</div>', unsafe_allow_html=True)
-        st.caption(p["role"])
-        if "alt" in p:
-            st.caption(f"Alternates with: {p['alt']}")
+        st.markdown(f'<div style="height:4px;margin:-1px -1px 10px -1px;border-radius:6px 6px 0 0;background:{color}"></div>', unsafe_allow_html=True)
+        st.image(pg.photo_path(player), width="stretch")
+        cap = ' <span class="stamp-captain">Captain</span>' if player.get("captain") else ""
+        st.markdown(f'<div class="roster-name">{player["last"]}{cap}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="roster-role">{player["role"]}</div>', unsafe_allow_html=True)
 
-
-def _render_grid(players, is_starter):
-    cols = st.columns(3)
-    for i, p in enumerate(players):
-        with cols[i % 3]:
-            _render_dossier_card(p, is_starter=is_starter)
+        if player["surname"] in stats.index:
+            row = stats.loc[player["surname"]]
+            st.markdown(
+                f'<div class="roster-stats">🏐 {row["points"]} pts · {row["appearances"]} matches</div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown('<div class="roster-stats">No scouting data</div>', unsafe_allow_html=True)
 
 
 def render():
-    section_header("Players", "Full roster. Each file summarizes role, position and rotation notes.")
+    section_header("Players", "Full roster by role, with season points and appearances.")
+    st.markdown(CARD_CSS, unsafe_allow_html=True)
 
-    search_query = st.text_input("🔍 Search player...", placeholder="Type a name...")
+    stats = dl.load_player_stats()
 
-    def _matches(p):
-        return not search_query or search_query.lower() in p["name"].lower()
-
-    st.subheader("Starting Roster")
-    _render_grid([p for p in titolari if _matches(p)], is_starter=True)
-
-    st.subheader("Bench")
-    _render_grid([p for p in panchina if _matches(p)], is_starter=False)
+    for row in pg.GRID_ROWS:
+        cols = st.columns(4)
+        for col, player in zip(cols, row):
+            with col:
+                if player is None:
+                    with st.container(border=True):
+                        st.markdown('<div class="roster-crest-cell">', unsafe_allow_html=True)
+                        st.image(pg.CREST_PATH, width="stretch")
+                        st.markdown('</div>', unsafe_allow_html=True)
+                else:
+                    _render_player_card(player, stats)
