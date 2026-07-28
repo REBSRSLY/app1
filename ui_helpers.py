@@ -1,7 +1,5 @@
 """Small UI utilities shared across the app's sections."""
 
-from datetime import timedelta
-
 import streamlit as st
 
 
@@ -13,17 +11,6 @@ def section_header(title, purpose):
         f'</div>',
         unsafe_allow_html=True,
     )
-
-
-def date_range_picker(label, series, default_days, key):
-    """A st.date_input range picker defaulting to the last N days of the given date series."""
-    min_d = series.min().date()
-    max_d = series.max().date()
-    default_start = max(min_d, max_d - timedelta(days=default_days - 1))
-    value = st.date_input(label, value=(default_start, max_d), min_value=min_d, max_value=max_d, key=key)
-    if isinstance(value, tuple) and len(value) == 2:
-        return value
-    return default_start, max_d
 
 
 def close_polygon(r, theta):

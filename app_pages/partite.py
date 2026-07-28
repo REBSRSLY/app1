@@ -5,14 +5,21 @@ import streamlit as st
 
 import calendar_view as cv
 import data_loader as dl
+import filters
 import match_calendar as mc
 from ui_helpers import section_header
 
 
-def _render_by_competition(season: str, season_matches: list[dict]):
+def _render_by_competition(season: str, season_matches: list[dict], competition_filter: str):
     st.markdown(cv.BOX_CSS, unsafe_allow_html=True)
 
     present = [c for c in mc.COMPETITION_ORDER if any(m["competition"] == c for m in season_matches)]
+    if competition_filter != filters.ALL_COMPETITIONS:
+        present = [c for c in present if c == competition_filter]
+        if not present:
+            st.info(f"No {competition_filter} matches recorded for this season.")
+            return
+
     if "Serie A1" not in present:
         st.info("No championship matches recorded for this season yet.")
     else:
@@ -49,8 +56,14 @@ def _render_full_calendar(season: str, season_matches: list[dict]):
     st.markdown(cv.render_month_calendar(season_matches, year, month, salti_dates), unsafe_allow_html=True)
 
 
-def _render_all_matches():
-    df = pd.DataFrame(mc.MATCHES).sort_values("date")
+def _render_all_matches(season_matches: list[dict], competition_filter: str):
+    if competition_filter != filters.ALL_COMPETITIONS:
+        season_matches = [m for m in season_matches if m["competition"] == competition_filter]
+    if not season_matches:
+        st.info(f"No {competition_filter} matches recorded for this season.")
+        return
+
+    df = pd.DataFrame(season_matches).sort_values("date")
     df["Date"] = df["date"].apply(lambda d: datetime.strptime(d, "%y-%m-%d").strftime("%d %b %Y"))
     df["Venue"] = df["home"].map({True: "Home", False: "Away"})
     df["Round"] = df.apply(lambda r: f"{r['competition']} ({r['round']})", axis=1)
@@ -80,21 +93,21 @@ SECTIONS = ["By competition", "Full calendar", "All matches"]
 def render():
     section_header("Matches", "Results and standings by competition, plus the full season calendar.")
 
-    col_season, col_section = st.columns([1, 3])
-    with col_season:
-        season = st.selectbox("Season", mc.SEASONS, index=0, key="season_select")
+    season = filters.season()
+    competition_filter = filters.competition()
     season_matches = mc.matches_for_season(season)
+
+    st.caption(f":material/filter_alt: {season}{'' if competition_filter == filters.ALL_COMPETITIONS else f' · {competition_filter}'} · change from the sidebar.")
 
     if not season_matches:
         st.info(f"No matches recorded yet for the {season} season.")
         return
 
-    with col_section:
-        section = st.segmented_control("Section", SECTIONS, default=SECTIONS[0], key="matches_section")
+    section = st.segmented_control("Section", SECTIONS, default=SECTIONS[0], key="matches_section")
 
     if section == "By competition":
-        _render_by_competition(season, season_matches)
+        _render_by_competition(season, season_matches, competition_filter)
     elif section == "Full calendar":
         _render_full_calendar(season, season_matches)
     else:
-        _render_all_matches()
+        _render_all_matches(season_matches, competition_filter)

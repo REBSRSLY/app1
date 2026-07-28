@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 import data_loader as dl
+import filters
 import match_calendar as mc
 import player_colors as pc
 from ui_helpers import section_header
@@ -43,6 +44,7 @@ SECTIONS = ["General stats", "Game distribution", "Excel Scout Sheet"]
 
 
 def _render_general_stats(scout, partita_options, format_partita_option):
+    filters.ensure_valid_selection("gen_partita", partita_options)
     col_partita, col_fond = st.columns(2)
     with col_partita:
         partita_sel = st.selectbox("Match", partita_options, key="gen_partita", format_func=format_partita_option)
@@ -132,6 +134,7 @@ def _render_distribution(scout, partita_options, format_partita_option, palla_ti
         "Reflects the game distribution set by the setter."
     )
 
+    filters.ensure_valid_selection("dist_partita", partita_options)
     col_partita, col_fond, col_metrica = st.columns(3)
     with col_partita:
         partita_sel2 = st.selectbox("Match", partita_options, key="dist_partita", format_func=format_partita_option)
@@ -251,6 +254,7 @@ def _render_raw_sheet(scout, partita_options, format_partita_option):
         "export (Fundamental → Set type → Team/Player, then P / Set / Ind / E% / Tot / "
         "= / % / BP / pC …) — player surnames instead of codes."
     )
+    filters.ensure_valid_selection("raw_partita", partita_options)
     partita_sel3 = st.selectbox("Match", partita_options, key="raw_partita", format_func=format_partita_option)
 
     raw = scout[scout["match"] == partita_sel3].copy()
@@ -283,13 +287,14 @@ def render():
     section_header("Scout & Stats", "Per-fundamental scouting statistics and attack game distribution, for a single match or the whole season.")
 
     scout = dl.load_scout_data()
-    matches = dl.load_match_list()
-    partita_options = [dl.SEASON_LABEL] + matches
+    partita_options = filters.match_options()
     palla_tipi = [p for p in dl.PALLA_ORDER if p != "Totale"]
     palla_tipi_en = [dl.PALLA_LABELS[p] for p in palla_tipi]
 
     def format_partita_option(opt: str) -> str:
         return opt if opt == dl.SEASON_LABEL else mc.match_label(opt)
+
+    st.caption(f":material/filter_alt: {filters.caption()} · change the period/competition from the sidebar.")
 
     # A plain st.tabs would leave whichever section isn't shown mounted but
     # hidden (display:none); Streamlit's data-grid widget never recovers a

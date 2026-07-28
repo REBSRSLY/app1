@@ -1,11 +1,13 @@
 import streamlit as st
 
 import data_loader as dl
+import filters
 from ui_helpers import section_header
 
 
 def render():
     section_header("Home", "Season at a glance: key numbers from scouting and wellness.")
+    st.caption(f":material/filter_alt: Sidebar scope: {filters.caption()} — most pages below follow it.")
 
     matches = dl.load_match_list()
     wellness = dl.load_wellness_data()["wellness"]

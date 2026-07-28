@@ -2,22 +2,19 @@ import plotly.express as px
 import streamlit as st
 
 import data_loader as dl
+import filters
 import player_colors as pc
-from ui_helpers import date_range_picker, section_header
+from ui_helpers import section_header
 
 SECTIONS = ["Jumps", "RPE / Load"]
 
 
 def _render_jumps(salti):
     salti_players = sorted(salti["player_name"].dropna().unique())
-    start_d, end_d = date_range_picker("Date range", salti["Data"], 14, "jumps_dates")
     sel_players = st.multiselect("Players", salti_players, default=salti_players, key="jumps_players")
 
-    mask = (
-        (salti["Data"].dt.date >= start_d) & (salti["Data"].dt.date <= end_d)
-        & salti["player_name"].isin(sel_players)
-    )
-    period = salti[mask].dropna(subset=["SALTI"])
+    period = filters.filter_by_date_col(salti)
+    period = period[period["player_name"].isin(sel_players)].dropna(subset=["SALTI"])
 
     if period.empty:
         st.info("No jump data for this selection.")
@@ -35,7 +32,6 @@ def _render_jumps(salti):
 
 def _render_rpe(rpe):
     rpe_players = sorted(rpe["player_name"].dropna().unique())
-    start_d, end_d = date_range_picker("Date range", rpe["Data"], 14, "rpe_dates")
 
     metric_label = st.segmented_control(
         "Metric", ["RPE", "Training Load"], default="Training Load", required=True, key="rpe_metric",
@@ -47,11 +43,8 @@ def _render_rpe(rpe):
         "Players to compare", rpe_players, default=rpe_players[:5], key="rpe_players",
     )
 
-    mask = (
-        (rpe["Data"].dt.date >= start_d) & (rpe["Data"].dt.date <= end_d)
-        & rpe["player_name"].isin(sel_players)
-    )
-    period = rpe[mask].dropna(subset=[metric_col])
+    period = filters.filter_by_date_col(rpe)
+    period = period[period["player_name"].isin(sel_players)].dropna(subset=[metric_col])
 
     if not sel_players or period.empty:
         st.info("Select at least one player with data in this date range.")
@@ -73,6 +66,7 @@ def render():
     data = dl.load_wellness_data()
     rpe, salti = data["rpe"], data["salti"]
 
+    st.caption(f":material/filter_alt: {filters.caption()} · change the period from the sidebar.")
     section = st.segmented_control("Section", SECTIONS, default=SECTIONS[0], key="loads_section")
 
     if section == "Jumps":

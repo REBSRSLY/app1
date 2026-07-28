@@ -3,8 +3,10 @@ import plotly.graph_objects as go
 import streamlit as st
 
 import data_loader as dl
+import filters
+import match_calendar as mc
 import player_colors as pc
-from ui_helpers import close_polygon, dark_polar_layout, date_range_picker, section_header
+from ui_helpers import close_polygon, dark_polar_layout, section_header
 
 # A sensible default fundamental to open on for each role — still changeable via the selector.
 DEFAULT_FONDAMENTALE_PER_ROLE = {
@@ -32,14 +34,17 @@ SECTIONS = ["Scouting", "Wellness", "Jumps", "RPE / Load"]
 
 def _render_scouting(role_sel, role_players):
     scout = dl.load_scout_data()
-    matches = dl.load_match_list()
-    partita_options = [dl.SEASON_LABEL] + matches
+    partita_options = filters.match_options()
     fondamentali = sorted(scout["fondamentale"].unique())
     default_fond = DEFAULT_FONDAMENTALE_PER_ROLE.get(role_sel, "Attacco")
 
+    filters.ensure_valid_selection("cmp_partita", partita_options)
     col_partita, col_fond = st.columns(2)
     with col_partita:
-        partita_sel = st.selectbox("Match", partita_options, key="cmp_partita")
+        partita_sel = st.selectbox(
+            "Match", partita_options, key="cmp_partita",
+            format_func=lambda opt: opt if opt == dl.SEASON_LABEL else mc.match_label(opt),
+        )
     with col_fond:
         fond_sel = st.selectbox(
             "Fundamental", fondamentali,
@@ -122,9 +127,8 @@ def _render_wellness(role_players):
         st.info("No wellness data for this role.")
         return
 
-    start_d, end_d = date_range_picker("Date range", wellness["Data"], 7, "cmp_wellness_dates")
-    period = wellness[(wellness["Data"].dt.date >= start_d) & (wellness["Data"].dt.date <= end_d)]
-    st.caption(f"Averages over {start_d.strftime('%d %b %Y')} – {end_d.strftime('%d %b %Y')}.")
+    period = filters.filter_by_date_col(wellness)
+    st.caption(f"Averages over {filters.caption()}.")
 
     param = st.selectbox(
         "Parameter", list(PARAM_LABELS.keys()),
@@ -157,14 +161,10 @@ def _render_jumps(role_players):
         st.info("No jump data for this role.")
         return
 
-    start_d, end_d = date_range_picker("Date range", salti["Data"], 14, "cmp_jumps_dates")
     sel_players = st.multiselect("Players", salti_players, default=salti_players, key="cmp_jumps_players")
 
-    mask = (
-        (salti["Data"].dt.date >= start_d) & (salti["Data"].dt.date <= end_d)
-        & salti["player_name"].isin(sel_players)
-    )
-    period = salti[mask].dropna(subset=["SALTI"])
+    period = filters.filter_by_date_col(salti)
+    period = period[period["player_name"].isin(sel_players)].dropna(subset=["SALTI"])
 
     if period.empty:
         st.info("No jump data for this selection.")
@@ -188,8 +188,6 @@ def _render_rpe(role_players):
         st.info("No RPE/load data for this role.")
         return
 
-    start_d, end_d = date_range_picker("Date range", rpe["Data"], 14, "cmp_rpe_dates")
-
     metric_label = st.segmented_control(
         "Metric", ["RPE", "Training Load"], default="Training Load", required=True, key="cmp_rpe_metric",
     )
@@ -200,11 +198,8 @@ def _render_rpe(role_players):
         "Players to compare", rpe_players, default=rpe_players, key="cmp_rpe_players",
     )
 
-    mask = (
-        (rpe["Data"].dt.date >= start_d) & (rpe["Data"].dt.date <= end_d)
-        & rpe["player_name"].isin(sel_players)
-    )
-    period = rpe[mask].dropna(subset=[metric_col])
+    period = filters.filter_by_date_col(rpe)
+    period = period[period["player_name"].isin(sel_players)].dropna(subset=[metric_col])
 
     if not sel_players or period.empty:
         st.info("Select at least one player with data in this date range.")

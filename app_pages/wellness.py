@@ -3,8 +3,9 @@ import plotly.graph_objects as go
 import streamlit as st
 
 import data_loader as dl
+import filters
 import players_grid as pg
-from ui_helpers import WELLNESS_ICONS, close_polygon, dark_polar_layout, date_range_picker, section_header
+from ui_helpers import WELLNESS_ICONS, close_polygon, dark_polar_layout, section_header
 
 # Wellness questionnaire items: all 1-5, high = worse (confirmed by negative
 # correlation with Tqr, which is 6-20 with high = better).
@@ -58,9 +59,8 @@ def render():
 
     wellness = dl.load_wellness_data()["wellness"]
 
-    start_d, end_d = date_range_picker("Date range", wellness["Data"], 7, "wellness_dates")
-    period = wellness[(wellness["Data"].dt.date >= start_d) & (wellness["Data"].dt.date <= end_d)]
-    st.caption(f"Averages over {start_d.strftime('%d %b %Y')} – {end_d.strftime('%d %b %Y')}.")
+    period = filters.filter_by_date_col(wellness)
+    st.caption(f"Averages over {filters.caption()}. Change the period from the sidebar.")
 
     col_team, col_player = st.columns(2)
 
