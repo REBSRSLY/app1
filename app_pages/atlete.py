@@ -19,7 +19,7 @@ BASE_CARD_CSS = """
     [class*="st-key-playercard_"] button {
         width: 100%;
         min-width: 92px;
-        height: 82px !important;
+        height: 100px !important;
         margin: 0 auto;
         font-weight: 600;
         font-size: 10px;
@@ -177,21 +177,21 @@ def _recent_matches(surname: str, n: int = RECENT_MATCHES_N) -> pd.DataFrame:
     return rows[rows["match"].isin(recent_matches)]
 
 
-def _performance_box(recent: pd.DataFrame, value_col: str, title: str, color: str, is_percent: bool):
-    """Horizontal box plot: one box per fundamental, built directly from the
-    per-match values in the last RECENT_MATCHES_N matches (no pre-aggregated
-    mean/std -- the box/whiskers/points show the real match-to-match spread)."""
-    d = recent[recent["Tot"] > 0].copy()
-    if d.empty:
+def _performance_bar(recent: pd.DataFrame, value_col: str, title: str, color: str, is_percent: bool):
+    agg = recent.groupby("fondamentale", observed=True).agg(
+        mean=(value_col, "mean"), std=(value_col, "std"), tot=("Tot", "sum"),
+    ).reset_index()
+    agg["std"] = agg["std"].fillna(0)
+    agg = agg[agg["tot"] > 0].sort_values("mean")
+
+    if agg.empty:
         st.info(f"No {title.lower()} data in the last {RECENT_MATCHES_N} matches.")
         return
 
-    d["Fundamental"] = d["fondamentale"].map(dl.FONDAMENTALE_LABELS)
-    order = d.groupby("Fundamental")[value_col].median().sort_values().index.tolist()
-    fig = px.box(
-        d, x=value_col, y="Fundamental", orientation="h", points="all",
-        category_orders={"Fundamental": order},
-        labels={value_col: title, "Fundamental": ""},
+    agg["Fundamental"] = agg["fondamentale"].map(dl.FONDAMENTALE_LABELS)
+    fig = px.bar(
+        agg, x="mean", y="Fundamental", orientation="h", error_x="std",
+        labels={"mean": title, "Fundamental": ""},
         color_discrete_sequence=[color],
     )
     if is_percent:
@@ -207,9 +207,9 @@ def _render_performance(surname: str, color: str):
         st.info("No scouting data for this player.")
         return
 
-    st.caption(f"Last {RECENT_MATCHES_N} matches · box shows the spread across matches, dots are individual match values.")
-    _performance_box(recent, "E_pct", "Efficiency E%", color, is_percent=True)
-    _performance_box(recent, "Ind", "Index", color, is_percent=False)
+    st.caption(f"Last {RECENT_MATCHES_N} matches · bars show the mean, whiskers show the standard deviation.")
+    _performance_bar(recent, "E_pct", "Efficiency E%", color, is_percent=True)
+    _performance_bar(recent, "Ind", "Index", color, is_percent=False)
 
 
 def _render_wellness_radar(surname: str, color: str):
@@ -226,7 +226,7 @@ def _render_wellness_radar(surname: str, color: str):
     fig = go.Figure(go.Scatterpolar(r=r, theta=theta, fill="toself", line_color=color, fillcolor=rgba_from_hex(color, 0.3)))
     fig.update_layout(**dark_polar_layout([1, 5]))
     fig.update_layout(
-        height=230, margin=dict(l=20, r=20, t=10, b=10),
+        height=300, margin=dict(l=20, r=20, t=10, b=10),
         polar=dict(radialaxis=dict(showticklabels=False, showline=False)),
     )
     st.plotly_chart(fig, width="stretch", theme=None)
