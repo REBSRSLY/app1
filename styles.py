@@ -80,39 +80,6 @@ CUSTOM_CSS = """
             gap: 10px;
         }
 
-        /* Dossier-style player cards (Players page) */
-        .dossier-tab {
-            height: 6px;
-            border-radius: 6px 6px 0 0;
-            margin: -1px -1px 12px -1px;
-        }
-        .dossier-tab.starter { background: var(--accent); }
-        .dossier-tab.bench { background: var(--muted); }
-        .dossier-id {
-            font-family: monospace;
-            font-size: 11px;
-            letter-spacing: 0.08em;
-            color: var(--muted);
-            text-transform: uppercase;
-        }
-        .dossier-name {
-            font-size: 1.15rem;
-            font-weight: 700;
-        }
-        .stamp-captain {
-            display: inline-block;
-            margin-left: 8px;
-            font-size: 10px;
-            font-family: monospace;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-            color: var(--accent);
-            border: 1.5px solid var(--accent);
-            border-radius: 3px;
-            padding: 1px 6px;
-            font-weight: bold;
-            transform: rotate(-4deg);
-        }
     </style>
 """
 

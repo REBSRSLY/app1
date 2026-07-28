@@ -52,3 +52,7 @@ CREST_PATH = "Volley graphic design/vero_volley_sym-removebg-preview.png"
 
 def photo_path(player: dict) -> str:
     return f"{PHOTO_DIR}/{player['first']} {player['last']}.png"
+
+
+ALL_PLAYERS = [p for row in GRID_ROWS for p in row if p is not None]
+PLAYERS_BY_SURNAME = {p["surname"]: p for p in ALL_PLAYERS}
