@@ -6,9 +6,13 @@ import streamlit as st
 
 
 def section_header(title, purpose):
-    st.title(title)
-    st.caption(purpose)
-    st.write("---")
+    st.markdown(
+        f'<div class="section-header">'
+        f'<span class="section-title">{title}</span>'
+        f'<span class="section-purpose">{purpose}</span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
 
 def date_range_picker(label, series, default_days, key):

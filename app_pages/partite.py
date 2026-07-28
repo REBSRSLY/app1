@@ -49,7 +49,7 @@ def _render_full_calendar(season: str, season_matches: list[dict]):
     st.markdown(cv.render_month_calendar(season_matches, year, month, salti_dates), unsafe_allow_html=True)
 
 
-def _render_list_tab():
+def _render_all_matches():
     df = pd.DataFrame(mc.MATCHES).sort_values("date")
     df["Date"] = df["date"].apply(lambda d: datetime.strptime(d, "%y-%m-%d").strftime("%d %b %Y"))
     df["Venue"] = df["home"].map({True: "Home", False: "Away"})
@@ -74,25 +74,27 @@ def _render_list_tab():
     )
 
 
+SECTIONS = ["By competition", "Full calendar", "All matches"]
+
+
 def render():
     section_header("Matches", "Results and standings by competition, plus the full season calendar.")
 
-    season = st.selectbox("Season", mc.SEASONS, index=0, key="season_select")
+    col_season, col_section = st.columns([1, 3])
+    with col_season:
+        season = st.selectbox("Season", mc.SEASONS, index=0, key="season_select")
     season_matches = mc.matches_for_season(season)
 
     if not season_matches:
         st.info(f"No matches recorded yet for the {season} season.")
         return
 
-    st.subheader("By competition")
-    _render_by_competition(season, season_matches)
+    with col_section:
+        section = st.segmented_control("Section", SECTIONS, default=SECTIONS[0], key="matches_section")
 
-    st.write("---")
-    st.subheader("Full calendar")
-    _render_full_calendar(season, season_matches)
-
-    st.write("---")
-    with st.expander("All matches (searchable list)"):
-        _render_list_tab()
-
-    st.caption("Score is always written as Milano–opponent sets. For per-fundamental scouting statistics of each match, filterable by individual player, go to **Scout & Stats**.")
+    if section == "By competition":
+        _render_by_competition(season, season_matches)
+    elif section == "Full calendar":
+        _render_full_calendar(season, season_matches)
+    else:
+        _render_all_matches()

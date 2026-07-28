@@ -5,6 +5,7 @@ import streamlit as st
 
 import data_loader as dl
 import match_calendar as mc
+import player_colors as pc
 from ui_helpers import section_header
 
 # Fixed colors for set type: same color everywhere in the app, order never cycled.
@@ -85,9 +86,9 @@ def _render_general_stats(scout, partita_options, format_partita_option):
             fig_vol = px.bar(
                 players, x="Tot", y="player_name", orientation="h",
                 labels={"Tot": "Total actions", "player_name": ""},
-                color_discrete_sequence=["#4C78A8"],
+                color="player_name", color_discrete_map=pc.color_map(players["player_name"].unique()),
             )
-            fig_vol.update_layout(yaxis={"categoryorder": "total ascending"})
+            fig_vol.update_layout(yaxis={"categoryorder": "total ascending"}, showlegend=False)
             st.plotly_chart(fig_vol, width="stretch")
 
     with col_eff:

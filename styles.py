@@ -48,6 +48,25 @@ CUSTOM_CSS = """
         }
         .ph-line:last-child { margin-bottom: 0; }
 
+        /* Section header: small, top-left, no big page title */
+        .section-header {
+            display: flex;
+            align-items: baseline;
+            flex-wrap: wrap;
+            column-gap: 10px;
+            padding-bottom: 8px;
+            margin-bottom: 14px;
+            border-bottom: 1px solid var(--line);
+        }
+        .section-title {
+            font-size: 1.05rem;
+            font-weight: 700;
+        }
+        .section-purpose {
+            font-size: 12px;
+            color: var(--muted);
+        }
+
         /* Alert card (TQR) */
         .alert-card {
             background-color: rgba(240, 166, 0, 0.1);
