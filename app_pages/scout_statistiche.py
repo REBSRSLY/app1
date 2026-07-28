@@ -19,6 +19,264 @@ PALLA_COLORS = {
 }
 PALLA_COLORS_EN = {dl.PALLA_LABELS[k]: v for k, v in PALLA_COLORS.items()}
 
+# Block order and column layout of the original Data Volley "by fundamental"
+# export (see data_loader.SCOUT_COLS / _parse_scout_sheet), used only by the
+# "Excel Scout Sheet" section to reproduce the sheet's row/column order exactly.
+RAW_FONDAMENTALE_ORDER = [
+    "Battuta", "Ricezione", "Attacco", "Att dopo Ricez", "Contrattacco",
+    "Muro", "Difesa", "Free ball", "Alzata",
+]
+RAW_PALLA_ORDER = ["Totale", "Alta", "Media", "Veloce", "Tesa", "Other"]
+RAW_COLUMN_RENAME = {
+    "P": "P", "Set": "Set", "Ind": "Ind", "E_pct": "E%", "Tot": "Tot",
+    "Err": "=", "Err_pct": "= %", "Err_BP": "= BP", "Err_pC": "= pC",
+    "Slash": "/", "Slash_pct": "/ %", "Slash_BP": "/ BP", "Slash_pC": "/ pC",
+    "Neg": "-", "Neg_pct": "- %",
+    "Neutral": "!", "Neutral_pct": "! %",
+    "Pos": "+", "Pos_pct": "+ %",
+    "Perfect": "#", "Perfect_pct": "# %", "Perfect_BP": "# BP", "Perfect_pC": "# pC",
+}
+RAW_PERCENT_COLUMNS = ["E%", "= %", "/ %", "- %", "! %", "+ %", "# %"]
+
+SECTIONS = ["General stats", "Game distribution", "Excel Scout Sheet"]
+
+
+def _render_general_stats(scout, partita_options, format_partita_option):
+    col_partita, col_fond = st.columns(2)
+    with col_partita:
+        partita_sel = st.selectbox("Match", partita_options, key="gen_partita", format_func=format_partita_option)
+    with col_fond:
+        fondamentali = sorted(scout["fondamentale"].unique())
+        fond_sel = st.selectbox(
+            "Fundamental", fondamentali,
+            index=fondamentali.index("Attacco") if "Attacco" in fondamentali else 0,
+            format_func=lambda f: dl.FONDAMENTALE_LABELS.get(f, f),
+            key="gen_fond",
+        )
+    fond_label = dl.FONDAMENTALE_LABELS.get(fond_sel, fond_sel)
+
+    perfetto_lbl = dl.perfetto_label(fond_sel)
+    errore_lbl = dl.errore_label(fond_sel)
+    legenda = dl.legenda_fondamentale(fond_sel)
+    if legenda:
+        with st.expander(f"How to read \"{fond_label}\"", icon=":material/menu_book:"):
+            for simbolo, nome, descrizione in legenda:
+                st.markdown(f"**{simbolo}** · {nome} — {descrizione}")
+
+    base = scout[(scout["match"] == partita_sel) & (scout["fondamentale"] == fond_sel) & (scout["palla"] == "Totale")]
+    team_row = base[base["is_team"]]
+    players = base[~base["is_team"]].sort_values("Tot", ascending=False)
+
+    if team_row.empty or players.empty:
+        st.info("No data available for this match/fundamental combination.")
+        return
+
+    t = team_row.iloc[0]
+    with st.container(horizontal=True):
+        st.metric("Total actions", int(t["Tot"]), border=True)
+        st.metric("Efficiency (E%)", f"{t['E_pct'] * 100:.0f}%", border=True)
+        st.metric(f"% {perfetto_lbl} (#)", f"{t['Perfect_pct'] * 100:.0f}%" if pd.notna(t["Perfect_pct"]) else "—", border=True)
+        st.metric(f"% {errore_lbl} (=)", f"{t['Err_pct'] * 100:.0f}%" if pd.notna(t["Err_pct"]) else "—", border=True)
+
+    col_vol, col_eff = st.columns(2)
+    with col_vol:
+        with st.container(border=True):
+            st.markdown(f"**Actions per player · {fond_label}**")
+            fig_vol = px.bar(
+                players, x="Tot", y="player_name", orientation="h",
+                labels={"Tot": "Total actions", "player_name": ""},
+                color_discrete_sequence=["#4C78A8"],
+            )
+            fig_vol.update_layout(yaxis={"categoryorder": "total ascending"})
+            st.plotly_chart(fig_vol, width="stretch")
+
+    with col_eff:
+        with st.container(border=True):
+            st.markdown(f"**Efficiency (E%) per player · {fond_label}**")
+            players_eff = players.sort_values("E_pct")
+            fig_effp = px.bar(
+                players_eff, x="E_pct", y="player_name", orientation="h",
+                labels={"E_pct": "Efficiency E%", "player_name": ""},
+                color="E_pct", color_continuous_scale="RdBu", color_continuous_midpoint=0,
+            )
+            fig_effp.update_layout(coloraxis_showscale=False, xaxis_tickformat=".0%")
+            st.plotly_chart(fig_effp, width="stretch")
+
+    with st.container(border=True):
+        st.markdown(f"**Detail per player · {fond_label}**")
+        col_perfetto = f"% {perfetto_lbl} (#)"
+        col_errore = f"% {errore_lbl} (=)"
+        tabella = players[["player_name", "Tot", "E_pct", "Perfect_pct", "Err_pct"]].rename(columns={
+            "player_name": "Player",
+            "E_pct": "Efficiency E%",
+            "Perfect_pct": col_perfetto,
+            "Err_pct": col_errore,
+        })
+        st.dataframe(
+            tabella,
+            hide_index=True,
+            width="stretch",
+            column_config={
+                "Tot": st.column_config.NumberColumn(format="%d"),
+                "Efficiency E%": st.column_config.NumberColumn(format="percent"),
+                col_perfetto: st.column_config.NumberColumn(format="percent"),
+                col_errore: st.column_config.NumberColumn(format="percent"),
+            },
+        )
+
+
+def _render_distribution(scout, partita_options, format_partita_option, palla_tipi, palla_tipi_en):
+    st.caption(
+        "For each player: how many times she attacks on each set type and with what effectiveness. "
+        "Reflects the game distribution set by the setter."
+    )
+
+    col_partita, col_fond, col_metrica = st.columns(3)
+    with col_partita:
+        partita_sel2 = st.selectbox("Match", partita_options, key="dist_partita", format_func=format_partita_option)
+    with col_fond:
+        fond_sel2 = st.selectbox(
+            "Fundamental", dl.FONDAMENTALI_CON_PALLA,
+            format_func=lambda f: dl.FONDAMENTALE_LABELS.get(f, f),
+            key="dist_fond",
+        )
+    with col_metrica:
+        metrica_label = st.segmented_control(
+            "Effectiveness metric",
+            ["Efficiency (E%)", "% Point (#)"],
+            default="Efficiency (E%)",
+            required=True,
+            key="dist_metrica",
+        )
+    metrica_col = "E_pct" if metrica_label == "Efficiency (E%)" else "Perfect_pct"
+    fond2_label = dl.FONDAMENTALE_LABELS.get(fond_sel2, fond_sel2)
+    # The "#" symbol has a different name per fundamental (Point for attack, Block point for block).
+    metrica_display = "Efficiency (E%)" if metrica_col == "E_pct" else f"% {dl.perfetto_label(fond_sel2)} (#)"
+    st.caption(f"For **{fond2_label}**: \"#\" = {dl.perfetto_label(fond_sel2)}, \"=\" = {dl.errore_label(fond_sel2)}.")
+
+    dist = scout[
+        (scout["match"] == partita_sel2)
+        & (scout["fondamentale"] == fond_sel2)
+        & (~scout["is_team"])
+        & (scout["palla"] != "Totale")
+        & (scout["Tot"] > 0)
+    ].copy()
+    dist["palla_en"] = dist["palla"].map(dl.PALLA_LABELS)
+
+    if dist.empty:
+        st.info("No data available for this match/fundamental combination.")
+        return
+
+    ordine_giocatrici = (
+        dist.groupby("player_name")["Tot"].sum().sort_values(ascending=False).index.tolist()
+    )
+
+    st.markdown("#### Chart 1 · Game map — volume of actions per set type")
+    fig1 = px.bar(
+        dist, x="player_name", y="Tot", color="palla_en",
+        category_orders={"player_name": ordine_giocatrici, "palla_en": palla_tipi_en},
+        color_discrete_map=PALLA_COLORS_EN,
+        labels={"player_name": "", "Tot": "Number of actions", "palla_en": "Set type"},
+        barmode="stack",
+    )
+    fig1.update_layout(legend_title_text="Set type")
+    st.plotly_chart(fig1, width="stretch")
+
+    st.markdown("#### Chart 2 · Effectiveness per set type")
+    default_players = ordine_giocatrici[: min(5, len(ordine_giocatrici))]
+    giocatrici_sel = st.multiselect(
+        "Players to compare", ordine_giocatrici, default=default_players, key="dist_giocatrici"
+    )
+    dist_line = dist[dist["player_name"].isin(giocatrici_sel)]
+    if giocatrici_sel and not dist_line.empty:
+        fig2 = px.line(
+            dist_line.sort_values("palla"), x="palla_en", y=metrica_col, color="player_name",
+            category_orders={"palla_en": palla_tipi_en},
+            markers=True,
+            labels={"palla_en": "Set type", metrica_col: metrica_display, "player_name": "Player"},
+        )
+        fig2.update_layout(yaxis_tickformat=".0%", legend_title_text="Player")
+        st.plotly_chart(fig2, width="stretch")
+    else:
+        st.info("Select at least one player to compare.")
+
+    st.markdown("#### Heatmap · Volume and effectiveness per player and set type")
+    pivot_tot = dist.pivot_table(index="player_name", columns="palla_en", values="Tot", aggfunc="sum", observed=True)
+    pivot_metrica = dist.pivot_table(index="player_name", columns="palla_en", values=metrica_col, aggfunc="mean", observed=True)
+    colonne_ordinate = [p for p in palla_tipi_en if p in pivot_metrica.columns]
+    pivot_tot = pivot_tot.reindex(index=ordine_giocatrici, columns=colonne_ordinate)
+    pivot_metrica = pivot_metrica.reindex(index=ordine_giocatrici, columns=colonne_ordinate)
+
+    testo = pivot_tot.copy().astype(object)
+    for r in pivot_tot.index:
+        for c in pivot_tot.columns:
+            tot_v = pivot_tot.loc[r, c]
+            eff_v = pivot_metrica.loc[r, c]
+            if pd.isna(tot_v):
+                testo.loc[r, c] = ""
+            elif pd.isna(eff_v):
+                testo.loc[r, c] = f"{int(tot_v)}<br>—"
+            else:
+                testo.loc[r, c] = f"{int(tot_v)}<br>{eff_v * 100:.0f}%"
+
+    if metrica_col == "E_pct":
+        # Efficiency can be negative: diverging scale centered on 0.
+        heat_kwargs = dict(colorscale="RdBu", zmid=0, zmin=-0.5, zmax=0.5)
+    else:
+        # % Point (#) is always >= 0: single-hue sequential scale.
+        heat_kwargs = dict(colorscale="Blues", zmin=0, zmax=1)
+
+    fig_heat = go.Figure(data=go.Heatmap(
+        z=pivot_metrica.values,
+        x=pivot_metrica.columns.tolist(),
+        y=pivot_metrica.index.tolist(),
+        text=testo.values,
+        texttemplate="%{text}",
+        colorbar=dict(title=metrica_display, tickformat=".0%"),
+        hovertemplate="%{y} · %{x}<br>" + metrica_display + ": %{z:.0%}<extra></extra>",
+        **heat_kwargs,
+    ))
+    fig_heat.update_layout(
+        xaxis_title="Set type", yaxis_title="", yaxis_autorange="reversed",
+        height=max(320, 40 * len(pivot_metrica.index)),
+    )
+    st.plotly_chart(fig_heat, width="stretch")
+    st.caption(f"In each cell: total number of actions and {metrica_display.lower()}.")
+
+
+def _render_raw_sheet(scout, partita_options, format_partita_option):
+    st.caption(
+        "Complete scouting sheet for one match, same rows/columns as the Data Volley "
+        "export (Fundamental → Set type → Team/Player, then P / Set / Ind / E% / Tot / "
+        "= / % / BP / pC …) — player surnames instead of codes."
+    )
+    partita_sel3 = st.selectbox("Match", partita_options, key="raw_partita", format_func=format_partita_option)
+
+    raw = scout[scout["match"] == partita_sel3].copy()
+    if raw.empty:
+        st.info("No data available for this match.")
+        return
+
+    raw["fondamentale"] = pd.Categorical(raw["fondamentale"], categories=RAW_FONDAMENTALE_ORDER, ordered=True)
+    raw["palla"] = pd.Categorical(raw["palla"].astype(str), categories=RAW_PALLA_ORDER, ordered=True)
+    raw["_team_rank"] = (~raw["is_team"]).astype(int)  # Team row before player rows, per block
+    raw = raw.sort_values(["fondamentale", "palla", "_team_rank"], kind="stable")
+
+    raw["Fondamentale"] = raw["fondamentale"].map(dl.FONDAMENTALE_LABELS)
+    raw["Set type"] = raw["palla"].map(dl.PALLA_LABELS)
+    raw["Player"] = raw["player_name"]
+
+    display_cols = ["Fondamentale", "Set type", "Player"] + list(RAW_COLUMN_RENAME.keys())
+    table = raw[display_cols].rename(columns=RAW_COLUMN_RENAME)
+
+    st.dataframe(
+        table,
+        hide_index=True,
+        width="stretch",
+        height=600,
+        column_config={c: st.column_config.NumberColumn(format="percent") for c in RAW_PERCENT_COLUMNS},
+    )
+
 
 def render():
     section_header("Scout & Stats", "Per-fundamental scouting statistics and attack game distribution, for a single match or the whole season.")
@@ -32,209 +290,17 @@ def render():
     def format_partita_option(opt: str) -> str:
         return opt if opt == dl.SEASON_LABEL else mc.match_label(opt)
 
-    tab_generale, tab_distribuzione = st.tabs(["General stats", "Game distribution"])
+    # A plain st.tabs would leave whichever section isn't shown mounted but
+    # hidden (display:none); Streamlit's data-grid widget never recovers a
+    # correct width once un-hidden that way (a real, reproducible Streamlit/
+    # glide-data-grid limitation, not just a one-off glitch). Using a
+    # segmented control with only the active section's code actually running
+    # means the grid is created already-visible every time, sidestepping it.
+    section = st.segmented_control("Section", SECTIONS, default=SECTIONS[0], key="scout_section")
 
-    # ------------------------------------------------------------------
-    # TAB 1 — General stats per fundamental
-    # ------------------------------------------------------------------
-    with tab_generale:
-        col_partita, col_fond = st.columns(2)
-        with col_partita:
-            partita_sel = st.selectbox("Match", partita_options, key="gen_partita", format_func=format_partita_option)
-        with col_fond:
-            fondamentali = sorted(scout["fondamentale"].unique())
-            fond_sel = st.selectbox(
-                "Fundamental", fondamentali,
-                index=fondamentali.index("Attacco") if "Attacco" in fondamentali else 0,
-                format_func=lambda f: dl.FONDAMENTALE_LABELS.get(f, f),
-                key="gen_fond",
-            )
-        fond_label = dl.FONDAMENTALE_LABELS.get(fond_sel, fond_sel)
-
-        perfetto_lbl = dl.perfetto_label(fond_sel)
-        errore_lbl = dl.errore_label(fond_sel)
-        legenda = dl.legenda_fondamentale(fond_sel)
-        if legenda:
-            with st.expander(f"How to read \"{fond_label}\"", icon=":material/menu_book:"):
-                for simbolo, nome, descrizione in legenda:
-                    st.markdown(f"**{simbolo}** · {nome} — {descrizione}")
-
-        base = scout[(scout["match"] == partita_sel) & (scout["fondamentale"] == fond_sel) & (scout["palla"] == "Totale")]
-        team_row = base[base["is_team"]]
-        players = base[~base["is_team"]].sort_values("Tot", ascending=False)
-
-        if team_row.empty or players.empty:
-            st.info("No data available for this match/fundamental combination.")
-        else:
-            t = team_row.iloc[0]
-            with st.container(horizontal=True):
-                st.metric("Total actions", int(t["Tot"]), border=True)
-                st.metric("Efficiency (E%)", f"{t['E_pct'] * 100:.0f}%", border=True)
-                st.metric(f"% {perfetto_lbl} (#)", f"{t['Perfect_pct'] * 100:.0f}%" if pd.notna(t["Perfect_pct"]) else "—", border=True)
-                st.metric(f"% {errore_lbl} (=)", f"{t['Err_pct'] * 100:.0f}%" if pd.notna(t["Err_pct"]) else "—", border=True)
-
-            col_vol, col_eff = st.columns(2)
-            with col_vol:
-                with st.container(border=True):
-                    st.markdown(f"**Actions per player · {fond_label}**")
-                    fig_vol = px.bar(
-                        players, x="Tot", y="player_name", orientation="h",
-                        labels={"Tot": "Total actions", "player_name": ""},
-                        color_discrete_sequence=["#4C78A8"],
-                    )
-                    fig_vol.update_layout(yaxis={"categoryorder": "total ascending"})
-                    st.plotly_chart(fig_vol, width="stretch")
-
-            with col_eff:
-                with st.container(border=True):
-                    st.markdown(f"**Efficiency (E%) per player · {fond_label}**")
-                    players_eff = players.sort_values("E_pct")
-                    fig_effp = px.bar(
-                        players_eff, x="E_pct", y="player_name", orientation="h",
-                        labels={"E_pct": "Efficiency E%", "player_name": ""},
-                        color="E_pct", color_continuous_scale="RdBu", color_continuous_midpoint=0,
-                    )
-                    fig_effp.update_layout(coloraxis_showscale=False, xaxis_tickformat=".0%")
-                    st.plotly_chart(fig_effp, width="stretch")
-
-            with st.container(border=True):
-                st.markdown(f"**Detail per player · {fond_label}**")
-                col_perfetto = f"% {perfetto_lbl} (#)"
-                col_errore = f"% {errore_lbl} (=)"
-                tabella = players[["player_name", "Tot", "E_pct", "Perfect_pct", "Err_pct"]].rename(columns={
-                    "player_name": "Player",
-                    "E_pct": "Efficiency E%",
-                    "Perfect_pct": col_perfetto,
-                    "Err_pct": col_errore,
-                })
-                st.dataframe(
-                    tabella,
-                    hide_index=True,
-                    width="stretch",
-                    column_config={
-                        "Tot": st.column_config.NumberColumn(format="%d"),
-                        "Efficiency E%": st.column_config.NumberColumn(format="percent"),
-                        col_perfetto: st.column_config.NumberColumn(format="percent"),
-                        col_errore: st.column_config.NumberColumn(format="percent"),
-                    },
-                )
-
-    # ------------------------------------------------------------------
-    # TAB 2 — Game distribution (who attacks on which set type)
-    # ------------------------------------------------------------------
-    with tab_distribuzione:
-        st.caption(
-            "For each player: how many times she attacks on each set type and with what effectiveness. "
-            "Reflects the game distribution set by the setter."
-        )
-
-        col_partita, col_fond, col_metrica = st.columns(3)
-        with col_partita:
-            partita_sel2 = st.selectbox("Match", partita_options, key="dist_partita", format_func=format_partita_option)
-        with col_fond:
-            fond_sel2 = st.selectbox(
-                "Fundamental", dl.FONDAMENTALI_CON_PALLA,
-                format_func=lambda f: dl.FONDAMENTALE_LABELS.get(f, f),
-                key="dist_fond",
-            )
-        with col_metrica:
-            metrica_label = st.segmented_control(
-                "Effectiveness metric",
-                ["Efficiency (E%)", "% Point (#)"],
-                default="Efficiency (E%)",
-                required=True,
-                key="dist_metrica",
-            )
-        metrica_col = "E_pct" if metrica_label == "Efficiency (E%)" else "Perfect_pct"
-        fond2_label = dl.FONDAMENTALE_LABELS.get(fond_sel2, fond_sel2)
-        # The "#" symbol has a different name per fundamental (Point for attack, Block point for block).
-        metrica_display = "Efficiency (E%)" if metrica_col == "E_pct" else f"% {dl.perfetto_label(fond_sel2)} (#)"
-        st.caption(f"For **{fond2_label}**: \"#\" = {dl.perfetto_label(fond_sel2)}, \"=\" = {dl.errore_label(fond_sel2)}.")
-
-        dist = scout[
-            (scout["match"] == partita_sel2)
-            & (scout["fondamentale"] == fond_sel2)
-            & (~scout["is_team"])
-            & (scout["palla"] != "Totale")
-            & (scout["Tot"] > 0)
-        ].copy()
-        dist["palla_en"] = dist["palla"].map(dl.PALLA_LABELS)
-
-        if dist.empty:
-            st.info("No data available for this match/fundamental combination.")
-        else:
-            ordine_giocatrici = (
-                dist.groupby("player_name")["Tot"].sum().sort_values(ascending=False).index.tolist()
-            )
-
-            st.markdown("#### Chart 1 · Game map — volume of actions per set type")
-            fig1 = px.bar(
-                dist, x="player_name", y="Tot", color="palla_en",
-                category_orders={"player_name": ordine_giocatrici, "palla_en": palla_tipi_en},
-                color_discrete_map=PALLA_COLORS_EN,
-                labels={"player_name": "", "Tot": "Number of actions", "palla_en": "Set type"},
-                barmode="stack",
-            )
-            fig1.update_layout(legend_title_text="Set type")
-            st.plotly_chart(fig1, width="stretch")
-
-            st.markdown("#### Chart 2 · Effectiveness per set type")
-            default_players = ordine_giocatrici[: min(5, len(ordine_giocatrici))]
-            giocatrici_sel = st.multiselect(
-                "Players to compare", ordine_giocatrici, default=default_players, key="dist_giocatrici"
-            )
-            dist_line = dist[dist["player_name"].isin(giocatrici_sel)]
-            if giocatrici_sel and not dist_line.empty:
-                fig2 = px.line(
-                    dist_line.sort_values("palla"), x="palla_en", y=metrica_col, color="player_name",
-                    category_orders={"palla_en": palla_tipi_en},
-                    markers=True,
-                    labels={"palla_en": "Set type", metrica_col: metrica_display, "player_name": "Player"},
-                )
-                fig2.update_layout(yaxis_tickformat=".0%", legend_title_text="Player")
-                st.plotly_chart(fig2, width="stretch")
-            else:
-                st.info("Select at least one player to compare.")
-
-            st.markdown("#### Heatmap · Volume and effectiveness per player and set type")
-            pivot_tot = dist.pivot_table(index="player_name", columns="palla_en", values="Tot", aggfunc="sum", observed=True)
-            pivot_metrica = dist.pivot_table(index="player_name", columns="palla_en", values=metrica_col, aggfunc="mean", observed=True)
-            colonne_ordinate = [p for p in palla_tipi_en if p in pivot_metrica.columns]
-            pivot_tot = pivot_tot.reindex(index=ordine_giocatrici, columns=colonne_ordinate)
-            pivot_metrica = pivot_metrica.reindex(index=ordine_giocatrici, columns=colonne_ordinate)
-
-            testo = pivot_tot.copy().astype(object)
-            for r in pivot_tot.index:
-                for c in pivot_tot.columns:
-                    tot_v = pivot_tot.loc[r, c]
-                    eff_v = pivot_metrica.loc[r, c]
-                    if pd.isna(tot_v):
-                        testo.loc[r, c] = ""
-                    elif pd.isna(eff_v):
-                        testo.loc[r, c] = f"{int(tot_v)}<br>—"
-                    else:
-                        testo.loc[r, c] = f"{int(tot_v)}<br>{eff_v * 100:.0f}%"
-
-            if metrica_col == "E_pct":
-                # Efficiency can be negative: diverging scale centered on 0.
-                heat_kwargs = dict(colorscale="RdBu", zmid=0, zmin=-0.5, zmax=0.5)
-            else:
-                # % Point (#) is always >= 0: single-hue sequential scale.
-                heat_kwargs = dict(colorscale="Blues", zmin=0, zmax=1)
-
-            fig_heat = go.Figure(data=go.Heatmap(
-                z=pivot_metrica.values,
-                x=pivot_metrica.columns.tolist(),
-                y=pivot_metrica.index.tolist(),
-                text=testo.values,
-                texttemplate="%{text}",
-                colorbar=dict(title=metrica_display, tickformat=".0%"),
-                hovertemplate="%{y} · %{x}<br>" + metrica_display + ": %{z:.0%}<extra></extra>",
-                **heat_kwargs,
-            ))
-            fig_heat.update_layout(
-                xaxis_title="Set type", yaxis_title="", yaxis_autorange="reversed",
-                height=max(320, 40 * len(pivot_metrica.index)),
-            )
-            st.plotly_chart(fig_heat, width="stretch")
-            st.caption(f"In each cell: total number of actions and {metrica_display.lower()}.")
+    if section == "General stats":
+        _render_general_stats(scout, partita_options, format_partita_option)
+    elif section == "Game distribution":
+        _render_distribution(scout, partita_options, format_partita_option, palla_tipi, palla_tipi_en)
+    else:
+        _render_raw_sheet(scout, partita_options, format_partita_option)
