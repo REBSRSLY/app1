@@ -25,12 +25,23 @@ PRESETS = {"Last 7 days": 7, "Last 14 days": 14, "Last 30 days": 30}
 
 
 def _season_bounds(season: str) -> tuple[dt.date, dt.date]:
+    """Full date range for the season, spanning both match days and
+    training-log days -- pre-season conditioning starts weeks before the
+    first match, so bounding this to match dates alone (as the app used to)
+    would silently hide that early wellness/RPE data from the pickers."""
     matches = mc.matches_for_season(season)
     if not matches:
         today = dt.date.today()
         return today, today
-    dates = sorted(m["pdate"] for m in matches)
-    return dates[0], dates[-1]
+    dates = [m["pdate"] for m in matches]
+
+    wellness = dl.load_wellness_data()
+    for df in wellness.values():
+        if not df.empty:
+            dates.append(df["Data"].min().date())
+            dates.append(df["Data"].max().date())
+
+    return min(dates), max(dates)
 
 
 def init():
