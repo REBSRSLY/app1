@@ -10,6 +10,13 @@ def close_polygon(r, theta):
 # charts. Same 1-5, high = worse items used team-wide (see wellness.py).
 WELLNESS_ICONS = {"Fatica": "🔋", "Sonno": "😴", "Doms": "💪", "Stress": "😌", "Mood": "🙂"}
 
+# Shared TQR readiness threshold and colors, used by every "TQR N.N" header
+# (Players page overview, Wellness page radars, Home page's low-recovery
+# banner) so the same cutoff and color always mean the same thing.
+GOOD_COLOR = "#54A24B"
+LOW_COLOR = "#E45756"
+RECOVERY_THRESHOLD = 15
+
 
 def rgba_from_hex(hex_color: str, alpha: float) -> str:
     """'#64B5F6' -> 'rgba(100,181,246,0.3)' (plotly rejects 8-digit hex+alpha)."""

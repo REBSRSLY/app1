@@ -8,12 +8,9 @@ import streamlit as st
 import data_loader as dl
 import player_colors as pc
 import players_grid as pg
-from ui_helpers import WELLNESS_ICONS, close_polygon, dark_polar_layout, rgba_from_hex
+from ui_helpers import GOOD_COLOR, LOW_COLOR, RECOVERY_THRESHOLD, WELLNESS_ICONS, close_polygon, dark_polar_layout, rgba_from_hex
 
 RECENT_MATCHES_N = 5
-GOOD_COLOR = "#54A24B"
-LOW_COLOR = "#E45756"
-RECOVERY_THRESHOLD = 15
 
 BASE_CARD_CSS = """
 <style>

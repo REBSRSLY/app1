@@ -9,6 +9,7 @@ import filters
 import match_calendar as mc
 import player_colors as pc
 import players_grid as pg
+from ui_helpers import close_polygon, dark_polar_layout
 
 # Fixed colors for set type: same color everywhere in the app, order never cycled.
 # Keys are the raw (Italian) values from the source data; translated to English
@@ -56,7 +57,7 @@ RAW_COLUMN_GROUPS = [
     ["Perfect", "Perfect_pct", "Perfect_BP", "Perfect_pC"],
 ]
 
-SECTIONS = ["General stats", "Game distribution", "Scout Sheet"]
+SECTIONS = ["Team Profile", "General stats", "Game distribution", "Scout Sheet"]
 
 # Which front-row zone each role attacks from -- we don't have real
 # per-attack court coordinates, so this fixed assumption (given by the
@@ -106,31 +107,158 @@ def _scope_scout(scout: pd.DataFrame) -> pd.DataFrame:
     return out.drop(columns=["_e", "_ind"])
 
 
-def _render_team_profile(scoped: pd.DataFrame):
-    """Team efficiency across every fundamental at once -- the "shape" of
-    the team's game (strong serve, shaky reception, etc.) that the
-    per-fundamental breakdown below can't show on its own."""
+# The four metrics selectable in the Team Profile bar chart: column name,
+# axis label, and whether it's a 0-1 rate (percent-formatted axis) or a
+# plain index value like Ind.
+TEAM_PROFILE_METRICS = {
+    "E%": ("E_pct", "Efficiency E%", True),
+    "Ind": ("Ind", "Index", False),
+    "=%": ("Err_pct", "Error %", True),
+    "#%": ("Perfect_pct", "% Point / Perfect", True),
+}
+
+
+def _render_team_profile(scoped: pd.DataFrame, metric_label: str):
+    """Team performance across every fundamental at once, for the selected
+    metric -- the "shape" of the team's game (strong serve, shaky
+    reception, etc.) that the per-fundamental breakdown elsewhere can't
+    show on its own."""
     team = scoped[scoped["is_team"] & (scoped["palla"] == "Totale") & (scoped["Tot"] > 0)].copy()
     if team.empty:
         return
 
+    metric_col, axis_label, is_pct = TEAM_PROFILE_METRICS[metric_label]
     present = [f for f in dl.FONDAMENTALE_ORDER if f in set(team["fondamentale"])]
     order_labels = [dl.FONDAMENTALE_LABELS[f] for f in present]
     team["Fundamental"] = team["fondamentale"].map(dl.FONDAMENTALE_LABELS)
 
-    fig = px.bar(
-        team, x="E_pct", y="Fundamental", orientation="h",
-        category_orders={"Fundamental": order_labels},
-        color="E_pct", color_continuous_scale="RdBu", color_continuous_midpoint=0,
-        labels={"E_pct": "Team efficiency E%", "Fundamental": ""},
-    )
+    if metric_col == "E_pct":
+        # Only E% is a diverging (can-go-negative) measure -- the others
+        # are plain 0-and-up rates/counts, so a single flat color reads
+        # better there than a gradient with no natural zero to diverge from.
+        fig = px.bar(
+            team, x=metric_col, y="Fundamental", orientation="h",
+            category_orders={"Fundamental": order_labels},
+            color=metric_col, color_continuous_scale="RdBu", color_continuous_midpoint=0,
+            labels={metric_col: axis_label, "Fundamental": ""},
+        )
+        fig.update_layout(coloraxis_showscale=False)
+    else:
+        fig = px.bar(
+            team, x=metric_col, y="Fundamental", orientation="h",
+            category_orders={"Fundamental": order_labels},
+            labels={metric_col: axis_label, "Fundamental": ""},
+            color_discrete_sequence=["#1655a5"],
+        )
     fig.update_layout(
-        coloraxis_showscale=False, xaxis_tickformat=".0%", height=260,
+        xaxis_tickformat=".0%" if is_pct else None, height=280,
         yaxis=dict(categoryorder="array", categoryarray=order_labels[::-1]),
         margin=dict(l=0, r=10, t=10, b=10),
     )
     st.plotly_chart(fig, width="stretch")
-    st.caption("Team efficiency (E%) for every fundamental in the selected scope -- where the team is strong vs. shaky.")
+    st.caption(f"Team {axis_label.lower()} for every fundamental in the selected scope.")
+
+
+def _render_team_radar(scoped: pd.DataFrame):
+    """Same team E% data as the bar above, but as a radar -- the overall
+    'shape' of team performance (well-rounded vs. lopsided) reads faster
+    from a polygon than from a list of bars."""
+    team = scoped[scoped["is_team"] & (scoped["palla"] == "Totale") & (scoped["Tot"] > 0)].copy()
+    present = [f for f in dl.FONDAMENTALE_ORDER if f in set(team["fondamentale"])]
+    if len(present) < 3:
+        st.info("Not enough fundamentals in this scope for a radar.")
+        return
+
+    labels = [dl.FONDAMENTALE_LABELS[f] for f in present]
+    values = [team.loc[team["fondamentale"] == f, "E_pct"].iloc[0] for f in present]
+    # E_pct can be negative, which would collapse/invert a polar shape
+    # around the origin -- shift every value up by 50pp onto a 0-1+ radial
+    # axis instead, purely for plotting (the caption spells this out).
+    shifted = [v + 0.5 for v in values]
+    r, theta = close_polygon(shifted, labels)
+    fig = go.Figure(go.Scatterpolar(r=r, theta=theta, fill="toself", line_color="#1655a5", fillcolor="rgba(22,85,165,0.3)"))
+    fig.update_layout(**dark_polar_layout([0, 1]))
+    fig.update_layout(height=320, margin=dict(l=30, r=30, t=20, b=20))
+    st.plotly_chart(fig, width="stretch", theme=None)
+    st.caption("Team efficiency (E%) per fundamental, shifted +50pp onto the radial axis so negative E% still plots.")
+
+
+def _render_team_volume_share(scoped: pd.DataFrame):
+    """Share of the team's total scouted actions going to each fundamental
+    -- a proportion, not an effectiveness measure, so a donut fits better
+    here than another bar chart."""
+    team = scoped[scoped["is_team"] & (scoped["palla"] == "Totale") & (scoped["Tot"] > 0)].copy()
+    if team.empty:
+        return
+    team["Fundamental"] = team["fondamentale"].map(dl.FONDAMENTALE_LABELS)
+    fig = px.pie(team, names="Fundamental", values="Tot", hole=0.5)
+    fig.update_traces(textinfo="percent+label")
+    fig.update_layout(height=320, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
+    st.plotly_chart(fig, width="stretch")
+    st.caption("Share of total scouted actions per fundamental.")
+
+
+def _render_team_trend(scout: pd.DataFrame):
+    """Team volume (bars) and efficiency (line) per match for one
+    fundamental, over the scoped matches -- whether the team is trending
+    up or down isn't visible from any of the other, single-snapshot charts
+    above."""
+    fond_options = dl.FONDAMENTALE_ORDER
+    fond_sel = st.selectbox(
+        "Fundamental", fond_options, index=fond_options.index("Attacco"),
+        format_func=lambda f: dl.FONDAMENTALE_LABELS.get(f, f), key="team_trend_fond",
+    )
+    d = scout[
+        scout["match"].isin(_in_scope_dates()) & (scout["fondamentale"] == fond_sel)
+        & scout["is_team"] & (scout["palla"] == "Totale") & (scout["match"] != dl.SEASON_LABEL)
+    ].copy()
+    if d.empty:
+        st.info("No data available for this fundamental in the selected scope.")
+        return
+
+    d["pdate"] = pd.to_datetime(d["match"].apply(mc.parsed_date))
+    d = d.sort_values("pdate")
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=d["pdate"], y=d["Tot"], name="Actions", marker_color="rgba(22,85,165,0.35)", yaxis="y2",
+    ))
+    fig.add_trace(go.Scatter(
+        x=d["pdate"], y=d["E_pct"], name="Efficiency E%", mode="lines+markers", line=dict(color="#f3343d", width=2),
+    ))
+    fig.update_layout(
+        height=340, margin=dict(l=0, r=10, t=30, b=10),
+        xaxis_title="Match date",
+        yaxis=dict(title="Efficiency E%", tickformat=".0%"),
+        yaxis2=dict(title="Actions", overlaying="y", side="right", showgrid=False),
+        legend=dict(orientation="h", y=1.15),
+    )
+    st.plotly_chart(fig, width="stretch")
+
+
+def _render_team_profile_section(scoped: pd.DataFrame, scout: pd.DataFrame):
+    st.caption("Team-wide performance across every fundamental, from the 'Squadra' rows of the scout sheet.")
+
+    with st.container(border=True):
+        st.markdown("**Team profile** · pick a metric")
+        metric_label = st.segmented_control(
+            "Metric", list(TEAM_PROFILE_METRICS.keys()), default="E%", required=True, key="team_profile_metric",
+        )
+        _render_team_profile(scoped, metric_label)
+
+    col_radar, col_pie = st.columns(2)
+    with col_radar:
+        with st.container(border=True):
+            st.markdown("**Team shape** · efficiency radar across fundamentals")
+            _render_team_radar(scoped)
+    with col_pie:
+        with st.container(border=True):
+            st.markdown("**Volume share** · actions per fundamental")
+            _render_team_volume_share(scoped)
+
+    with st.container(border=True):
+        st.markdown("**Trend over time** · team efficiency per match")
+        _render_team_trend(scout)
 
 
 def _render_outcome_distribution(base: pd.DataFrame, fond_sel: str, player_order: list[str]):
@@ -215,10 +343,6 @@ def _render_general_stats(scoped: pd.DataFrame):
         with st.expander(f"How to read \"{fond_label}\"", icon=":material/menu_book:"):
             for simbolo, nome, descrizione in legenda:
                 st.markdown(f"**{simbolo}** · {nome} — {descrizione}")
-
-    with st.container(border=True):
-        st.markdown("**Team profile** · efficiency across every fundamental")
-        _render_team_profile(scoped)
 
     base = scoped[(scoped["fondamentale"] == fond_sel) & (scoped["palla"] == "Totale")]
     team_row = base[base["is_team"]]
@@ -697,11 +821,16 @@ def _render_raw_sheet(scout: pd.DataFrame):
         "their % / BP / pC) — player surnames instead of codes. Follows the sidebar's period: "
         "the season aggregate when it spans the whole season, otherwise the most recent match in range."
     )
+    fond_sel = st.selectbox(
+        "Fundamental", dl.FONDAMENTALE_ORDER,
+        format_func=lambda f: dl.FONDAMENTALE_LABELS.get(f, f), key="raw_fond",
+    )
+
     partita_sel3 = _resolve_raw_match()
     match_label = partita_sel3 if partita_sel3 == dl.SEASON_LABEL else mc.match_label(partita_sel3)
     st.markdown(f"**Showing:** {match_label}")
 
-    raw = scout[scout["match"] == partita_sel3].copy()
+    raw = scout[(scout["match"] == partita_sel3) & (scout["fondamentale"] == fond_sel)].copy()
     if raw.empty:
         st.info("No data available for this match.")
         return
@@ -711,35 +840,32 @@ def _render_raw_sheet(scout: pd.DataFrame):
     raw["Set type"] = raw["palla"].map(dl.PALLA_LABELS)
     raw["Player"] = raw["player_name"]
 
-    for fond in dl.FONDAMENTALE_ORDER:
-        block = raw[raw["fondamentale"] == fond].sort_values(["palla", "_team_rank"], kind="stable").reset_index(drop=True)
-        if block.empty:
-            continue
-        with st.container(border=True):
-            st.markdown(f"**{dl.FONDAMENTALE_LABELS[fond]}**")
-            table = pd.DataFrame({"Set type": block["Set type"], "Player": block["Player"]})
-            column_config = {}
-            for gi, group in enumerate(RAW_COLUMN_GROUPS):
-                if gi > 0:
-                    spacer = " " * gi
-                    table[spacer] = ""
-                    column_config[spacer] = st.column_config.Column(label="", width="small", disabled=True)
-                for col in group:
-                    label = RAW_COLUMN_RENAME[col]
-                    table[label] = block[col]
-                    if label in RAW_PERCENT_COLUMNS:
-                        column_config[label] = st.column_config.NumberColumn(label, format="percent")
+    block = raw.sort_values(["palla", "_team_rank"], kind="stable").reset_index(drop=True)
+    with st.container(border=True):
+        st.markdown(f"**{dl.FONDAMENTALE_LABELS[fond_sel]}**")
+        table = pd.DataFrame({"Set type": block["Set type"], "Player": block["Player"]})
+        column_config = {}
+        for gi, group in enumerate(RAW_COLUMN_GROUPS):
+            if gi > 0:
+                spacer = " " * gi
+                table[spacer] = ""
+                column_config[spacer] = st.column_config.Column(label="", width="small", disabled=True)
+            for col in group:
+                label = RAW_COLUMN_RENAME[col]
+                table[label] = block[col]
+                if label in RAW_PERCENT_COLUMNS:
+                    column_config[label] = st.column_config.NumberColumn(label, format="percent")
 
-            # Each row's text colored by the athlete's assigned color (same
-            # hue as every other chart in the app); the team row instead
-            # gets black text on a white background so it stands out as
-            # "not a player".
-            row_styles = [
-                "color:#000000;background-color:#ffffff;" if is_team else f"color:{pc.color_for(player)};"
-                for is_team, player in zip(block["is_team"], block["Player"])
-            ]
-            styled = table.style.apply(lambda row: [row_styles[row.name]] * len(row), axis=1)
-            st.dataframe(styled, hide_index=True, width="stretch", column_config=column_config)
+        # Each row's text colored by the athlete's assigned color (same
+        # hue as every other chart in the app); the team row instead
+        # gets black text on a white background so it stands out as
+        # "not a player".
+        row_styles = [
+            "color:#000000;background-color:#ffffff;" if is_team else f"color:{pc.color_for(player)};"
+            for is_team, player in zip(block["is_team"], block["Player"])
+        ]
+        styled = table.style.apply(lambda row: [row_styles[row.name]] * len(row), axis=1)
+        st.dataframe(styled, hide_index=True, width="stretch", column_config=column_config)
 
 
 def render():
@@ -755,7 +881,9 @@ def render():
     # means the grid is created already-visible every time, sidestepping it.
     section = st.segmented_control("Section", SECTIONS, default=SECTIONS[0], key="scout_section")
 
-    if section == "General stats":
+    if section == "Team Profile":
+        _render_team_profile_section(scoped, scout)
+    elif section == "General stats":
         _render_general_stats(scoped)
     elif section == "Game distribution":
         _render_distribution(scoped, scout, palla_tipi_en)

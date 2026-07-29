@@ -1,3 +1,4 @@
+import pandas as pd
 import plotly.colors as pcolors
 import plotly.graph_objects as go
 import streamlit as st
@@ -5,7 +6,7 @@ import streamlit as st
 import data_loader as dl
 import filters
 import players_grid as pg
-from ui_helpers import WELLNESS_ICONS, close_polygon, dark_polar_layout
+from ui_helpers import GOOD_COLOR, LOW_COLOR, RECOVERY_THRESHOLD, WELLNESS_ICONS, close_polygon, dark_polar_layout
 
 # Wellness questionnaire items: all 1-5, high = worse (confirmed by negative
 # correlation with Tqr, which is 6-20 with high = better).
@@ -39,24 +40,86 @@ def _player_role_map() -> dict[str, str]:
     return {names[code]: dl.ROLE_LABELS.get(r, r) for code, r in roles.items() if code in names}
 
 
-def _player_radar(p_period, use_icons=False, height=None):
-    """Same 'Individual player' radar (TQR-colored, axes inverted so bigger =
-    better) for one player's data in the current date range, or None if empty."""
+def _render_player_radar(p_period, use_icons=False, height=None, show_caption=False, key=None):
+    """Same enriched radar as the Players page overview: a faint mean
+    shape, a shaded +/-1 std dev band around it, and a solid outline for
+    the most recent day in range layered on top -- instead of one flat
+    shape, this shows both the period's overall picture and how the latest
+    check-in compares to it. Renders the chart itself (and a colored TQR
+    header above it); returns the average TQR, or None if there's no data."""
     if p_period.empty:
-        return None, None
+        return None
 
-    inverted = [6 - p_period[p].mean() for p in NEGATIVE_PARAMS]
-    labels = list(WELLNESS_ICONS.values()) if use_icons else [INVERTED_LABELS[p] for p in NEGATIVE_PARAMS]
+    icons = list(WELLNESS_ICONS.values())
+    labels = icons if use_icons else [INVERTED_LABELS[p] for p in NEGATIVE_PARAMS]
+
+    means = [p_period[p].mean() for p in NEGATIVE_PARAMS]
+    stds = [p_period[p].std() for p in NEGATIVE_PARAMS]
+    values = [6 - m for m in means]
+    # Inversion (6 - x) is a shift, so std is unaffected -- upper/lower
+    # bounds just add/subtract it around the already-inverted mean, clipped
+    # to the 1-5 axis.
+    upper = [min(5.0, v + (s if pd.notna(s) else 0)) for v, s in zip(values, stds)]
+    lower = [max(1.0, v - (s if pd.notna(s) else 0)) for v, s in zip(values, stds)]
+
+    last_date = p_period["Data"].max()
+    last_day = p_period[p_period["Data"] == last_date]
+    last_values = [6 - last_day[p].mean() for p in NEGATIVE_PARAMS]
+
     tqr_avg = p_period["Tqr"].mean()
     t = max(0.0, min(1.0, (tqr_avg - 6) / (20 - 6)))
     color = pcolors.sample_colorscale("RdYlGn", [t])[0]
-    fill = color.replace("rgb", "rgba").replace(")", ", 0.35)")
-    r, theta = close_polygon(inverted, labels)
-    fig = go.Figure(go.Scatterpolar(r=r, theta=theta, fill="toself", line_color=color, fillcolor=fill))
+    fill_faint = color.replace("rgb", "rgba").replace(")", ",0.18)")
+    line_faint = color.replace("rgb", "rgba").replace(")", ",0.7)")
+
+    tqr_color = LOW_COLOR if tqr_avg < RECOVERY_THRESHOLD else GOOD_COLOR
+    font_size = "0.95rem" if use_icons else "1.15rem"
+    st.markdown(
+        f'<div style="text-align:center; font-size:{font_size}; font-weight:700; color:{tqr_color};">TQR {tqr_avg:.1f}</div>',
+        unsafe_allow_html=True,
+    )
+
+    fig = go.Figure()
+    # ±1 std dev band: filled only between the lower and upper polygons
+    # (fill="tonext" on the second trace), heavily transparent since it's
+    # just context around the mean shape.
+    r_lower, theta_lower = close_polygon(lower, labels)
+    fig.add_trace(go.Scatterpolar(
+        r=r_lower, theta=theta_lower, mode="lines", line=dict(width=0),
+        showlegend=False, hoverinfo="skip",
+    ))
+    r_upper, theta_upper = close_polygon(upper, labels)
+    fig.add_trace(go.Scatterpolar(
+        r=r_upper, theta=theta_upper, mode="lines", fill="tonext",
+        line=dict(width=0), fillcolor=fill_faint,
+        showlegend=False, hoverinfo="skip",
+    ))
+    # Mean shape: thin, slightly-transparent outline, fainter than the
+    # most-recent-day line below so the two don't compete.
+    r, theta = close_polygon(values, labels)
+    fig.add_trace(go.Scatterpolar(
+        r=r, theta=theta, mode="lines", line=dict(color=line_faint, width=1.2),
+        showlegend=False,
+    ))
+    # Most recent day in range: a solid outline with filled dots, drawn
+    # last so it stands out over the std band.
+    r_last, theta_last = close_polygon(last_values, labels)
+    fig.add_trace(go.Scatterpolar(
+        r=r_last, theta=theta_last, mode="lines+markers",
+        line=dict(color=color, width=2), marker=dict(color=color, size=5 if use_icons else 7),
+        showlegend=False,
+    ))
     fig.update_layout(**dark_polar_layout([1, 5]))
     if height is not None:
         fig.update_layout(height=height, margin=dict(l=10, r=10, t=10, b=10))
-    return fig, tqr_avg
+    if use_icons:
+        fig.update_layout(polar=dict(angularaxis=dict(tickfont=dict(size=22))))
+    st.plotly_chart(fig, width="stretch", theme=None, key=key)
+
+    if show_caption:
+        st.caption("Bigger = feeling better. Faint band = ±1 std dev over this period · solid line = most recent day in range.")
+
+    return tqr_avg
 
 
 def render():
@@ -113,12 +176,9 @@ def render():
             player_sel = st.selectbox("Player", all_players, key="wellness_player")
             p_period = period[period["player_name"] == player_sel]
 
-            fig, tqr_avg = _player_radar(p_period)
-            if fig is None:
+            tqr_avg = _render_player_radar(p_period, show_caption=True)
+            if tqr_avg is None:
                 st.info("No data for this player in this date range.")
-            else:
-                st.plotly_chart(fig, width="stretch", theme=None)
-                st.caption(f"Axes inverted so bigger = feeling better. Fill color reflects average TQR: {tqr_avg:.1f}/20.")
 
     st.write("---")
     st.markdown("**All players**")
@@ -133,8 +193,8 @@ def render():
                 with st.container(border=True):
                     st.caption(player["last"])
                     p_period = period[period["player_name"] == player["surname"]]
-                    fig, tqr_avg = _player_radar(p_period, use_icons=True, height=170)
-                    if fig is None:
+                    tqr_avg = _render_player_radar(
+                        p_period, use_icons=True, height=170, key=f"radar_{player['surname']}",
+                    )
+                    if tqr_avg is None:
                         st.caption("No data")
-                    else:
-                        st.plotly_chart(fig, width="stretch", theme=None, key=f"radar_{player['surname']}")
