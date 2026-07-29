@@ -150,8 +150,19 @@ def _render_team_profile(scoped: pd.DataFrame, metric_label: str):
             labels={metric_col: axis_label, "Fundamental": ""},
             color_discrete_sequence=["#1655a5"],
         )
+    # E_pct etc. are mathematically bounded to [-1, 1] and never actually
+    # exceed 100% -- but Plotly's autorange only fits the tallest bar, so a
+    # high-but-valid value (season Alzata E% = 91%) can visually run past
+    # the last gridline and look like it broke the scale. Pin an explicit
+    # range that always includes the full 0-100% span (and any negative
+    # values, e.g. Battuta) so that's never ambiguous.
+    xaxis_kwargs = dict(tickformat=".0%") if is_pct else {}
+    if is_pct:
+        lo = min(0.0, float(team[metric_col].min())) - 0.05
+        hi = max(1.0, float(team[metric_col].max())) + 0.05
+        xaxis_kwargs["range"] = [lo, hi]
     fig.update_layout(
-        xaxis_tickformat=".0%" if is_pct else None, height=280,
+        xaxis=xaxis_kwargs, height=280,
         yaxis=dict(categoryorder="array", categoryarray=order_labels[::-1]),
         margin=dict(l=0, r=10, t=10, b=10),
     )
@@ -261,6 +272,14 @@ def _render_team_profile_section(scoped: pd.DataFrame, scout: pd.DataFrame):
         _render_team_trend(scout)
 
 
+def _render_how_to_expander(fond_sel: str, fond_label: str):
+    legenda = dl.legenda_fondamentale(fond_sel)
+    if legenda:
+        with st.expander(f"How to read \"{fond_label}\"", icon=":material/menu_book:"):
+            for simbolo, nome, descrizione in legenda:
+                st.markdown(f"**{simbolo}** · {nome} — {descrizione}")
+
+
 def _render_outcome_distribution(base: pd.DataFrame, fond_sel: str, player_order: list[str]):
     """100%-stacked bar of each player's outcome mix (error/poor/neutral/
     good/perfect) for the selected fundamental -- two players can share
@@ -338,11 +357,7 @@ def _render_general_stats(scoped: pd.DataFrame):
 
     perfetto_lbl = dl.perfetto_label(fond_sel)
     errore_lbl = dl.errore_label(fond_sel)
-    legenda = dl.legenda_fondamentale(fond_sel)
-    if legenda:
-        with st.expander(f"How to read \"{fond_label}\"", icon=":material/menu_book:"):
-            for simbolo, nome, descrizione in legenda:
-                st.markdown(f"**{simbolo}** · {nome} — {descrizione}")
+    _render_how_to_expander(fond_sel, fond_label)
 
     base = scoped[(scoped["fondamentale"] == fond_sel) & (scoped["palla"] == "Totale")]
     team_row = base[base["is_team"]]
@@ -461,34 +476,37 @@ def _add_court_shapes(fig: go.Figure):
         fig.add_annotation(x=x, y=y, text=f"<span style='opacity:0.35'>{label}</span>", showarrow=False, font=dict(color="#ffffff", size=13))
 
 
-# Coloring config per selectable court metric. E% is diverging (can go
-# negative) and zero-centered so the scale's pale midpoint sits exactly at
-# E%=0; % Point is a plain 0-1 rate, so it gets a sequential scale instead
-# (pale at the low end, not the middle).
-ZONE_METRIC_OPTIONS = {"Efficiency (E%)": "E_pct", "% Point (#)": "Perfect_pct"}
+# Coloring config per selectable court metric, same 4 metrics as the Team
+# Profile chart and the Heatmap. E% is diverging (can go negative) and
+# zero-centered so the scale's pale midpoint sits exactly at E%=0; the
+# other three are plain 0-and-up rates/counts, so each gets a sequential
+# scale instead (pale at the low end, not the middle). Ind's cmax has no
+# natural fixed ceiling -- _render_zone_efficiency_court overrides it per
+# call to whatever this scope's zones actually reach.
+ZONE_METRIC_OPTIONS = {"E%": "E_pct", "Ind": "Ind", "=%": "Err_pct", "#%": "Perfect_pct"}
 ZONE_METRIC_CONFIG = {
-    "E_pct": {"colorscale": "RdYlGn", "cmin": -0.6, "cmax": 0.6, "diverging": True, "label": "E%"},
-    "Perfect_pct": {"colorscale": "Greens", "cmin": 0.0, "cmax": 0.6, "diverging": False, "label": "% Point"},
+    "E_pct": {"colorscale": "RdYlGn", "cmin": -0.6, "cmax": 0.6, "diverging": True, "label": "E%", "is_pct": True},
+    "Ind": {"colorscale": "Blues", "cmin": 0.0, "cmax": 1.0, "diverging": False, "label": "Ind", "is_pct": False},
+    "Err_pct": {"colorscale": "Reds", "cmin": 0.0, "cmax": 0.6, "diverging": False, "label": "=%", "is_pct": True},
+    "Perfect_pct": {"colorscale": "Greens", "cmin": 0.0, "cmax": 0.6, "diverging": False, "label": "#%", "is_pct": True},
 }
 
 
-def _zone_color(value, metric_col: str = "E_pct") -> str:
+def _zone_color(value, cfg: dict) -> str:
     if value is None or pd.isna(value):
         return "rgba(255,255,255,0.08)"
-    cfg = ZONE_METRIC_CONFIG[metric_col]
     t = max(0.0, min(1.0, (value - cfg["cmin"]) / (cfg["cmax"] - cfg["cmin"])))
     rgb = pcolors.sample_colorscale(cfg["colorscale"], [t])[0]
     return rgb.replace("rgb", "rgba").replace(")", ",0.75)")
 
 
-def _zone_text_color(value, metric_col: str = "E_pct") -> str:
+def _zone_text_color(value, cfg: dict) -> str:
     """Near the scale's pale end the fill is too light for white text to
     read -- switch to black there; everywhere else (more saturated colors)
     white stays legible. Diverging scales are pale at the center; sequential
     ones are pale at the low end."""
     if value is None or pd.isna(value):
         return "#ffffff"
-    cfg = ZONE_METRIC_CONFIG[metric_col]
     if cfg["diverging"]:
         return "#000000" if abs(value) <= 0.2 else "#ffffff"
     span = cfg["cmax"] - cfg["cmin"]
@@ -502,12 +520,13 @@ ZONE_TABLE_RENAME = {
 ZONE_TABLE_PERCENT_COLS = ["E%", "=", "/", "-", "!", "+", "#"]
 
 
-def _render_zone_efficiency_court(attack_totale: pd.DataFrame, metric_col: str = "E_pct"):
-    """Chart 4: each zone filled by a single color for the selected metric
-    (E% or % Point), with a real gradient colorbar (rather than the flat
-    color patches from the old "Court zones" section) to read the shade
-    against."""
-    cfg = ZONE_METRIC_CONFIG[metric_col]
+def _render_zone_efficiency_court(attack_totale: pd.DataFrame, metric_col: str = "E_pct") -> dict:
+    """Chart 4: each zone filled by a single color for the selected metric,
+    with a real gradient colorbar (rather than the flat color patches from
+    the old "Court zones" section) to read the shade against. Returns
+    zone_stats -- the per-zone tables render separately (see
+    _render_zone_efficiency_tables), in the column next to this one."""
+    cfg = dict(ZONE_METRIC_CONFIG[metric_col])
     zone_stats = {}
     for zone, roles_in_zone in ZONE_ROLES.items():
         sub = attack_totale[attack_totale["Role"].isin(roles_in_zone) & (attack_totale["Tot"] > 0)]
@@ -515,58 +534,81 @@ def _render_zone_efficiency_court(attack_totale: pd.DataFrame, metric_col: str =
         value = (sub[metric_col] * sub["Tot"]).sum() / tot if tot > 0 else None
         zone_stats[zone] = {"tot": int(tot), "value": value, "players": sub.sort_values("Tot", ascending=False)}
 
+    if metric_col == "Ind":
+        # Ind has no natural fixed ceiling (unlike the 0-1 rate metrics) --
+        # scale the colorbar to whatever this scope's zones actually reach.
+        vals = [s["value"] for s in zone_stats.values() if s["value"] is not None]
+        cfg["cmax"] = max(vals) * 1.15 if vals else 1.0
+
     fig = go.Figure()
     _add_court_shapes(fig)
     for zone, (x0, x1) in ZONE_X.items():
         stats = zone_stats[zone]
         fig.add_shape(
             type="rect", x0=x0, y0=6, x1=x1, y1=9,
-            fillcolor=_zone_color(stats["value"], metric_col), line=dict(color="rgba(255,255,255,0.5)", width=1),
+            fillcolor=_zone_color(stats["value"], cfg), line=dict(color="rgba(255,255,255,0.5)", width=1),
         )
-        val_txt = f"{stats['value'] * 100:.0f}%" if stats["value"] is not None else "—"
+        if stats["value"] is None:
+            val_txt = "—"
+        elif cfg["is_pct"]:
+            val_txt = f"{stats['value'] * 100:.0f}%"
+        else:
+            val_txt = f"{stats['value']:.0f}"
         fig.add_annotation(
-            x=(x0 + x1) / 2, y=7.5, showarrow=False, font=dict(color=_zone_text_color(stats["value"], metric_col), size=13),
+            x=(x0 + x1) / 2, y=7.5, showarrow=False, font=dict(color=_zone_text_color(stats["value"], cfg), size=13),
             text=f"<b>{zone}</b><br>{cfg['label']} {val_txt}<br>{stats['tot']} attacks",
         )
 
-    # Dummy invisible trace, only to host a real gradient colorbar next to
-    # the court (the zones themselves are plain shapes, which have no
-    # colorbar of their own).
+    # Dummy invisible trace, only to host a real gradient colorbar (the
+    # zones themselves are plain shapes, which have no colorbar of their
+    # own) -- horizontal, below the court, out of the way of the narrower
+    # column this chart now renders in.
     fig.add_trace(go.Scatter(
         x=[None], y=[None], mode="markers",
         marker=dict(
             colorscale=cfg["colorscale"], cmin=cfg["cmin"], cmax=cfg["cmax"], showscale=True, color=[0], size=0.1,
-            colorbar=dict(title=cfg["label"], tickformat=".0%", thickness=15, len=0.6, x=1.02),
+            colorbar=dict(
+                title=dict(text=cfg["label"], side="top"), orientation="h",
+                tickformat=".0%" if cfg["is_pct"] else None,
+                thickness=15, len=0.9, x=0.5, xanchor="center", y=-0.1, yanchor="top",
+            ),
         ),
         showlegend=False, hoverinfo="skip",
     ))
 
-    fig.update_xaxes(visible=False, range=[-0.3, 10.8])
+    fig.update_xaxes(visible=False, range=[-0.3, 9.3])
     fig.update_yaxes(visible=False, range=[-0.3, 9.3], scaleanchor="x")
-    fig.update_layout(height=440, margin=dict(l=10, r=10, t=10, b=10), plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+    fig.update_layout(height=620, margin=dict(l=10, r=10, t=10, b=70), plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
     with st.container(border=True):
         st.plotly_chart(fig, width="stretch")
 
-    cols = st.columns(3)
-    for col, zone in zip(cols, ["P4", "P3", "P2"]):
-        with col:
-            with st.container(border=True):
-                st.markdown(f"**{zone}** · {' / '.join(ZONE_ROLES[zone])}")
-                top = zone_stats[zone]["players"][["player_name", "Tot", "E_pct", "Err_pct", "Slash_pct", "Neg_pct", "Neutral_pct", "Pos_pct", "Perfect_pct"]].head(5)
-                if top.empty:
-                    st.caption("No attacks in this scope.")
-                else:
-                    st.dataframe(
-                        top.rename(columns=ZONE_TABLE_RENAME),
-                        hide_index=True, width="stretch",
-                        column_config={c: st.column_config.NumberColumn(format="percent") for c in ZONE_TABLE_PERCENT_COLS},
-                    )
+    return zone_stats
 
 
-def _render_zone_settype_court(attack_by_type: pd.DataFrame):
+def _render_zone_efficiency_tables(zone_stats: dict):
+    """The P4/P3/P2 detail tables for the efficiency court above, stacked
+    vertically (rather than 3-abreast) so they fit their own column next to
+    the court, fully readable without scrolling."""
+    for zone in ["P4", "P3", "P2"]:
+        with st.container(border=True):
+            st.markdown(f"**{zone}** · {' / '.join(ZONE_ROLES[zone])}")
+            top = zone_stats[zone]["players"][["player_name", "Tot", "E_pct", "Err_pct", "Slash_pct", "Neg_pct", "Neutral_pct", "Pos_pct", "Perfect_pct"]].head(5)
+            if top.empty:
+                st.caption("No attacks in this scope.")
+            else:
+                st.dataframe(
+                    top.rename(columns=ZONE_TABLE_RENAME),
+                    hide_index=True, width="stretch",
+                    column_config={c: st.column_config.NumberColumn(format="percent") for c in ZONE_TABLE_PERCENT_COLS},
+                )
+
+
+def _render_zone_settype_court(attack_by_type: pd.DataFrame) -> dict:
     """Chart 5: same court, but each zone is split into proportional
     stripes by set type (same colors as the rest of the app's set-type
-    charts) instead of a single efficiency color."""
+    charts) instead of a single efficiency color. Returns zone_mix -- the
+    per-zone tables render separately (see _render_zone_settype_tables), in
+    the column next to this one."""
     zone_mix = {}
     for zone, roles_in_zone in ZONE_ROLES.items():
         sub = attack_by_type[attack_by_type["Role"].isin(roles_in_zone) & (attack_by_type["Tot"] > 0)]
@@ -602,7 +644,7 @@ def _render_zone_settype_court(attack_by_type: pd.DataFrame):
 
     fig.update_xaxes(visible=False, range=[-0.3, 9.3])
     fig.update_yaxes(visible=False, range=[-0.3, 9.3], scaleanchor="x")
-    fig.update_layout(height=440, margin=dict(l=10, r=10, t=10, b=10), plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+    fig.update_layout(height=620, margin=dict(l=10, r=10, t=10, b=10), plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
     with st.container(border=True):
         st.plotly_chart(fig, width="stretch")
 
@@ -613,24 +655,28 @@ def _render_zone_settype_court(attack_by_type: pd.DataFrame):
         for p in RAW_PALLA_ORDER[1:]
     )
     st.markdown(legend_html, unsafe_allow_html=True)
+    return zone_mix
 
-    cols = st.columns(3)
-    for col, zone in zip(cols, ["P4", "P3", "P2"]):
-        with col:
-            with st.container(border=True):
-                st.markdown(f"**{zone}** · {' / '.join(ZONE_ROLES[zone])}")
-                shares = zone_mix[zone]["shares"]
-                if not shares:
-                    st.caption("No attacks in this scope.")
-                else:
-                    tbl = pd.DataFrame({
-                        "Set type": [dl.PALLA_LABELS[p] for p in shares.keys()],
-                        "Share": list(shares.values()),
-                    }).sort_values("Share", ascending=False)
-                    st.dataframe(
-                        tbl, hide_index=True, width="stretch",
-                        column_config={"Share": st.column_config.NumberColumn(format="percent")},
-                    )
+
+def _render_zone_settype_tables(zone_mix: dict):
+    """The P4/P3/P2 detail tables for the set-type court above, stacked
+    vertically (rather than 3-abreast) so they fit their own column next to
+    the court, fully readable without scrolling."""
+    for zone in ["P4", "P3", "P2"]:
+        with st.container(border=True):
+            st.markdown(f"**{zone}** · {' / '.join(ZONE_ROLES[zone])}")
+            shares = zone_mix[zone]["shares"]
+            if not shares:
+                st.caption("No attacks in this scope.")
+            else:
+                tbl = pd.DataFrame({
+                    "Set type": [dl.PALLA_LABELS[p] for p in shares.keys()],
+                    "Share": list(shares.values()),
+                }).sort_values("Share", ascending=False)
+                st.dataframe(
+                    tbl, hide_index=True, width="stretch",
+                    column_config={"Share": st.column_config.NumberColumn(format="percent")},
+                )
 
 
 def _render_zone_distribution(scoped: pd.DataFrame):
@@ -664,17 +710,27 @@ def _render_zone_distribution(scoped: pd.DataFrame):
     if mode == "Efficiency by zone":
         metric_label = st.segmented_control(
             "Effectiveness metric", list(ZONE_METRIC_OPTIONS.keys()),
-            default="Efficiency (E%)", required=True, key="zone_metrica",
+            default="E%", required=True, key="zone_metrica",
         )
         metric_col = ZONE_METRIC_OPTIONS[metric_label]
 
-    col_court, col_table = st.columns([2, 1])
+    # Court column narrower than before (was [2, 1]) -- the court itself
+    # renders taller to compensate, and the P4/P3/P2 tables move into the
+    # other column, stacked above the setters' table, so the whole thing
+    # reads top-to-bottom without needing to scroll sideways or down past
+    # the court to find them.
+    col_court, col_table = st.columns([1, 1])
     with col_court:
         if mode == "Efficiency by zone":
-            _render_zone_efficiency_court(attack[attack["palla"] == "Totale"], metric_col)
+            zone_stats = _render_zone_efficiency_court(attack[attack["palla"] == "Totale"], metric_col)
         else:
-            _render_zone_settype_court(attack[attack["palla"] != "Totale"])
+            zone_mix = _render_zone_settype_court(attack[attack["palla"] != "Totale"])
     with col_table:
+        if mode == "Efficiency by zone":
+            _render_zone_efficiency_tables(zone_stats)
+        else:
+            _render_zone_settype_tables(zone_mix)
+
         with st.container(border=True):
             st.markdown(f"**{title_names}**")
             if setters_alzata.empty:
@@ -702,6 +758,7 @@ def _render_distribution(scoped: pd.DataFrame, scout: pd.DataFrame, palla_tipi_e
     )
     fond2_label = dl.FONDAMENTALE_LABELS.get(fond_sel2, fond_sel2)
     st.caption(f"For **{fond2_label}**: \"#\" = {dl.perfetto_label(fond_sel2)}, \"=\" = {dl.errore_label(fond_sel2)}.")
+    _render_how_to_expander(fond_sel2, fond2_label)
 
     dist = scoped[
         (scoped["fondamentale"] == fond_sel2)
@@ -744,12 +801,19 @@ def _render_distribution(scoped: pd.DataFrame, scout: pd.DataFrame, palla_tipi_e
 
     st.markdown("#### Heatmap · Volume and effectiveness per player and set type")
     metrica_label = st.segmented_control(
-        "Effectiveness metric", ["Efficiency (E%)", "% Point (#)"],
-        default="Efficiency (E%)", required=True, key="dist_metrica",
+        "Effectiveness metric", list(TEAM_PROFILE_METRICS.keys()),
+        default="E%", required=True, key="dist_metrica",
     )
-    metrica_col = "E_pct" if metrica_label == "Efficiency (E%)" else "Perfect_pct"
-    # The "#" symbol has a different name per fundamental (Point for attack, Block point for block).
-    metrica_display = "Efficiency (E%)" if metrica_col == "E_pct" else f"% {dl.perfetto_label(fond_sel2)} (#)"
+    metrica_col, _, metrica_is_pct = TEAM_PROFILE_METRICS[metrica_label]
+    # "#"/"=" have a different name per fundamental (Point for attack, Block point for block).
+    if metrica_col == "Perfect_pct":
+        metrica_display = f"% {dl.perfetto_label(fond_sel2)} (#)"
+    elif metrica_col == "Err_pct":
+        metrica_display = f"% {dl.errore_label(fond_sel2)} (=)"
+    elif metrica_col == "Ind":
+        metrica_display = "Index"
+    else:
+        metrica_display = "Efficiency (E%)"
 
     pivot_tot = dist.pivot_table(index="player_name", columns="palla_en", values="Tot", aggfunc="sum", observed=True)
     pivot_metrica = dist.pivot_table(index="player_name", columns="palla_en", values=metrica_col, aggfunc="mean", observed=True)
@@ -757,33 +821,62 @@ def _render_distribution(scoped: pd.DataFrame, scout: pd.DataFrame, palla_tipi_e
     pivot_tot = pivot_tot.reindex(index=ordine_giocatrici, columns=colonne_ordinate)
     pivot_metrica = pivot_metrica.reindex(index=ordine_giocatrici, columns=colonne_ordinate)
 
-    testo = pivot_tot.copy().astype(object)
+    if metrica_col == "E_pct":
+        # Efficiency can be negative: diverging scale centered on 0.
+        heat_kwargs = dict(colorscale="RdBu", zmid=0, zmin=-0.5, zmax=0.5)
+    elif metrica_col == "Ind":
+        # Ind has no natural fixed ceiling (unlike the 0-1 rate metrics) --
+        # scale to whatever this scope's cells actually reach.
+        ind_max = pivot_metrica.max(numeric_only=True).max()
+        ind_max = float(ind_max) if pd.notna(ind_max) and ind_max > 0 else 1.0
+        heat_kwargs = dict(colorscale="Blues", zmin=0, zmax=ind_max)
+    elif metrica_col == "Err_pct":
+        # Higher error % is worse -- a "bad = more red" sequential scale,
+        # as opposed to Perfect_pct's "good = more green" below.
+        heat_kwargs = dict(colorscale="Reds", zmin=0, zmax=1)
+    else:
+        # % Point (#) is always >= 0: single-hue sequential scale.
+        heat_kwargs = dict(colorscale="Blues", zmin=0, zmax=1)
+
+    # Cell text: black on the paler part of whichever scale is active (E%
+    # near 0, or the other metrics near their low end) so it stays legible
+    # against a background color that can range from near-white to fully
+    # saturated; white everywhere else.
+    def _heat_text_color(value) -> str:
+        if pd.isna(value):
+            return "#ffffff"
+        if metrica_col == "E_pct":
+            return "#000000" if -0.2 <= value <= 0.2 else "#ffffff"
+        if metrica_col == "Ind":
+            return "#000000" if 0 <= value <= heat_kwargs["zmax"] / 2 else "#ffffff"
+        return "#000000" if 0 <= value <= 0.5 else "#ffffff"
+
+    # go.Heatmap's own texttemplate/textfont only take a single scalar
+    # color for the whole trace -- per-cell colors aren't supported there,
+    # so the cell text is drawn as individual annotations instead (same
+    # technique already used for the court charts below), one per cell,
+    # each with its own black/white color.
+    annotations = []
     for r in pivot_tot.index:
         for c in pivot_tot.columns:
             tot_v = pivot_tot.loc[r, c]
             eff_v = pivot_metrica.loc[r, c]
             if pd.isna(tot_v):
-                testo.loc[r, c] = ""
-            elif pd.isna(eff_v):
-                testo.loc[r, c] = f"{int(tot_v)}<br>—"
-            else:
-                testo.loc[r, c] = f"{int(tot_v)}<br>{eff_v * 100:.0f}%"
-
-    if metrica_col == "E_pct":
-        # Efficiency can be negative: diverging scale centered on 0.
-        heat_kwargs = dict(colorscale="RdBu", zmid=0, zmin=-0.5, zmax=0.5)
-    else:
-        # % Point (#) is always >= 0: single-hue sequential scale.
-        heat_kwargs = dict(colorscale="Blues", zmin=0, zmax=1)
+                continue
+            text = f"{int(tot_v)}<br>—" if pd.isna(eff_v) else (
+                f"{int(tot_v)}<br>{eff_v * 100:.0f}%" if metrica_is_pct else f"{int(tot_v)}<br>{eff_v:.0f}"
+            )
+            annotations.append(dict(
+                x=c, y=r, text=text, showarrow=False,
+                font=dict(color=_heat_text_color(eff_v), size=11),
+            ))
 
     fig_heat = go.Figure(data=go.Heatmap(
         z=pivot_metrica.values,
         x=pivot_metrica.columns.tolist(),
         y=pivot_metrica.index.tolist(),
-        text=testo.values,
-        texttemplate="%{text}",
-        colorbar=dict(title=metrica_display, tickformat=".0%"),
-        hovertemplate="%{y} · %{x}<br>" + metrica_display + ": %{z:.0%}<extra></extra>",
+        colorbar=dict(title=metrica_display, tickformat=".0%" if metrica_is_pct else None),
+        hovertemplate="%{y} · %{x}<br>" + metrica_display + (": %{z:.0%}" if metrica_is_pct else ": %{z:.1f}") + "<extra></extra>",
         **heat_kwargs,
     ))
     fig_heat.update_layout(
@@ -794,6 +887,7 @@ def _render_distribution(scoped: pd.DataFrame, scout: pd.DataFrame, palla_tipi_e
         # (Orro) at the top, reading top-to-bottom like the role list.
         yaxis=dict(categoryorder="array", categoryarray=ordine_giocatrici[::-1]),
         height=max(420, 50 * len(pivot_metrica.index)),
+        annotations=annotations,
     )
     with st.container(border=True):
         st.plotly_chart(fig_heat, width="stretch")
@@ -825,6 +919,7 @@ def _render_raw_sheet(scout: pd.DataFrame):
         "Fundamental", dl.FONDAMENTALE_ORDER,
         format_func=lambda f: dl.FONDAMENTALE_LABELS.get(f, f), key="raw_fond",
     )
+    _render_how_to_expander(fond_sel, dl.FONDAMENTALE_LABELS.get(fond_sel, fond_sel))
 
     partita_sel3 = _resolve_raw_match()
     match_label = partita_sel3 if partita_sel3 == dl.SEASON_LABEL else mc.match_label(partita_sel3)
