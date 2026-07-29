@@ -241,10 +241,9 @@ def _performance_bar(recent: pd.DataFrame, value_col: str, title: str, color: st
 
 
 def _performance_range(recent: pd.DataFrame, value_col: str, title: str, color: str, is_percent: bool, x_range: list):
-    """Hollow rounded bar spanning [min, max] of this fundamental's values
-    over the recent matches, with one scatter dot per match plotted inside
-    it -- more recent matches more opaque, so the shape itself tells the
-    spread and the dots tell the trend."""
+    """One scatter dot per match, per fundamental -- more recent matches
+    more opaque. Thin gridlines across the fixed axis range (rather than
+    an outline bar) are what makes each row readable now."""
     d = recent[recent["Tot"] > 0].copy()
     if d.empty:
         st.info(f"No {title.lower()} data in the last {RECENT_MATCHES_N} matches.")
@@ -255,14 +254,7 @@ def _performance_range(recent: pd.DataFrame, value_col: str, title: str, color: 
     order = _ordered_fundamentals(set(d["fondamentale"]))
     order_labels = [dl.FONDAMENTALE_LABELS[f] for f in order]
 
-    span = d.groupby("Fundamental", observed=True)[value_col].agg(["min", "max"]).reset_index()
-
     fig = go.Figure()
-    fig.add_trace(go.Bar(
-        x=span["max"] - span["min"], y=span["Fundamental"], base=span["min"], orientation="h",
-        marker=dict(color="rgba(0,0,0,0)", line=dict(color=color, width=2), cornerradius=8),
-        showlegend=False, hoverinfo="skip",
-    ))
     fig.add_trace(go.Scatter(
         x=d[value_col], y=d["Fundamental"], mode="markers",
         marker=dict(color=color, opacity=d["opacity"], size=8, line=dict(width=0)),
@@ -273,7 +265,12 @@ def _performance_range(recent: pd.DataFrame, value_col: str, title: str, color: 
     fig.update_layout(
         height=190, margin=dict(l=0, r=10, t=25, b=10),
         title=dict(text=title, font=dict(size=12)),
-        xaxis=dict(range=x_range, tickformat=".0%" if is_percent else None),
+        xaxis=dict(
+            range=x_range, tickformat=".0%" if is_percent else None,
+            dtick=(x_range[1] - x_range[0]) / 4,
+            showgrid=True, gridcolor="rgba(255,255,255,0.14)", gridwidth=1,
+            zeroline=True, zerolinecolor="rgba(255,255,255,0.3)", zerolinewidth=1,
+        ),
         yaxis=dict(categoryorder="array", categoryarray=order_labels[::-1]),
     )
     st.plotly_chart(fig, width="stretch")
@@ -321,32 +318,45 @@ def _render_wellness_radar(surname: str, color: str):
     )
 
     fig = go.Figure()
-    for bound in (upper, lower):
-        r_b, theta_b = close_polygon(bound, icons)
-        fig.add_trace(go.Scatterpolar(
-            r=r_b, theta=theta_b, mode="lines", line=dict(color=color, width=1, dash="dot"),
-            showlegend=False, hoverinfo="skip",
-        ))
+    # ±1 std dev band: filled only between the lower and upper polygons
+    # (fill="tonext" on the second trace), heavily transparent since it's
+    # just context around the mean shape.
+    r_lower, theta_lower = close_polygon(lower, icons)
+    fig.add_trace(go.Scatterpolar(
+        r=r_lower, theta=theta_lower, mode="lines", line=dict(width=0),
+        showlegend=False, hoverinfo="skip",
+    ))
+    r_upper, theta_upper = close_polygon(upper, icons)
+    fig.add_trace(go.Scatterpolar(
+        r=r_upper, theta=theta_upper, mode="lines", fill="tonext",
+        line=dict(width=0), fillcolor=rgba_from_hex(color, 0.18),
+        showlegend=False, hoverinfo="skip",
+    ))
+    # Mean shape: filled from center, lightly transparent (i.e. more
+    # opaque) so it reads clearly over the fainter std band.
     r, theta = close_polygon(values, icons)
     fig.add_trace(go.Scatterpolar(
-        r=r, theta=theta, fill="toself", line_color=color, fillcolor=rgba_from_hex(color, 0.3), showlegend=False,
+        r=r, theta=theta, fill="toself", line=dict(width=0), fillcolor=rgba_from_hex(color, 0.45),
+        showlegend=False,
     ))
+    # Most recent day: a solid outline with filled dots, drawn last so it
+    # stands out over both fills.
     r_last, theta_last = close_polygon(last_values, icons)
     fig.add_trace(go.Scatterpolar(
-        r=r_last, theta=theta_last, mode="markers",
-        marker=dict(color="#ffffff", size=8, line=dict(color=color, width=1.5)),
+        r=r_last, theta=theta_last, mode="lines+markers",
+        line=dict(color=color, width=2), marker=dict(color=color, size=7),
         showlegend=False,
     ))
     fig.update_layout(**dark_polar_layout([1, 5]))
     fig.update_layout(
-        height=300, margin=dict(l=20, r=20, t=10, b=10),
+        height=230, margin=dict(l=20, r=20, t=10, b=10),
         polar=dict(
             radialaxis=dict(showticklabels=False, showline=False),
             angularaxis=dict(tickfont=dict(size=26)),
         ),
     )
     st.plotly_chart(fig, width="stretch", theme=None)
-    st.caption("Last 7 days, bigger = feeling better. Dotted = ±1 std dev · white dot = most recent day.")
+    st.caption("Last 7 days, bigger = feeling better. Faint band = ±1 std dev · solid line = most recent day.")
 
 
 def _render_overview(surname: str):
