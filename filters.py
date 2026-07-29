@@ -74,6 +74,16 @@ def period() -> tuple[dt.date, dt.date]:
     return start, end
 
 
+def is_full_season() -> bool:
+    """Whether the active period spans the entire season (e.g. right after
+    the "Full season" preset), as opposed to a narrower custom range --
+    pages that fall back to a single "which sheet to show" choice (like the
+    raw scout sheet) use this to pick the season-aggregate sheet instead of
+    a single match."""
+    full_start, full_end = _season_bounds(season())
+    return period() == (full_start, full_end)
+
+
 def matches_in_scope() -> list[dict]:
     """Season matches (with parsed `pdate`) filtered by the active period
     and competition, most recent first -- the shared source of truth for

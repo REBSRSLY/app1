@@ -130,7 +130,9 @@ GLOSSARIO = {
         "errore": "Error",
         "legenda": [
             ("=", "Error", "Attack sent straight out or into the net."),
+            ("-", "Poor", "Attack blocked or dug by the opponent, who keeps a clear advantage."),
             ("!", "Neutral", "Attack dug by the opposing defense (ball dug and replayed)."),
+            ("+", "Good", "Attack that puts the opposing defense in trouble without scoring outright."),
             ("#", "Point", "Winning attack that lands the ball or forces a hitting error."),
         ],
     },
@@ -141,6 +143,7 @@ GLOSSARIO = {
             ("=", "Error", "Blocking error (e.g. net touch or invasion)."),
             ("-", "Invasion / negative touch", "Block that touches the ball but deflects it in the opponent's favor."),
             ("!", "Neutral", "Containment touch: the block slows the ball down and the team can dig it."),
+            ("+", "Good", "Block touch that puts the ball in an easy position for the defense, without scoring outright."),
             ("#", "Block point", "Winning block that sends the ball straight down into the opposing court."),
         ],
     },
@@ -160,7 +163,10 @@ GLOSSARIO = {
         "errore": "Error",
         "legenda": [
             ("=", "Error", "Blatant error on an easy ball (e.g. ball dropped due to miscommunication)."),
-            ("+ / #", "Good / Perfect", "Free ball delivered perfectly to the setter."),
+            ("-", "Poor", "Free ball played with an imprecise pass."),
+            ("!", "Neutral", "Free ball kept in play, but with no real advantage gained."),
+            ("+", "Good", "Free ball delivered cleanly to the setter."),
+            ("#", "Perfect", "Free ball delivered perfectly to the setter."),
         ],
     },
     "Alzata": {
@@ -169,6 +175,8 @@ GLOSSARIO = {
         "legenda": [
             ("=", "Error", "Setting fault (e.g. double contact, held ball) or set completely off target."),
             ("-", "Poor", "Imprecise set that puts the hitter in real trouble."),
+            ("!", "Neutral", "Average set, playable but not in an ideal position."),
+            ("+", "Good", "Good set that gives the hitter a clear advantage without being perfect."),
             ("#", "Perfect", "Perfect set."),
         ],
     },
