@@ -24,6 +24,16 @@ PALLA_ORDER = ["Alta", "Media", "Veloce", "Tesa", "Other", "Totale"]
 
 FONDAMENTALI_CON_PALLA = ["Attacco", "Att dopo Ricez", "Contrattacco", "Muro"]
 
+# Block order of the original Data Volley "by fundamental" export (see
+# SCOUT_COLS / _parse_scout_sheet below) -- the canonical row order for any
+# chart/table that breaks a player's stats down by fundamental, so they
+# always list in the same order instead of shuffling with the data (e.g.
+# sorted by mean/median).
+FONDAMENTALE_ORDER = [
+    "Battuta", "Ricezione", "Attacco", "Att dopo Ricez", "Contrattacco",
+    "Muro", "Difesa", "Free ball", "Alzata",
+]
+
 # Display-only English labels for the raw (Italian) categorical values above.
 # Keep the raw values untouched anywhere they're used for filtering/matching;
 # apply these mappings only when rendering text, chart axes, or legends.

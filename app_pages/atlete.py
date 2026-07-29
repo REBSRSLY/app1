@@ -11,6 +11,9 @@ import players_grid as pg
 from ui_helpers import WELLNESS_ICONS, close_polygon, dark_polar_layout, rgba_from_hex
 
 RECENT_MATCHES_N = 5
+GOOD_COLOR = "#54A24B"
+LOW_COLOR = "#E45756"
+RECOVERY_THRESHOLD = 15
 
 BASE_CARD_CSS = """
 <style>
@@ -186,56 +189,93 @@ def _recent_matches(surname: str, n: int = RECENT_MATCHES_N) -> pd.DataFrame:
     return rows[rows["match"].isin(recent_matches)]
 
 
-def _performance_bar(recent: pd.DataFrame, value_col: str, title: str, color: str, is_percent: bool):
+def _ordered_fundamentals(present: set) -> list[str]:
+    """dl.FONDAMENTALE_ORDER (the Excel sheet's own row order), restricted
+    to whichever fundamentals this player actually has data for -- so the
+    row order never reshuffles between players or reruns."""
+    return [f for f in dl.FONDAMENTALE_ORDER if f in present]
+
+
+def _recency_opacity(group: pd.DataFrame) -> pd.Series:
+    """0.25 (oldest match in this fundamental) ramping up to 1.0 (most
+    recent) -- "match" sorts correctly as a plain string since it's a
+    fixed-width YY-MM-DD sheet name."""
+    rank = group["match"].rank(method="dense")
+    n = rank.max()
+    if n <= 1:
+        return pd.Series(1.0, index=group.index)
+    return 0.25 + 0.75 * (rank - 1) / (n - 1)
+
+
+def _performance_bar(recent: pd.DataFrame, value_col: str, title: str, color: str, x_range: list):
     """Mean +/- std bars: used for Ind, which is a plain non-negative count
     per fundamental so a single mean+spread bar reads cleanly."""
     agg = recent.groupby("fondamentale", observed=True).agg(
         mean=(value_col, "mean"), std=(value_col, "std"), tot=("Tot", "sum"),
     ).reset_index()
     agg["std"] = agg["std"].fillna(0)
-    agg = agg[agg["tot"] > 0].sort_values("mean")
+    agg = agg[agg["tot"] > 0]
 
     if agg.empty:
         st.info(f"No {title.lower()} data in the last {RECENT_MATCHES_N} matches.")
         return
 
     agg["Fundamental"] = agg["fondamentale"].map(dl.FONDAMENTALE_LABELS)
+    order = _ordered_fundamentals(set(agg["fondamentale"]))
+    order_labels = [dl.FONDAMENTALE_LABELS[f] for f in order]
+
     fig = px.bar(
         agg, x="mean", y="Fundamental", orientation="h", error_x="std",
-        labels={"mean": title, "Fundamental": ""},
+        category_orders={"Fundamental": order_labels},
+        labels={"mean": "", "Fundamental": ""},
         color_discrete_sequence=[color],
     )
-    if is_percent:
-        fig.update_layout(xaxis_tickformat=".0%")
-    fig.update_layout(height=190, margin=dict(l=0, r=10, t=25, b=10), title=dict(text=title, font=dict(size=12)))
+    fig.update_layout(
+        height=190, margin=dict(l=0, r=10, t=25, b=10),
+        title=dict(text=title, font=dict(size=12)),
+        xaxis=dict(range=x_range),
+        yaxis=dict(categoryorder="array", categoryarray=order_labels[::-1]),
+    )
     fig.update_traces(error_x=dict(thickness=1, width=3))
     st.plotly_chart(fig, width="stretch")
 
 
-def _performance_box(recent: pd.DataFrame, value_col: str, title: str, color: str, is_percent: bool):
-    """Horizontal box plot: used for E%, which can go negative (errors
-    outweighing points), so a box/whiskers view reads better than a mean+std
-    bar that would visually imply a single-signed magnitude."""
+def _performance_range(recent: pd.DataFrame, value_col: str, title: str, color: str, is_percent: bool, x_range: list):
+    """Hollow rounded bar spanning [min, max] of this fundamental's values
+    over the recent matches, with one scatter dot per match plotted inside
+    it -- more recent matches more opaque, so the shape itself tells the
+    spread and the dots tell the trend."""
     d = recent[recent["Tot"] > 0].copy()
     if d.empty:
         st.info(f"No {title.lower()} data in the last {RECENT_MATCHES_N} matches.")
         return
 
     d["Fundamental"] = d["fondamentale"].map(dl.FONDAMENTALE_LABELS)
-    order = d.groupby("Fundamental")[value_col].median().sort_values().index.tolist()
-    fig = px.box(
-        d, x=value_col, y="Fundamental", orientation="h", points="all",
-        category_orders={"Fundamental": order},
-        labels={value_col: title, "Fundamental": ""},
-        color_discrete_sequence=[color],
-    )
-    if is_percent:
-        fig.update_layout(xaxis_tickformat=".0%")
+    d["opacity"] = d.groupby("fondamentale", group_keys=False).apply(_recency_opacity)
+    order = _ordered_fundamentals(set(d["fondamentale"]))
+    order_labels = [dl.FONDAMENTALE_LABELS[f] for f in order]
+
+    span = d.groupby("Fundamental", observed=True)[value_col].agg(["min", "max"]).reset_index()
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=span["max"] - span["min"], y=span["Fundamental"], base=span["min"], orientation="h",
+        marker=dict(color="rgba(0,0,0,0)", line=dict(color=color, width=2), cornerradius=8),
+        showlegend=False, hoverinfo="skip",
+    ))
+    fig.add_trace(go.Scatter(
+        x=d[value_col], y=d["Fundamental"], mode="markers",
+        marker=dict(color=color, opacity=d["opacity"], size=8, line=dict(width=0)),
+        showlegend=False,
+        customdata=d["match"],
+        hovertemplate="%{y} · %{customdata}: %{x" + (":.0%" if is_percent else "") + "}<extra></extra>",
+    ))
     fig.update_layout(
-        height=190, margin=dict(l=0, r=10, t=25, b=10), showlegend=False,
+        height=190, margin=dict(l=0, r=10, t=25, b=10),
         title=dict(text=title, font=dict(size=12)),
+        xaxis=dict(range=x_range, tickformat=".0%" if is_percent else None),
+        yaxis=dict(categoryorder="array", categoryarray=order_labels[::-1]),
     )
-    fig.update_traces(marker=dict(size=4, opacity=0.75), line=dict(width=1.5))
     st.plotly_chart(fig, width="stretch")
 
 
@@ -245,9 +285,9 @@ def _render_performance(surname: str, color: str):
         st.info("No scouting data for this player.")
         return
 
+    _performance_range(recent, "E_pct", "Efficiency E%", color, is_percent=True, x_range=[-1, 1])
+    _performance_bar(recent, "Ind", "Index", color, x_range=[0, 100])
     st.caption(f"Last {RECENT_MATCHES_N} matches, by fundamental.")
-    _performance_box(recent, "E_pct", "Efficiency E%", color, is_percent=True)
-    _performance_bar(recent, "Ind", "Index", color, is_percent=False)
 
 
 def _render_wellness_radar(surname: str, color: str):
@@ -258,17 +298,55 @@ def _render_wellness_radar(surname: str, color: str):
         return
 
     recent = p[p["Data"] >= p["Data"].max() - pd.Timedelta(days=6)]
-    values = [6 - recent[param].mean() for param in WELLNESS_ICONS]
     icons = list(WELLNESS_ICONS.values())
+
+    means = [recent[param].mean() for param in WELLNESS_ICONS]
+    stds = [recent[param].std() for param in WELLNESS_ICONS]
+    values = [6 - m for m in means]
+    # Inversion (6 - x) is a shift, so std is unaffected -- upper/lower
+    # bounds just add/subtract it around the already-inverted mean, clipped
+    # to the 1-5 axis.
+    upper = [min(5.0, v + (s if pd.notna(s) else 0)) for v, s in zip(values, stds)]
+    lower = [max(1.0, v - (s if pd.notna(s) else 0)) for v, s in zip(values, stds)]
+
+    last_date = recent["Data"].max()
+    last_day = recent[recent["Data"] == last_date]
+    last_values = [6 - last_day[param].mean() for param in WELLNESS_ICONS]
+
+    tqr_avg = recent["Tqr"].mean()
+    tqr_color = LOW_COLOR if tqr_avg < RECOVERY_THRESHOLD else GOOD_COLOR
+    st.markdown(
+        f'<div style="text-align:center; font-size:1.15rem; font-weight:700; color:{tqr_color};">TQR {tqr_avg:.1f}</div>',
+        unsafe_allow_html=True,
+    )
+
+    fig = go.Figure()
+    for bound in (upper, lower):
+        r_b, theta_b = close_polygon(bound, icons)
+        fig.add_trace(go.Scatterpolar(
+            r=r_b, theta=theta_b, mode="lines", line=dict(color=color, width=1, dash="dot"),
+            showlegend=False, hoverinfo="skip",
+        ))
     r, theta = close_polygon(values, icons)
-    fig = go.Figure(go.Scatterpolar(r=r, theta=theta, fill="toself", line_color=color, fillcolor=rgba_from_hex(color, 0.3)))
+    fig.add_trace(go.Scatterpolar(
+        r=r, theta=theta, fill="toself", line_color=color, fillcolor=rgba_from_hex(color, 0.3), showlegend=False,
+    ))
+    r_last, theta_last = close_polygon(last_values, icons)
+    fig.add_trace(go.Scatterpolar(
+        r=r_last, theta=theta_last, mode="markers",
+        marker=dict(color="#ffffff", size=8, line=dict(color=color, width=1.5)),
+        showlegend=False,
+    ))
     fig.update_layout(**dark_polar_layout([1, 5]))
     fig.update_layout(
         height=300, margin=dict(l=20, r=20, t=10, b=10),
-        polar=dict(radialaxis=dict(showticklabels=False, showline=False)),
+        polar=dict(
+            radialaxis=dict(showticklabels=False, showline=False),
+            angularaxis=dict(tickfont=dict(size=26)),
+        ),
     )
     st.plotly_chart(fig, width="stretch", theme=None)
-    st.caption("Last 7 days, bigger = feeling better.")
+    st.caption("Last 7 days, bigger = feeling better. Dotted = ±1 std dev · white dot = most recent day.")
 
 
 def _render_overview(surname: str):
@@ -277,7 +355,7 @@ def _render_overview(surname: str):
     stats = dl.load_player_stats()
 
     with st.container(border=True):
-        col_photo, col_info = st.columns([1, 2])
+        col_photo, col_info = st.columns([0.8, 2.2])
         with col_photo:
             st.image(pg.photo_path(player), width="stretch")
         with col_info:
@@ -288,13 +366,15 @@ def _render_overview(surname: str):
                 row = stats.loc[surname]
                 st.markdown(f"🏐 **{row['points']}** pts · **{row['appearances']}** matches")
 
-        # Performance and Wellness share one toggle-switched section
-        # (rather than both stacked) so the whole overview box stays short
-        # enough to fit without scrolling the page.
-        view = st.segmented_control(
-            "Detail view", ["Performance", "Wellness"],
-            default="Performance", key="players_detail_view",
-        )
+            # Performance and Wellness share one toggle-switched section
+            # (rather than both stacked) so the whole overview box stays
+            # short enough to fit without scrolling the page.
+            view = st.segmented_control(
+                "Detail view", ["Performance", "Wellness"],
+                default="Performance", key="players_detail_view",
+                label_visibility="collapsed",
+            )
+
         if view == "Wellness":
             _render_wellness_radar(surname, color)
         else:

@@ -52,7 +52,7 @@ GRID_ROWS = [
 ]
 
 PHOTO_DIR = "Volley graphic design/Team Photos"
-CREST_PATH = "Volley graphic design/vero_volley_sym-removebg-preview.png"
+CREST_PATH = "Volley graphic design/logo_white.png"
 
 
 def photo_path(player: dict) -> str:

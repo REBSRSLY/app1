@@ -20,13 +20,11 @@ PALLA_COLORS = {
 }
 PALLA_COLORS_EN = {dl.PALLA_LABELS[k]: v for k, v in PALLA_COLORS.items()}
 
-# Block order and column layout of the original Data Volley "by fundamental"
-# export (see data_loader.SCOUT_COLS / _parse_scout_sheet), used only by the
-# "Excel Scout Sheet" section to reproduce the sheet's row/column order exactly.
-RAW_FONDAMENTALE_ORDER = [
-    "Battuta", "Ricezione", "Attacco", "Att dopo Ricez", "Contrattacco",
-    "Muro", "Difesa", "Free ball", "Alzata",
-]
+# Column layout of the original Data Volley "by fundamental" export (see
+# data_loader.SCOUT_COLS / _parse_scout_sheet), used only by the "Excel
+# Scout Sheet" section to reproduce the sheet's column order exactly. Row
+# order reuses dl.FONDAMENTALE_ORDER (the same constant every other
+# fundamental-breakdown chart in the app follows).
 RAW_PALLA_ORDER = ["Totale", "Alta", "Media", "Veloce", "Tesa", "Other"]
 RAW_COLUMN_RENAME = {
     "P": "P", "Set": "Set", "Ind": "Ind", "E_pct": "E%", "Tot": "Tot",
@@ -261,7 +259,7 @@ def _render_raw_sheet(scout, partita_options, format_partita_option):
         st.info("No data available for this match.")
         return
 
-    raw["fondamentale"] = pd.Categorical(raw["fondamentale"], categories=RAW_FONDAMENTALE_ORDER, ordered=True)
+    raw["fondamentale"] = pd.Categorical(raw["fondamentale"], categories=dl.FONDAMENTALE_ORDER, ordered=True)
     raw["palla"] = pd.Categorical(raw["palla"].astype(str), categories=RAW_PALLA_ORDER, ordered=True)
     raw["_team_rank"] = (~raw["is_team"]).astype(int)  # Team row before player rows, per block
     raw = raw.sort_values(["fondamentale", "palla", "_team_rank"], kind="stable")
