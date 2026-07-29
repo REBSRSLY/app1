@@ -17,15 +17,22 @@ _SCORE_POINTS = {"3-0": 3, "3-1": 3, "3-2": 2, "2-3": 1, "1-3": 0, "0-3": 0}
 
 def _render_form_chart(matches: list[dict]):
     """Match-by-match result points in chronological order: an at-a-glance
-    form/momentum view across whatever's currently in scope."""
+    form/momentum view across whatever's currently in scope. Bar height is
+    the result (points), bar color is the competition -- the same colors as
+    each competition's box below -- so a pattern like "we lose more in
+    Champions League" is visible at a glance instead of needing the color
+    to repeat what the height already shows."""
     ordered = sorted(matches, key=lambda m: m["date"])
     points = [mc.result_points(m) for m in ordered]
-    labels = [f"{'vs' if m['home'] else '@'} {m['opponent']}" for m in ordered]
-    hover = [f"{fmt}<br>{m['score']}" for fmt, m in zip((cv.fmt_date(m["date"]) for m in ordered), ordered)]
+    labels = [m["opponent"] for m in ordered]
+    hover = [
+        f"{fmt}<br>{m['score']} · {m['competition']}"
+        for fmt, m in zip((cv.fmt_date(m["date"]) for m in ordered), ordered)
+    ]
 
     fig = go.Figure(go.Bar(
         x=list(range(len(ordered))), y=points,
-        marker_color=[cv.RESULT_COLORS[p] for p in points],
+        marker_color=[mc.COMPETITIONS[m["competition"]]["color"] for m in ordered],
         text=labels, hovertext=hover, hovertemplate="%{text}<br>%{hovertext}<extra></extra>",
     ))
     fig.update_layout(
@@ -34,6 +41,7 @@ def _render_form_chart(matches: list[dict]):
         xaxis=dict(visible=False),
     )
     st.plotly_chart(fig, width="stretch")
+    st.caption("Bar height = result points · bar color = competition (see the boxes below).")
 
 
 def _render_by_competition(season: str, matches: list[dict]):

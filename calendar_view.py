@@ -53,10 +53,9 @@ def _events_for_month(matches: list[dict], year: int, month: int) -> dict[int, l
         if d.year != year or d.month != month:
             continue
         comp = mc.COMPETITIONS[m["competition"]]
-        vs = f"{'vs' if m['home'] else '@'} {m['opponent']}"
         events.setdefault(d.day, []).append({
             "color": comp["color"],
-            "title": f"{vs} {m['score']}",
+            "title": f"{m['opponent']} {m['score']}",
         })
     return events
 
@@ -102,6 +101,7 @@ BOX_CSS = """
         background: var(--surface);
         padding: 14px 16px 12px;
         margin-bottom: 12px;
+        box-sizing: border-box;
     }
     .comp-box-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; }
     .comp-box-title { font-size:1.05rem; font-weight:700; color:var(--box-accent, var(--accent)); }
@@ -109,15 +109,21 @@ BOX_CSS = """
         font-size:11.5px; color:var(--muted); background:rgba(255,255,255,0.05);
         border:1px solid var(--line); border-radius:20px; padding:3px 10px; white-space:nowrap;
     }
-    .comp-results { height:246px; overflow-y:auto; padding-right:6px; }
-    .result-row { display:flex; align-items:center; gap:10px; padding:6px 2px; border-bottom:1px solid var(--line); font-size:12.5px; }
+    /* Sized to roughly match the standings box's own natural height (14
+       teams + header lands around ~600px) -- matches contained here are
+       sorted most-recent-first (see render_competition_box), so whatever's
+       most relevant right now, wins or losses, is what's visible without
+       scrolling, not whatever happened to be scrolled to. */
+    .comp-results { height:520px; overflow-y:auto; padding-right:6px; }
+    .result-row { padding:8px 2px; border-bottom:1px solid var(--line); }
     .result-row:last-child { border-bottom:none; }
-    .result-date { color:var(--muted); width:54px; flex-shrink:0; font-variant-numeric: tabular-nums; white-space:nowrap; }
-    .result-opponent { flex:1; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .result-venue { color:var(--muted); font-size:10.5px; width:34px; flex-shrink:0; }
-    .result-round { color:var(--muted); font-size:10.5px; flex-shrink:0; max-width:110px; text-align:right;
-        overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .result-score { font-weight:700; width:34px; text-align:center; flex-shrink:0; border-radius:5px; padding:1px 0; }
+    .result-top { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:3px; }
+    .result-opponent { font-weight:700; font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .result-score { font-weight:700; font-size:12.5px; flex-shrink:0; border-radius:6px; padding:2px 9px; }
+    .result-bottom { display:flex; align-items:center; gap:9px; font-size:11px; color:var(--muted); white-space:nowrap; }
+    .result-date { font-variant-numeric: tabular-nums; flex-shrink:0; }
+    .result-venue { text-transform:uppercase; letter-spacing:0.04em; flex-shrink:0; }
+    .result-round { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .comp-empty { color:var(--muted); font-size:12.5px; padding:8px 0; }
 </style>
 """
@@ -132,14 +138,22 @@ def fmt_date(sheet_date: str) -> str:
 def _result_row_html(m: dict, show_round: bool) -> str:
     color = RESULT_COLORS[mc.result_points(m)]
     venue = "Home" if m["home"] else "Away"
-    round_html = f'<div class="result-round">{mc.round_label(m["round"])}</div>' if show_round else ""
+    round_html = f'<div class="result-round">· {mc.round_label(m["round"])}</div>' if show_round else ""
+    # Two lines instead of five columns crammed into one row: the opponent
+    # name and score (the two things worth reading at a glance) get their
+    # own larger, uncontested line; date/venue/round move to a smaller
+    # muted line below instead of fighting them for horizontal space.
     return (
         '<div class="result-row">'
-        f'<div class="result-date">{fmt_date(m["date"])}</div>'
+        f'<div class="result-top">'
         f'<div class="result-opponent">{m["opponent"]}</div>'
+        f'<div class="result-score" style="color:{color};background:{color}26;">{m["score"]}</div>'
+        f'</div>'
+        f'<div class="result-bottom">'
+        f'<div class="result-date">{fmt_date(m["date"])}</div>'
         f'<div class="result-venue">{venue}</div>'
         f'{round_html}'
-        f'<div class="result-score" style="color:{color}">{m["score"]}</div>'
+        f'</div>'
         '</div>'
     )
 
@@ -159,9 +173,13 @@ def render_box(title: str, color: str, body_html: str, record_html: str = "") ->
 
 
 def render_competition_box(comp_key: str, matches: list[dict], show_round: bool = True) -> str:
-    """Self-contained box: header (name, W-L record) + scrollable results list."""
+    """Self-contained box: header (name, W-L record) + scrollable results
+    list, most recent match first -- the box has a capped height (roughly
+    matching the standings box next to it) and scrolls for competitions
+    with a lot of matches, so whatever's most recent (a loss included)
+    is what's visible by default, not whatever's oldest."""
     conf = mc.COMPETITIONS[comp_key]
-    comp_matches = sorted((m for m in matches if m["competition"] == comp_key), key=lambda m: m["date"])
+    comp_matches = sorted((m for m in matches if m["competition"] == comp_key), key=lambda m: m["date"], reverse=True)
 
     if not comp_matches:
         return render_box(comp_key, conf["color"], '<div class="comp-empty">No matches yet.</div>')

@@ -19,8 +19,6 @@ import filters
 import styles
 from app_pages import (
     atlete,
-    confronti,
-    formazioni,
     home,
     inserimento_dati,
     loads,
@@ -46,8 +44,6 @@ PAGES = {
     "Scout & Stats": scout_statistiche.render,
     "Wellness": wellness.render,
     "Loads": loads.render,
-    "Comparisons": confronti.render,
-    "Lineups": formazioni.render,
     "Data Entry": inserimento_dati.render,
 }
 
@@ -58,8 +54,6 @@ PAGE_ICONS = {
     "Scout & Stats": "bar_chart",
     "Wellness": "monitor_heart",
     "Loads": "fitness_center",
-    "Comparisons": "compare_arrows",
-    "Lineups": "grid_view",
     "Data Entry": "edit_note",
 }
 

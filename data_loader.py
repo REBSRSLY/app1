@@ -254,6 +254,13 @@ def _parse_scout_sheet(df: pd.DataFrame, match_label: str) -> list[dict]:
     return rows
 
 
+def parse_scout_sheet(df: pd.DataFrame, match_label: str) -> list[dict]:
+    """Public entry point to _parse_scout_sheet, for external callers (the
+    Data Entry upload flow) that need to parse an uploaded sheet with the
+    exact same logic used for the app's own bundled matches file."""
+    return _parse_scout_sheet(df, match_label)
+
+
 @st.cache_data(show_spinner="Loading scouting data...")
 def load_player_names() -> dict[str, str]:
     """Map player code -> real name, women's A1 team only."""

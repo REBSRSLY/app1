@@ -119,12 +119,11 @@ def parsed_date(sheet_date: str):
 
 
 def match_label(sheet_date: str) -> str:
-    """'date - vs/@ Opponent (round)' label for selectboxes and chips."""
+    """'date - Opponent (round)' label for selectboxes and chips."""
     m = MATCH_BY_DATE.get(sheet_date)
     if m is None:
         return sheet_date
-    vs = f"{'vs' if m['home'] else '@'} {m['opponent']}"
-    return f"{sheet_date} · {vs} ({m['round']})"
+    return f"{sheet_date} · {m['opponent']} ({m['round']})"
 
 
 # ---------------------------------------------------------------------------

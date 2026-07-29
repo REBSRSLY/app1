@@ -12,6 +12,37 @@ import training_load
 SECTIONS = ["Jumps", "RPE / Load"]
 
 
+def _render_jumps_ampm(period: pd.DataFrame):
+    """Team-wide jump volume split by session (AM/PM) -- the per-player
+    chart above already shows who's jumping; this shows when, which the
+    "AM-PM" column carries but nothing else on this page visualizes."""
+    daily = period.groupby(["Data", "AM-PM"], as_index=False)["SALTI"].sum()
+    fig = px.bar(
+        daily, x="Data", y="SALTI", color="AM-PM", barmode="stack",
+        category_orders={"AM-PM": ["AM", "PM"]},
+        color_discrete_map={"AM": "#F9A825", "PM": "#4C78A8"},
+        labels={"Data": "Date", "SALTI": "Jumps", "AM-PM": "Session"},
+    )
+    fig.update_layout(legend_title_text="Session", height=300, margin=dict(l=10, r=10, t=10, b=10))
+    st.plotly_chart(fig, width="stretch")
+
+
+def _render_jumps_cumulative(period: pd.DataFrame):
+    """Running jump total per player over the period -- workload
+    accumulating over time reads faster from a rising line than from
+    picking out the tallest daily bars in the stacked chart above."""
+    daily = period.groupby(["Data", "player_name"], as_index=False)["SALTI"].sum().sort_values("Data")
+    daily["cumulative"] = daily.groupby("player_name")["SALTI"].cumsum()
+    fig = px.line(
+        daily, x="Data", y="cumulative", color="player_name",
+        color_discrete_map=pc.color_map(daily["player_name"].unique()),
+        labels={"Data": "Date", "cumulative": "Cumulative jumps", "player_name": "Player"},
+        markers=True,
+    )
+    fig.update_layout(legend_title_text="Player", height=300, margin=dict(l=10, r=10, t=10, b=10))
+    st.plotly_chart(fig, width="stretch")
+
+
 def _render_jumps(salti):
     salti_players = sorted(salti["player_name"].dropna().unique())
     sel_players = st.multiselect("Players", salti_players, default=salti_players, key="jumps_players")
@@ -23,14 +54,26 @@ def _render_jumps(salti):
         st.info("No jump data for this selection.")
         return
 
-    daily = period.groupby(["Data", "player_name"], as_index=False)["SALTI"].sum()
-    fig = px.bar(
-        daily, x="Data", y="SALTI", color="player_name", barmode="stack",
-        color_discrete_map=pc.color_map(daily["player_name"].unique()),
-        labels={"Data": "Date", "SALTI": "Jumps", "player_name": "Player"},
-    )
-    fig.update_layout(legend_title_text="Player")
-    st.plotly_chart(fig, width="stretch")
+    with st.container(border=True):
+        st.markdown("**Jumps per player** · daily")
+        daily = period.groupby(["Data", "player_name"], as_index=False)["SALTI"].sum()
+        fig = px.bar(
+            daily, x="Data", y="SALTI", color="player_name", barmode="stack",
+            color_discrete_map=pc.color_map(daily["player_name"].unique()),
+            labels={"Data": "Date", "SALTI": "Jumps", "player_name": "Player"},
+        )
+        fig.update_layout(legend_title_text="Player", height=320, margin=dict(l=10, r=10, t=10, b=10))
+        st.plotly_chart(fig, width="stretch")
+
+    col_ampm, col_cum = st.columns(2)
+    with col_ampm:
+        with st.container(border=True):
+            st.markdown("**AM vs PM** · team jump volume")
+            _render_jumps_ampm(period)
+    with col_cum:
+        with st.container(border=True):
+            st.markdown("**Cumulative jumps** · per player")
+            _render_jumps_cumulative(period)
 
 
 def _reference_date(rpe: pd.DataFrame):

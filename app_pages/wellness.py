@@ -110,16 +110,61 @@ def _render_player_radar(p_period, use_icons=False, height=None, show_caption=Fa
         showlegend=False,
     ))
     fig.update_layout(**dark_polar_layout([1, 5]))
+    # Radial ring numbers (1, 1.5, 2 ... 5) are just clutter here -- the
+    # shape/color/recency already carry the meaning, and the axis range is
+    # explained in the caption instead.
+    fig.update_layout(polar=dict(radialaxis=dict(showticklabels=False)))
     if height is not None:
-        fig.update_layout(height=height, margin=dict(l=10, r=10, t=10, b=10))
+        # The icon labels need more breathing room than a plain text label
+        # would -- tight 10px margins were clipping them at the card edge.
+        margin = dict(l=30, r=30, t=26, b=26) if use_icons else dict(l=10, r=10, t=10, b=10)
+        fig.update_layout(height=height, margin=margin)
     if use_icons:
-        fig.update_layout(polar=dict(angularaxis=dict(tickfont=dict(size=22))))
+        fig.update_layout(polar=dict(angularaxis=dict(tickfont=dict(size=18))))
     st.plotly_chart(fig, width="stretch", theme=None, key=key)
 
     if show_caption:
         st.caption("Bigger = feeling better. Faint band = ±1 std dev over this period · solid line = most recent day in range.")
 
     return tqr_avg
+
+
+def _render_team_tqr_trend(period: pd.DataFrame):
+    """Team-average TQR per day, with a +/-1 std dev band and the recovery
+    threshold marked -- a trend line is the natural read for "is the team's
+    readiness holding up over this period", which none of the per-player or
+    per-parameter snapshots above actually show."""
+    daily = period.groupby("Data")["Tqr"].agg(["mean", "std", "count"]).reset_index()
+    daily = daily[daily["count"] > 0]
+    if daily.empty:
+        st.info("No wellness data in this date range.")
+        return
+    daily["std"] = daily["std"].fillna(0)
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=daily["Data"], y=daily["mean"] + daily["std"], mode="lines", line=dict(width=0),
+        showlegend=False, hoverinfo="skip",
+    ))
+    fig.add_trace(go.Scatter(
+        x=daily["Data"], y=daily["mean"] - daily["std"], mode="lines", fill="tonext", line=dict(width=0),
+        fillcolor="rgba(46,204,113,0.15)", showlegend=False, hoverinfo="skip",
+    ))
+    fig.add_trace(go.Scatter(
+        x=daily["Data"], y=daily["mean"], mode="lines+markers", name="Team avg TQR",
+        line=dict(color="#2ecc71", width=2),
+    ))
+    fig.add_hline(
+        y=RECOVERY_THRESHOLD, line_dash="dash", line_color=LOW_COLOR,
+        annotation_text=f"Recovery threshold ({RECOVERY_THRESHOLD})", annotation_position="bottom right",
+        annotation_font=dict(color=LOW_COLOR, size=11),
+    )
+    fig.update_layout(
+        height=280, margin=dict(l=10, r=10, t=10, b=10), showlegend=False,
+        yaxis=dict(title="TQR", range=[6, 20]), xaxis_title=None,
+    )
+    st.plotly_chart(fig, width="stretch")
+    st.caption(f"Team average TQR per day (±1 std dev band). Dashed line = recovery threshold ({RECOVERY_THRESHOLD}).")
 
 
 def render():
@@ -165,6 +210,7 @@ def render():
                     line_color="#2ecc71", fillcolor="rgba(46,204,113,0.25)",
                 ))
                 fig.update_layout(**dark_polar_layout([lo, hi]))
+                fig.update_layout(polar=dict(radialaxis=dict(showticklabels=False)))
                 st.plotly_chart(fig, width="stretch", theme=None)
                 if is_negative:
                     st.caption("Axis inverted so bigger = better.")
@@ -180,6 +226,10 @@ def render():
             if tqr_avg is None:
                 st.info("No data for this player in this date range.")
 
+    with st.container(border=True):
+        st.markdown("**Team TQR** · trend over time")
+        _render_team_tqr_trend(period)
+
     st.write("---")
     st.markdown("**All players**")
     for row in pg.GRID_ROWS:
@@ -194,7 +244,7 @@ def render():
                     st.caption(player["last"])
                     p_period = period[period["player_name"] == player["surname"]]
                     tqr_avg = _render_player_radar(
-                        p_period, use_icons=True, height=170, key=f"radar_{player['surname']}",
+                        p_period, use_icons=True, height=195, key=f"radar_{player['surname']}",
                     )
                     if tqr_avg is None:
                         st.caption("No data")
