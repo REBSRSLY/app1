@@ -18,6 +18,7 @@ import data_loader as dl
 import match_calendar as mc
 
 ALL_COMPETITIONS = "All competitions"
+ALL_MATCHES = "All matches (use dates below)"
 
 # Quick-period presets, in days back from the season's last match. "Full
 # season" isn't a day count -- it's handled separately as "span everything".
@@ -50,6 +51,7 @@ def init():
     narrows something down."""
     st.session_state.setdefault("flt_season", mc.SEASONS[0])
     st.session_state.setdefault("flt_competition", ALL_COMPETITIONS)
+    st.session_state.setdefault("flt_match_pick", ALL_MATCHES)
     start, end = _season_bounds(st.session_state["flt_season"])
     st.session_state.setdefault("flt_start", start)
     st.session_state.setdefault("flt_end", end)
@@ -82,6 +84,17 @@ def is_full_season() -> bool:
     a single match."""
     full_start, full_end = _season_bounds(season())
     return period() == (full_start, full_end)
+
+
+def _matches_for_picker() -> list[dict]:
+    """Season matches filtered by competition only (not period -- picking
+    one of these from the sidebar is what sets the period), most recent
+    first."""
+    matches = mc.matches_for_season(season())
+    comp = competition()
+    if comp != ALL_COMPETITIONS:
+        matches = [m for m in matches if m["competition"] == comp]
+    return sorted(matches, key=lambda m: m["pdate"], reverse=True)
 
 
 def matches_in_scope() -> list[dict]:
@@ -140,6 +153,10 @@ def _apply_preset(days: int | None, target_season: str | None = None):
         st.session_state["flt_start"] = max(start, end - dt.timedelta(days=days - 1))
         st.session_state["flt_end"] = end
     st.session_state["flt_has_end"] = True
+    # A date-range preset supersedes any single match picked from the
+    # dropdown above -- clear it so the two controls don't show
+    # contradictory state.
+    st.session_state["flt_match_pick"] = ALL_MATCHES
 
 
 def _on_season_change():
@@ -147,6 +164,22 @@ def _on_season_change():
     with a different (or no) match range would otherwise leave the stored
     start/end outside the new bounds and make st.date_input raise."""
     _apply_preset(None, target_season=st.session_state["flt_season"])
+
+
+def _apply_match_pick():
+    """Picking a single match from the sidebar sets the period to exactly
+    that match day (start = the match's date, no end) -- a shortcut next to
+    the calendar pickers, not a replacement for them."""
+    picked = st.session_state["flt_match_pick"]
+    if picked == ALL_MATCHES:
+        return
+    match = mc.MATCH_BY_DATE.get(picked)
+    if match is None:
+        return
+    match_date = mc.parsed_date(picked)
+    st.session_state["flt_start"] = match_date
+    st.session_state["flt_end"] = match_date
+    st.session_state["flt_has_end"] = False
 
 
 LOGO_WHITE_PATH = "Volley graphic design/logo_white.png"
@@ -165,6 +198,14 @@ def render_sidebar_tools():
 
     st.selectbox("Season", mc.SEASONS, key="flt_season", on_change=_on_season_change)
     st.selectbox("Competition", [ALL_COMPETITIONS] + mc.COMPETITION_ORDER, key="flt_competition")
+
+    match_pick_options = [ALL_MATCHES] + [m["date"] for m in _matches_for_picker()]
+    ensure_valid_selection("flt_match_pick", match_pick_options)
+    st.selectbox(
+        "Match", match_pick_options, key="flt_match_pick", on_change=_apply_match_pick,
+        format_func=lambda d: d if d == ALL_MATCHES else mc.match_label(d),
+        help="Jump the period to a single match day, instead of picking dates below.",
+    )
 
     st.markdown("**Period**")
     with st.container(border=True):
