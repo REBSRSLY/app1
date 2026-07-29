@@ -7,7 +7,6 @@ import data_loader as dl
 import filters
 import match_calendar as mc
 import player_colors as pc
-from ui_helpers import section_header
 
 # Fixed colors for set type: same color everywhere in the app, order never cycled.
 # Keys are the raw (Italian) values from the source data; translated to English
@@ -284,8 +283,6 @@ def _render_raw_sheet(scout, partita_options, format_partita_option):
 
 
 def render():
-    section_header("Scout & Stats", "Per-fundamental scouting statistics and attack game distribution, for a single match or the whole season.")
-
     scout = dl.load_scout_data()
     partita_options = filters.match_options()
     palla_tipi = [p for p in dl.PALLA_ORDER if p != "Totale"]
@@ -293,8 +290,6 @@ def render():
 
     def format_partita_option(opt: str) -> str:
         return opt if opt == dl.SEASON_LABEL else mc.match_label(opt)
-
-    st.caption(f":material/filter_alt: {filters.caption()} · change the period/competition from the sidebar.")
 
     # A plain st.tabs would leave whichever section isn't shown mounted but
     # hidden (display:none); Streamlit's data-grid widget never recovers a

@@ -3,7 +3,6 @@ import streamlit as st
 import data_loader as dl
 import player_colors as pc
 from roster import panchina, titolari
-from ui_helpers import section_header
 
 RECOVERY_THRESHOLD = 15  # same threshold as the Home page's recovery alert
 GOOD_COLOR = "#54A24B"
@@ -53,7 +52,6 @@ def _render_player_card(p: dict, tqr_by_player: dict, position_label: str):
 
 
 def render():
-    section_header("Lineups", "Starting six and bench by role, with each player's latest recovery status.")
     st.markdown(CARD_CSS, unsafe_allow_html=True)
     st.markdown(_card_border_css(titolari + panchina), unsafe_allow_html=True)
 

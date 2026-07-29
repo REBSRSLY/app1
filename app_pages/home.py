@@ -4,16 +4,12 @@ import calendar_view as cv
 import data_loader as dl
 import filters
 import match_calendar as mc
-from ui_helpers import section_header
 
 GOOD_COLOR = "#54A24B"
 LOW_COLOR = "#E45756"
 
 
 def render():
-    section_header("Home", "Season at a glance: key numbers from scouting and wellness.")
-    st.caption(f":material/filter_alt: Sidebar scope: {filters.caption()} — most pages below follow it.")
-
     matches = dl.load_match_list()
     wellness = dl.load_wellness_data()["wellness"]
 

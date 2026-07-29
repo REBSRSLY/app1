@@ -6,7 +6,7 @@ import data_loader as dl
 import filters
 import match_calendar as mc
 import player_colors as pc
-from ui_helpers import close_polygon, dark_polar_layout, section_header
+from ui_helpers import close_polygon, dark_polar_layout
 
 # A sensible default fundamental to open on for each role — still changeable via the selector.
 DEFAULT_FONDAMENTALE_PER_ROLE = {
@@ -128,7 +128,6 @@ def _render_wellness(role_players):
         return
 
     period = filters.filter_by_date_col(wellness)
-    st.caption(f"Averages over {filters.caption()}.")
 
     param = st.selectbox(
         "Parameter", list(PARAM_LABELS.keys()),
@@ -216,11 +215,6 @@ def _render_rpe(role_players):
 
 
 def render():
-    section_header(
-        "Comparisons",
-        "Pick a role to see and compare all data for the players who play it.",
-    )
-
     names = dl.load_player_names()
     roles = dl.load_player_roles()
 

@@ -139,12 +139,19 @@ def _on_season_change():
     _apply_preset(None, target_season=st.session_state["flt_season"])
 
 
+LOGO_WHITE_PATH = "Volley graphic design/logo_white.png"
+
+
 def render_sidebar_tools():
     """The sidebar's whole content: season/competition pickers, the period
     box, and quick presets -- everything that used to be scattered as local
     widgets across every page, now edited in one place."""
-    st.markdown('<div class="brand-title">Vero Volley Milano</div>', unsafe_allow_html=True)
-    st.markdown('<div class="brand-subtitle">Technical Staff · A1 Women\'s</div>', unsafe_allow_html=True)
+    col_logo, col_brand = st.columns([1, 3], vertical_alignment="center")
+    with col_logo:
+        st.image(LOGO_WHITE_PATH, width="stretch")
+    with col_brand:
+        st.markdown('<div class="brand-title">Vero Volley Milano</div>', unsafe_allow_html=True)
+        st.markdown('<div class="brand-subtitle">Technical Staff · A1 Women\'s</div>', unsafe_allow_html=True)
 
     st.selectbox("Season", mc.SEASONS, key="flt_season", on_change=_on_season_change)
     st.selectbox("Competition", [ALL_COMPETITIONS] + mc.COMPETITION_ORDER, key="flt_competition")

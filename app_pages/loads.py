@@ -8,7 +8,6 @@ import filters
 import player_colors as pc
 import players_grid as pg
 import training_load
-from ui_helpers import section_header
 
 SECTIONS = ["Jumps", "RPE / Load"]
 
@@ -208,12 +207,9 @@ def _render_load(rpe: pd.DataFrame):
 
 
 def render():
-    section_header("Loads", "Training load monitoring: jump count and RPE/Training Load — for the team or an individual player.")
-
     data = dl.load_wellness_data()
     rpe, salti = data["rpe"], data["salti"]
 
-    st.caption(f":material/filter_alt: {filters.caption()} · change the period from the sidebar.")
     section = st.segmented_control("Section", SECTIONS, default=SECTIONS[0], key="loads_section")
 
     if section == "Jumps":

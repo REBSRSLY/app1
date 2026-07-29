@@ -1,10 +1,16 @@
 """App entry point: page config, top navigation and shared filters.
 
-Page navigation lives in a fixed top bar (st.navigation(position="top")) so
-it's always visible and never has to share space with anything else. The
-collapsible sidebar is dedicated entirely to the season/competition/period
-tools in filters.py, which every page reads from for continuity instead of
-each keeping its own local date picker.
+Navigation is a custom fixed top bar (plain st.button, styled via CSS keyed
+off each button's auto-generated st-key class) rather than
+st.navigation(position="top"): the native version's internal markup is
+built by a ResizeObserver-driven overflow component that doesn't render
+reliably in every environment and can't be reached with custom CSS with any
+confidence, while plain buttons give full, verifiable control over the
+colored border and the active-page gradient design asks for.
+
+The collapsible sidebar is dedicated entirely to the season/competition/
+period tools in filters.py, which every page reads from for continuity
+instead of each keeping its own local date picker.
 """
 
 import streamlit as st
@@ -25,7 +31,7 @@ from app_pages import (
 
 st.set_page_config(
     page_title="Vero Volley Milano - Technical Staff",
-    page_icon="🏐",
+    page_icon="Volley graphic design/logo.png",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -33,20 +39,77 @@ st.set_page_config(
 styles.inject()
 filters.init()
 
-pages = [
-    st.Page(home.render, title="Home", icon=":material/home:", url_path="home", default=True),
-    st.Page(atlete.render, title="Players", icon=":material/badge:", url_path="players"),
-    st.Page(partite.render, title="Matches", icon=":material/calendar_month:", url_path="matches"),
-    st.Page(scout_statistiche.render, title="Scout & Stats", icon=":material/bar_chart:", url_path="scout-stats"),
-    st.Page(wellness.render, title="Wellness", icon=":material/monitor_heart:", url_path="wellness"),
-    st.Page(loads.render, title="Loads", icon=":material/fitness_center:", url_path="loads"),
-    st.Page(confronti.render, title="Comparisons", icon=":material/compare_arrows:", url_path="comparisons"),
-    st.Page(formazioni.render, title="Lineups", icon=":material/grid_view:", url_path="lineups"),
-    st.Page(inserimento_dati.render, title="Data Entry", icon=":material/edit_note:", url_path="data-entry"),
-]
-page = st.navigation(pages, position="top")
+PAGES = {
+    "Home": home.render,
+    "Players": atlete.render,
+    "Matches": partite.render,
+    "Scout & Stats": scout_statistiche.render,
+    "Wellness": wellness.render,
+    "Loads": loads.render,
+    "Comparisons": confronti.render,
+    "Lineups": formazioni.render,
+    "Data Entry": inserimento_dati.render,
+}
+
+PAGE_ICONS = {
+    "Home": "home",
+    "Players": "badge",
+    "Matches": "calendar_month",
+    "Scout & Stats": "bar_chart",
+    "Wellness": "monitor_heart",
+    "Loads": "fitness_center",
+    "Comparisons": "compare_arrows",
+    "Lineups": "grid_view",
+    "Data Entry": "edit_note",
+}
+
+st.session_state.setdefault("menu", "Home")
+
+
+def _set_menu(name):
+    st.session_state.menu = name
+
+
+NAV_CSS = """
+<style>
+    /* Pin the nav row to the top of the scrollable area, just below
+       Streamlit's own deploy/menu header. */
+    div[data-testid="stHorizontalBlock"]:has(> div [class*="st-key-topnav_"]) {
+        position: sticky;
+        top: 0;
+        z-index: 999;
+        background: var(--background, #0e1117);
+        padding: 6px 0 10px;
+        margin-bottom: 4px;
+    }
+    [class*="st-key-topnav_"] button {
+        border: 2px solid var(--accent) !important;
+        border-radius: 8px !important;
+        font-weight: 600;
+    }
+    [class*="st-key-topnav_"] button[kind="primary"] {
+        background: linear-gradient(90deg, var(--accent) 0%, var(--accent-2) 100%) !important;
+        border: 2px solid transparent !important;
+        color: #ffffff !important;
+    }
+</style>
+"""
+st.markdown(NAV_CSS, unsafe_allow_html=True)
+
+nav_cols = st.columns(len(PAGES))
+for col, (name, icon) in zip(nav_cols, PAGE_ICONS.items()):
+    with col:
+        st.button(
+            name,
+            icon=f":material/{icon}:",
+            key=f"topnav_{name}",
+            type="primary" if st.session_state.menu == name else "secondary",
+            on_click=_set_menu,
+            args=(name,),
+            width="stretch",
+        )
 
 with st.sidebar:
     filters.render_sidebar_tools()
 
-page.run()
+PAGES[st.session_state.menu]()

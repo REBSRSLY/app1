@@ -8,7 +8,7 @@ import streamlit as st
 import data_loader as dl
 import player_colors as pc
 import players_grid as pg
-from ui_helpers import WELLNESS_ICONS, close_polygon, dark_polar_layout, rgba_from_hex, section_header
+from ui_helpers import WELLNESS_ICONS, close_polygon, dark_polar_layout, rgba_from_hex
 
 RECENT_MATCHES_N = 5
 
@@ -302,7 +302,6 @@ def _render_overview(surname: str):
 
 
 def render():
-    section_header("Players", "Click a player for her season overview.")
     st.markdown(BASE_CARD_CSS, unsafe_allow_html=True)
     st.markdown(_role_border_css(), unsafe_allow_html=True)
     st.markdown(_player_card_css(), unsafe_allow_html=True)

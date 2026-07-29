@@ -4,13 +4,23 @@ import streamlit as st
 
 CUSTOM_CSS = """
     <style>
-        /* General variables and styles */
+        /* General variables and styles. --accent/--accent-2 are the club
+           logo's own blue/red, used for the nav bar, buttons and other
+           brand chrome (charts keep their own established per-role/
+           per-player palettes -- these two are for app chrome only). */
         :root {
-            --accent: #c0392b;
-            --accent-bg: rgba(192, 57, 43, 0.12);
+            --accent: #1655a5;
+            --accent-2: #f3343d;
+            --accent-bg: rgba(22, 85, 165, 0.12);
             --surface: #181818;
             --muted: #9a9a9a;
             --line: #2a2a2a;
+        }
+
+        /* Pull page content up closer to the nav bar instead of leaving
+           Streamlit's default large top gap. */
+        div[data-testid="stMainBlockContainer"] {
+            padding-top: 1.5rem;
         }
 
         /* Sidebar style */
@@ -47,25 +57,6 @@ CUSTOM_CSS = """
             margin-bottom: 8px;
         }
         .ph-line:last-child { margin-bottom: 0; }
-
-        /* Section header: small, top-left, no big page title */
-        .section-header {
-            display: flex;
-            align-items: baseline;
-            flex-wrap: wrap;
-            column-gap: 10px;
-            padding-bottom: 8px;
-            margin-bottom: 14px;
-            border-bottom: 1px solid var(--line);
-        }
-        .section-title {
-            font-size: 1.05rem;
-            font-weight: 700;
-        }
-        .section-purpose {
-            font-size: 12px;
-            color: var(--muted);
-        }
 
         /* Alert card (TQR) */
         .alert-card {

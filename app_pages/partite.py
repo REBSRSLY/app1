@@ -9,7 +9,6 @@ import calendar_view as cv
 import data_loader as dl
 import filters
 import match_calendar as mc
-from ui_helpers import section_header
 
 # Same 3/2/1/0 scale as mc.result_points, keyed by the raw score string --
 # used to color/order the "All matches" score-pattern chart.
@@ -165,13 +164,9 @@ SECTIONS = ["By competition", "Full calendar", "All matches"]
 
 
 def render():
-    section_header("Matches", "Results and standings by competition, plus the full season calendar.")
-
     season = filters.season()
     season_matches = mc.matches_for_season(season)
     scoped_matches = filters.matches_in_scope()
-
-    st.caption(f":material/filter_alt: {filters.caption()} · change from the sidebar.")
 
     if not season_matches:
         st.info(f"No matches recorded yet for the {season} season.")

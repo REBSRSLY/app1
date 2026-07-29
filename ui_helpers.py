@@ -1,17 +1,5 @@
 """Small UI utilities shared across the app's sections."""
 
-import streamlit as st
-
-
-def section_header(title, purpose):
-    st.markdown(
-        f'<div class="section-header">'
-        f'<span class="section-title">{title}</span>'
-        f'<span class="section-purpose">{purpose}</span>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
-
 
 def close_polygon(r, theta):
     """Repeat the first point at the end so a go.Scatterpolar trace closes visually."""

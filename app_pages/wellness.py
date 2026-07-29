@@ -5,7 +5,7 @@ import streamlit as st
 import data_loader as dl
 import filters
 import players_grid as pg
-from ui_helpers import WELLNESS_ICONS, close_polygon, dark_polar_layout, section_header
+from ui_helpers import WELLNESS_ICONS, close_polygon, dark_polar_layout
 
 # Wellness questionnaire items: all 1-5, high = worse (confirmed by negative
 # correlation with Tqr, which is 6-20 with high = better).
@@ -60,15 +60,8 @@ def _player_radar(p_period, use_icons=False, height=None):
 
 
 def render():
-    section_header(
-        "Wellness",
-        "Daily wellness questionnaire (Fatigue, Sleep, Doms, Stress, Mood, TQR) — for the team or an individual player.",
-    )
-
     wellness = dl.load_wellness_data()["wellness"]
-
     period = filters.filter_by_date_col(wellness)
-    st.caption(f"Averages over {filters.caption()}. Change the period from the sidebar.")
 
     col_team, col_player = st.columns(2)
 
