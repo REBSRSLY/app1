@@ -332,15 +332,18 @@ def _render_wellness_radar(surname: str, color: str):
         line=dict(width=0), fillcolor=rgba_from_hex(color, 0.18),
         showlegend=False, hoverinfo="skip",
     ))
-    # Mean shape: filled from center, lightly transparent (i.e. more
-    # opaque) so it reads clearly over the fainter std band.
+    # Mean shape: no fill anymore, just a thin, slightly-transparent
+    # outline (thinner and fainter than the most-recent-day line below, so
+    # the two don't compete). mode="lines" must be explicit -- Plotly
+    # defaults an unset mode to "lines+markers" for this few a points,
+    # which was silently adding unstyled default-colored dots.
     r, theta = close_polygon(values, icons)
     fig.add_trace(go.Scatterpolar(
-        r=r, theta=theta, fill="toself", line=dict(width=0), fillcolor=rgba_from_hex(color, 0.45),
+        r=r, theta=theta, mode="lines", line=dict(color=rgba_from_hex(color, 0.7), width=1.2),
         showlegend=False,
     ))
     # Most recent day: a solid outline with filled dots, drawn last so it
-    # stands out over both fills.
+    # stands out over the std band.
     r_last, theta_last = close_polygon(last_values, icons)
     fig.add_trace(go.Scatterpolar(
         r=r_last, theta=theta_last, mode="lines+markers",
@@ -349,7 +352,7 @@ def _render_wellness_radar(surname: str, color: str):
     ))
     fig.update_layout(**dark_polar_layout([1, 5]))
     fig.update_layout(
-        height=230, margin=dict(l=20, r=20, t=10, b=10),
+        height=280, margin=dict(l=45, r=45, t=35, b=35),
         polar=dict(
             radialaxis=dict(showticklabels=False, showline=False),
             angularaxis=dict(tickfont=dict(size=26)),
