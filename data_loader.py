@@ -107,6 +107,7 @@ GLOSSARIO = {
         "errore": "Error (net/out)",
         "legenda": [
             ("=", "Error", "Serve into the net or out."),
+            ("/", "Slash", "Serve that clips the net or antenna and deflects sharply out of play."),
             ("-", "Poor", "Easy serve that allows a perfect reception."),
             ("!", "Neutral", "Normal serve (e.g. float) that keeps play balanced."),
             ("+", "Good", "Tricky serve that puts the opposing reception in trouble."),
@@ -118,11 +119,11 @@ GLOSSARIO = {
         "errore": "Error / Ace conceded",
         "legenda": [
             ("=", "Error / Ace conceded", "The reception fails and the opponent scores."),
+            ("/", "Slash", "Very poor reception that goes straight back into the opposing court along the net."),
             ("-", "Poor", "Reception far from the net or imprecise."),
             ("!", "Fair", "Average reception: the setter has to run but the ball is playable."),
             ("+", "Good", "Positive reception that allows multiple attack choices."),
             ("#", "Perfect", 'Reception perfect "on target" to the setter.'),
-            ("/", "Slash", "Very poor reception that goes straight back into the opposing court along the net."),
         ],
     },
     "Attacco": {
@@ -130,6 +131,7 @@ GLOSSARIO = {
         "errore": "Error",
         "legenda": [
             ("=", "Error", "Attack sent straight out or into the net."),
+            ("/", "Slash", "Attack that deflects sharply off the block or hand, out of bounds along the sideline."),
             ("-", "Poor", "Attack blocked or dug by the opponent, who keeps a clear advantage."),
             ("!", "Neutral", "Attack dug by the opposing defense (ball dug and replayed)."),
             ("+", "Good", "Attack that puts the opposing defense in trouble without scoring outright."),
@@ -141,6 +143,7 @@ GLOSSARIO = {
         "errore": "Error",
         "legenda": [
             ("=", "Error", "Blocking error (e.g. net touch or invasion)."),
+            ("/", "Slash", "Block touch that deflects the ball sharply out of bounds."),
             ("-", "Invasion / negative touch", "Block that touches the ball but deflects it in the opponent's favor."),
             ("!", "Neutral", "Containment touch: the block slows the ball down and the team can dig it."),
             ("+", "Good", "Block touch that puts the ball in an easy position for the defense, without scoring outright."),
@@ -152,6 +155,7 @@ GLOSSARIO = {
         "errore": "Error",
         "legenda": [
             ("=", "Error", "Failed dig (the ball hits the floor or flies off with no control)."),
+            ("/", "Slash", "Dig that deflects sharply out of play instead of staying in the court."),
             ("-", "Poor", "Flawed dig that doesn't allow a clean rebuild."),
             ("!", "Neutral", "Dig that keeps the ball high and playable, even if off-target."),
             ("+", "Good", "Great dig that lets the setter build a counter-attack."),
@@ -163,6 +167,7 @@ GLOSSARIO = {
         "errore": "Error",
         "legenda": [
             ("=", "Error", "Blatant error on an easy ball (e.g. ball dropped due to miscommunication)."),
+            ("/", "Slash", "Free ball shanked sharply out of play."),
             ("-", "Poor", "Free ball played with an imprecise pass."),
             ("!", "Neutral", "Free ball kept in play, but with no real advantage gained."),
             ("+", "Good", "Free ball delivered cleanly to the setter."),
@@ -174,6 +179,7 @@ GLOSSARIO = {
         "errore": "Error",
         "legenda": [
             ("=", "Error", "Setting fault (e.g. double contact, held ball) or set completely off target."),
+            ("/", "Slash", "Set that deflects sharply off target, out of play."),
             ("-", "Poor", "Imprecise set that puts the hitter in real trouble."),
             ("!", "Neutral", "Average set, playable but not in an ideal position."),
             ("+", "Good", "Good set that gives the hitter a clear advantage without being perfect."),

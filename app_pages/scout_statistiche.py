@@ -271,16 +271,17 @@ def _render_general_stats(scoped: pd.DataFrame):
         st.markdown(f"**Detail per player** · {fond_label}")
         col_perfetto = f"% {perfetto_lbl} (#)"
         col_errore = f"% {errore_lbl} (=)"
-        tabella = players[["player_name", "Tot", "E_pct", "Err_pct", "Neg_pct", "Neutral_pct", "Pos_pct", "Perfect_pct"]].rename(columns={
+        tabella = players[["player_name", "Tot", "E_pct", "Err_pct", "Slash_pct", "Neg_pct", "Neutral_pct", "Pos_pct", "Perfect_pct"]].rename(columns={
             "player_name": "Player",
             "E_pct": "Efficiency E%",
             "Err_pct": col_errore,
+            "Slash_pct": "/",
             "Neg_pct": "-",
             "Neutral_pct": "!",
             "Pos_pct": "+",
             "Perfect_pct": col_perfetto,
         })
-        percent_cols = ["Efficiency E%", col_errore, "-", "!", "+", col_perfetto]
+        percent_cols = ["Efficiency E%", col_errore, "/", "-", "!", "+", col_perfetto]
         st.dataframe(
             tabella,
             hide_index=True,
@@ -372,9 +373,9 @@ def _zone_text_color(value, metric_col: str = "E_pct") -> str:
 
 ZONE_TABLE_RENAME = {
     "player_name": "Player", "Tot": "Attacks", "E_pct": "E%",
-    "Err_pct": "=", "Neg_pct": "-", "Neutral_pct": "!", "Pos_pct": "+", "Perfect_pct": "#",
+    "Err_pct": "=", "Slash_pct": "/", "Neg_pct": "-", "Neutral_pct": "!", "Pos_pct": "+", "Perfect_pct": "#",
 }
-ZONE_TABLE_PERCENT_COLS = ["E%", "=", "-", "!", "+", "#"]
+ZONE_TABLE_PERCENT_COLS = ["E%", "=", "/", "-", "!", "+", "#"]
 
 
 def _render_zone_efficiency_court(attack_totale: pd.DataFrame, metric_col: str = "E_pct"):
@@ -427,7 +428,7 @@ def _render_zone_efficiency_court(attack_totale: pd.DataFrame, metric_col: str =
         with col:
             with st.container(border=True):
                 st.markdown(f"**{zone}** · {' / '.join(ZONE_ROLES[zone])}")
-                top = zone_stats[zone]["players"][["player_name", "Tot", "E_pct", "Err_pct", "Neg_pct", "Neutral_pct", "Pos_pct", "Perfect_pct"]].head(5)
+                top = zone_stats[zone]["players"][["player_name", "Tot", "E_pct", "Err_pct", "Slash_pct", "Neg_pct", "Neutral_pct", "Pos_pct", "Perfect_pct"]].head(5)
                 if top.empty:
                     st.caption("No attacks in this scope.")
                 else:
@@ -555,7 +556,7 @@ def _render_zone_distribution(scoped: pd.DataFrame):
             if setters_alzata.empty:
                 st.caption("No setting data in this scope.")
             else:
-                tbl = setters_alzata[["player_name", "Tot", "E_pct", "Err_pct", "Neg_pct", "Neutral_pct", "Pos_pct", "Perfect_pct"]].rename(
+                tbl = setters_alzata[["player_name", "Tot", "E_pct", "Err_pct", "Slash_pct", "Neg_pct", "Neutral_pct", "Pos_pct", "Perfect_pct"]].rename(
                     columns={**ZONE_TABLE_RENAME, "Tot": "Sets"}
                 )
                 st.dataframe(
