@@ -8,6 +8,7 @@ import data_loader as dl
 import filters
 import match_calendar as mc
 import player_colors as pc
+import players_grid as pg
 
 # Fixed colors for set type: same color everywhere in the app, order never cycled.
 # Keys are the raw (Italian) values from the source data; translated to English
@@ -55,16 +56,24 @@ RAW_COLUMN_GROUPS = [
     ["Perfect", "Perfect_pct", "Perfect_BP", "Perfect_pC"],
 ]
 
-SECTIONS = ["General stats", "Game distribution", "Court zones", "Excel Scout Sheet"]
+SECTIONS = ["General stats", "Game distribution", "Excel Scout Sheet"]
 
 # Which front-row zone each role attacks from -- we don't have real
 # per-attack court coordinates, so this fixed assumption (given by the
-# coaching staff) stands in for it.
+# coaching staff) stands in for it. Setters aren't attackers here: their
+# own "Alzata" numbers get a side table instead (see
+# _render_zone_distribution) rather than being folded into P2.
 ZONE_ROLES = {
     "P4": ["Outside Hitter"],
     "P3": ["Middle Blocker"],
-    "P2": ["Setter", "Opposite"],
+    "P2": ["Opposite"],
 }
+ZONE_X = {"P4": (0, 3), "P3": (3, 6), "P2": (6, 9)}
+SETTER_SURNAMES = ["Orro", "Prandi"]
+
+
+def _in_scope_dates() -> set[str]:
+    return {m["date"] for m in filters.matches_in_scope()}
 
 
 def _scope_scout(scout: pd.DataFrame) -> pd.DataFrame:
@@ -73,8 +82,7 @@ def _scope_scout(scout: pd.DataFrame) -> pd.DataFrame:
     rate columns (E%, Ind, outcome %s) become Tot-weighted averages across
     the scoped matches. Falls back to the season-total sheet if nothing
     is in scope."""
-    in_scope = {m["date"] for m in filters.matches_in_scope()}
-    d = scout[scout["match"].isin(in_scope)]
+    d = scout[scout["match"].isin(_in_scope_dates())]
     if d.empty:
         return scout[scout["match"] == dl.SEASON_LABEL].copy()
 
@@ -282,7 +290,242 @@ def _render_general_stats(scoped: pd.DataFrame):
         )
 
 
-def _render_distribution(scoped: pd.DataFrame, palla_tipi_en: list[str]):
+def _render_cumulative_actions(scout: pd.DataFrame, fond_sel2: str):
+    """Running total of actions per player over the scoped matches, in
+    chronological order -- shows workload building up over time rather
+    than just the final tally, and who's carrying an increasing share."""
+    d = scout[
+        scout["match"].isin(_in_scope_dates()) & (scout["fondamentale"] == fond_sel2)
+        & (~scout["is_team"]) & (scout["palla"] == "Totale") & (scout["match"] != dl.SEASON_LABEL)
+    ].copy()
+    if d.empty:
+        st.info("No data available for this fundamental in the selected scope.")
+        return
+
+    # mc.parsed_date returns plain datetime.date objects; px.line's date-axis
+    # auto-ranging gets confused by an object-dtype column of those (it
+    # rendered a real bug once: a multi-month span collapsed to a
+    # sub-millisecond x-axis window) -- pd.to_datetime gives it a proper
+    # datetime64 column to work with instead.
+    d["pdate"] = pd.to_datetime(d["match"].apply(mc.parsed_date))
+    daily = d.groupby(["pdate", "player_name"], as_index=False)["Tot"].sum().sort_values("pdate")
+    daily["cumulative"] = daily.groupby("player_name")["Tot"].cumsum()
+
+    fig = px.line(
+        daily, x="pdate", y="cumulative", color="player_name",
+        color_discrete_map=pc.color_map(daily["player_name"].unique()),
+        labels={"pdate": "Match date", "cumulative": "Cumulative actions", "player_name": "Player"},
+        markers=True,
+    )
+    fig.update_layout(legend_title_text="Player", height=340, margin=dict(l=0, r=10, t=10, b=10))
+    st.plotly_chart(fig, width="stretch")
+
+
+def _add_court_shapes(fig: go.Figure):
+    """Court outline, net, 3m attack line and back-row zone labels shared
+    by both zone-distribution charts below."""
+    fig.add_shape(type="rect", x0=0, y0=0, x1=9, y1=9, line=dict(color="rgba(255,255,255,0.5)", width=2))
+    fig.add_shape(type="line", x0=0, y0=9, x1=9, y1=9, line=dict(color="#ffffff", width=5))
+    fig.add_annotation(x=4.5, y=9.35, text="NET", showarrow=False, font=dict(color="rgba(255,255,255,0.6)", size=11))
+    fig.add_shape(type="line", x0=0, y0=6, x1=9, y1=6, line=dict(color="rgba(255,255,255,0.35)", width=1, dash="dash"))
+    for x in (3, 6):
+        fig.add_shape(type="line", x0=x, y0=0, x1=x, y1=9, line=dict(color="rgba(255,255,255,0.25)", width=1))
+    for label, (x, y) in {"P5": (1.5, 3), "P6": (4.5, 3), "P1": (7.5, 3)}.items():
+        fig.add_annotation(x=x, y=y, text=f"<span style='opacity:0.35'>{label}</span>", showarrow=False, font=dict(color="#ffffff", size=13))
+
+
+def _zone_color(e_pct) -> str:
+    if e_pct is None or pd.isna(e_pct):
+        return "rgba(255,255,255,0.08)"
+    t = max(0.0, min(1.0, (e_pct - (-0.2)) / (0.6 - (-0.2))))
+    rgb = pcolors.sample_colorscale("RdYlGn", [t])[0]
+    return rgb.replace("rgb", "rgba").replace(")", ",0.75)")
+
+
+def _render_zone_efficiency_court(attack_totale: pd.DataFrame):
+    """Chart 4: each zone filled by a single E% color, with a real
+    gradient colorbar (rather than the flat color patches from the old
+    "Court zones" section) to read the shade against."""
+    zone_stats = {}
+    for zone, roles_in_zone in ZONE_ROLES.items():
+        sub = attack_totale[attack_totale["Role"].isin(roles_in_zone) & (attack_totale["Tot"] > 0)]
+        tot = sub["Tot"].sum()
+        e_pct = (sub["E_pct"] * sub["Tot"]).sum() / tot if tot > 0 else None
+        zone_stats[zone] = {"tot": int(tot), "e_pct": e_pct, "players": sub.sort_values("Tot", ascending=False)}
+
+    fig = go.Figure()
+    _add_court_shapes(fig)
+    for zone, (x0, x1) in ZONE_X.items():
+        stats = zone_stats[zone]
+        fig.add_shape(
+            type="rect", x0=x0, y0=6, x1=x1, y1=9,
+            fillcolor=_zone_color(stats["e_pct"]), line=dict(color="rgba(255,255,255,0.5)", width=1),
+        )
+        e_txt = f"{stats['e_pct'] * 100:.0f}%" if stats["e_pct"] is not None else "—"
+        fig.add_annotation(
+            x=(x0 + x1) / 2, y=7.5, showarrow=False, font=dict(color="#ffffff", size=13),
+            text=f"<b>{zone}</b> · {' / '.join(ZONE_ROLES[zone])}<br>E% {e_txt}<br>{stats['tot']} attacks",
+        )
+
+    # Dummy invisible trace, only to host a real gradient colorbar next to
+    # the court (the zones themselves are plain shapes, which have no
+    # colorbar of their own).
+    fig.add_trace(go.Scatter(
+        x=[None], y=[None], mode="markers",
+        marker=dict(
+            colorscale="RdYlGn", cmin=-0.2, cmax=0.6, showscale=True, color=[0], size=0.1,
+            colorbar=dict(title="E%", tickformat=".0%", thickness=15, len=0.6, x=1.02),
+        ),
+        showlegend=False, hoverinfo="skip",
+    ))
+
+    fig.update_xaxes(visible=False, range=[-0.3, 10.8])
+    fig.update_yaxes(visible=False, range=[-0.3, 9.3], scaleanchor="x")
+    fig.update_layout(height=440, margin=dict(l=10, r=10, t=10, b=10), plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+    st.plotly_chart(fig, width="stretch")
+
+    cols = st.columns(3)
+    for col, zone in zip(cols, ["P4", "P3", "P2"]):
+        with col:
+            with st.container(border=True):
+                st.markdown(f"**{zone}** · {' / '.join(ZONE_ROLES[zone])}")
+                top = zone_stats[zone]["players"][["player_name", "Tot", "E_pct"]].head(5)
+                if top.empty:
+                    st.caption("No attacks in this scope.")
+                else:
+                    st.dataframe(
+                        top.rename(columns={"player_name": "Player", "Tot": "Attacks", "E_pct": "E%"}),
+                        hide_index=True, width="stretch",
+                        column_config={"E%": st.column_config.NumberColumn(format="percent")},
+                    )
+
+
+def _render_zone_settype_court(attack_by_type: pd.DataFrame):
+    """Chart 5: same court, but each zone is split into proportional
+    stripes by set type (same colors as the rest of the app's set-type
+    charts) instead of a single efficiency color."""
+    zone_mix = {}
+    for zone, roles_in_zone in ZONE_ROLES.items():
+        sub = attack_by_type[attack_by_type["Role"].isin(roles_in_zone) & (attack_by_type["Tot"] > 0)]
+        mix = sub.groupby("palla", observed=True)["Tot"].sum()
+        total = mix.sum()
+        shares = (mix / total).to_dict() if total > 0 else {}
+        zone_mix[zone] = {"shares": shares, "tot": int(total)}
+
+    fig = go.Figure()
+    _add_court_shapes(fig)
+    for zone, (x0, x1) in ZONE_X.items():
+        shares = zone_mix[zone]["shares"]
+        if not shares:
+            fig.add_shape(type="rect", x0=x0, y0=6, x1=x1, y1=9, fillcolor="rgba(255,255,255,0.08)", line=dict(color="rgba(255,255,255,0.5)", width=1))
+        else:
+            cursor = x0
+            width = x1 - x0
+            for palla in RAW_PALLA_ORDER[1:]:  # skip "Totale"
+                share = shares.get(palla, 0)
+                if share <= 0:
+                    continue
+                seg_w = width * share
+                fig.add_shape(
+                    type="rect", x0=cursor, y0=6, x1=cursor + seg_w, y1=9,
+                    fillcolor=PALLA_COLORS.get(palla, "#888888"), opacity=0.85, line=dict(width=0),
+                )
+                cursor += seg_w
+            fig.add_shape(type="rect", x0=x0, y0=6, x1=x1, y1=9, fillcolor="rgba(0,0,0,0)", line=dict(color="rgba(255,255,255,0.5)", width=1))
+        fig.add_annotation(
+            x=(x0 + x1) / 2, y=7.5, showarrow=False, font=dict(color="#ffffff", size=12),
+            text=f"<b>{zone}</b> · {' / '.join(ZONE_ROLES[zone])}<br>{zone_mix[zone]['tot']} attacks",
+        )
+
+    fig.update_xaxes(visible=False, range=[-0.3, 9.3])
+    fig.update_yaxes(visible=False, range=[-0.3, 9.3], scaleanchor="x")
+    fig.update_layout(height=440, margin=dict(l=10, r=10, t=10, b=10), plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+    st.plotly_chart(fig, width="stretch")
+
+    legend_html = "&nbsp;&nbsp;".join(
+        f'<span style="display:inline-block;width:10px;height:10px;background:{PALLA_COLORS[p]};'
+        f'border-radius:2px;margin-right:4px;"></span>{dl.PALLA_LABELS[p]}'
+        for p in RAW_PALLA_ORDER[1:]
+    )
+    st.markdown(legend_html, unsafe_allow_html=True)
+
+    cols = st.columns(3)
+    for col, zone in zip(cols, ["P4", "P3", "P2"]):
+        with col:
+            with st.container(border=True):
+                st.markdown(f"**{zone}** · {' / '.join(ZONE_ROLES[zone])}")
+                shares = zone_mix[zone]["shares"]
+                if not shares:
+                    st.caption("No attacks in this scope.")
+                else:
+                    tbl = pd.DataFrame({
+                        "Set type": [dl.PALLA_LABELS[p] for p in shares.keys()],
+                        "Share": list(shares.values()),
+                    }).sort_values("Share", ascending=False)
+                    st.dataframe(
+                        tbl, hide_index=True, width="stretch",
+                        column_config={"Share": st.column_config.NumberColumn(format="percent")},
+                    )
+
+
+def _render_zone_distribution(scoped: pd.DataFrame):
+    """Charts 4 & 5 (merged behind a toggle): where the setters' sets end
+    up (P4/P3/P2), either colored by efficiency or by set-type mix. Orro
+    and Prandi -- the setters -- aren't attackers assigned to a zone here;
+    their own setting numbers get a table beside the court instead."""
+    names = dl.load_player_names()
+    roles = dl.load_player_roles()
+    name_to_role = {names[code]: dl.ROLE_LABELS.get(r, r) for code, r in roles.items() if code in names}
+
+    attack = scoped[(scoped["fondamentale"] == "Attacco") & (~scoped["is_team"])].copy()
+    attack["Role"] = attack["player_name"].map(name_to_role)
+
+    setters_alzata = scoped[
+        (scoped["fondamentale"] == "Alzata") & (scoped["palla"] == "Totale")
+        & (scoped["player_name"].isin(SETTER_SURNAMES)) & (scoped["Tot"] > 0)
+    ]
+    setter_full_names = []
+    for surname in setters_alzata["player_name"]:
+        p = pg.PLAYERS_BY_SURNAME.get(surname)
+        setter_full_names.append(f"{p['first']} {p['last']}" if p else surname)
+    title_names = " & ".join(setter_full_names) if setter_full_names else "the setters"
+
+    st.markdown(f"#### Chart 4/5 · Setting distribution — {title_names}")
+    st.caption(
+        "We don't have each attack's real court coordinates, so this assumes the usual front-row "
+        "assignment: Middle Blockers attack from P3, Outside Hitters from P4, Opposites from P2. "
+        "Orro/Prandi's own setting numbers are in the table on the right, not folded into a zone."
+    )
+    mode = st.segmented_control(
+        "View", ["Efficiency by zone", "Set type by zone"], default="Efficiency by zone",
+        required=True, key="zone_mode",
+    )
+
+    col_court, col_table = st.columns([2, 1])
+    with col_court:
+        if mode == "Efficiency by zone":
+            _render_zone_efficiency_court(attack[attack["palla"] == "Totale"])
+        else:
+            _render_zone_settype_court(attack[attack["palla"] != "Totale"])
+    with col_table:
+        with st.container(border=True):
+            st.markdown(f"**{title_names}** · setting (Alzata)")
+            if setters_alzata.empty:
+                st.caption("No setting data in this scope.")
+            else:
+                tbl = setters_alzata[["player_name", "Tot", "E_pct", "Perfect_pct"]].rename(columns={
+                    "player_name": "Player", "Tot": "Sets", "E_pct": "E%", "Perfect_pct": "% Perfect",
+                })
+                st.dataframe(
+                    tbl, hide_index=True, width="stretch",
+                    column_config={
+                        "E%": st.column_config.NumberColumn(format="percent"),
+                        "% Perfect": st.column_config.NumberColumn(format="percent"),
+                    },
+                )
+
+
+def _render_distribution(scoped: pd.DataFrame, scout: pd.DataFrame, palla_tipi_en: list[str]):
     st.caption(
         "For each player: how many times she attacks on each set type and with what effectiveness. "
         "Reflects the game distribution set by the setter."
@@ -321,9 +564,13 @@ def _render_distribution(scoped: pd.DataFrame, palla_tipi_en: list[str]):
         st.info("No data available for this fundamental in the selected scope.")
         return
 
-    ordine_giocatrici = (
-        dist.groupby("player_name")["Tot"].sum().sort_values(ascending=False).index.tolist()
-    )
+    # Role-grouped order (Setters, Opposites, Outside Hitters, Middle
+    # Blockers, Liberos -- players_grid.ALL_PLAYERS' own order) instead of
+    # sorting by volume, so the same player always lands in the same row/
+    # column regardless of who had the most touches this time.
+    role_order = [p["surname"] for p in pg.ALL_PLAYERS]
+    present = set(dist["player_name"])
+    ordine_giocatrici = [s for s in role_order if s in present]
 
     st.markdown("#### Chart 1 · Game map — volume of actions per set type")
     fig1 = px.bar(
@@ -336,25 +583,10 @@ def _render_distribution(scoped: pd.DataFrame, palla_tipi_en: list[str]):
     fig1.update_layout(legend_title_text="Set type")
     st.plotly_chart(fig1, width="stretch")
 
-    st.markdown("#### Chart 2 · Effectiveness per set type")
-    default_players = ordine_giocatrici[: min(5, len(ordine_giocatrici))]
-    giocatrici_sel = st.multiselect(
-        "Players to compare", ordine_giocatrici, default=default_players, key="dist_giocatrici"
-    )
-    dist_line = dist[dist["player_name"].isin(giocatrici_sel)]
-    if giocatrici_sel and not dist_line.empty:
-        fig2 = px.line(
-            dist_line.sort_values("palla"), x="palla_en", y=metrica_col, color="player_name",
-            category_orders={"palla_en": palla_tipi_en},
-            markers=True,
-            labels={"palla_en": "Set type", metrica_col: metrica_display, "player_name": "Player"},
-        )
-        fig2.update_layout(yaxis_tickformat=".0%", legend_title_text="Player")
-        st.plotly_chart(fig2, width="stretch")
-    else:
-        st.info("Select at least one player to compare.")
+    st.markdown("#### Chart 2 · Cumulative actions over time")
+    _render_cumulative_actions(scout, fond_sel2)
 
-    st.markdown("#### Heatmap · Volume and effectiveness per player and set type")
+    st.markdown("#### Chart 3 · Heatmap · Volume and effectiveness per player and set type")
     pivot_tot = dist.pivot_table(index="player_name", columns="palla_en", values="Tot", aggfunc="sum", observed=True)
     pivot_metrica = dist.pivot_table(index="player_name", columns="palla_en", values=metrica_col, aggfunc="mean", observed=True)
     colonne_ordinate = [p for p in palla_tipi_en if p in pivot_metrica.columns]
@@ -391,91 +623,19 @@ def _render_distribution(scoped: pd.DataFrame, palla_tipi_en: list[str]):
         **heat_kwargs,
     ))
     fig_heat.update_layout(
-        xaxis_title="Set type", yaxis_title="", yaxis_autorange="reversed",
+        xaxis_title="Set type", yaxis_title="",
+        # Explicit array (not the old yaxis_autorange="reversed", which was
+        # tuned for the previous volume-sort order and silently flips the
+        # new fixed role order upside down): puts ordine_giocatrici[0]
+        # (Orro) at the top, reading top-to-bottom like the role list.
+        yaxis=dict(categoryorder="array", categoryarray=ordine_giocatrici[::-1]),
         height=max(320, 40 * len(pivot_metrica.index)),
     )
     st.plotly_chart(fig_heat, width="stretch")
-    st.caption(f"In each cell: total number of actions and {metrica_display.lower()}.")
+    st.caption(f"In each cell: total number of actions and {metrica_display.lower()}. Rows ordered by role.")
 
-
-def _zone_color(e_pct) -> str:
-    if e_pct is None or pd.isna(e_pct):
-        return "rgba(255,255,255,0.08)"
-    t = max(0.0, min(1.0, (e_pct - (-0.2)) / (0.6 - (-0.2))))
-    rgb = pcolors.sample_colorscale("RdYlGn", [t])[0]
-    return rgb.replace("rgb", "rgba").replace(")", ",0.75)")
-
-
-def _render_court_zones(scoped: pd.DataFrame):
-    st.caption(
-        "We don't have each attack's real court coordinates, so this assumes the usual front-row "
-        "assignment: Setter/Opposite attack from P2, Middle Blockers from P3, Outside Hitters from P4."
-    )
-
-    names = dl.load_player_names()
-    roles = dl.load_player_roles()
-    name_to_role = {names[code]: dl.ROLE_LABELS.get(r, r) for code, r in roles.items() if code in names}
-
-    attack = scoped[
-        (scoped["fondamentale"] == "Attacco") & (scoped["palla"] == "Totale") & (~scoped["is_team"])
-    ].copy()
-    attack["Role"] = attack["player_name"].map(name_to_role)
-
-    zone_stats = {}
-    for zone, roles_in_zone in ZONE_ROLES.items():
-        sub = attack[attack["Role"].isin(roles_in_zone) & (attack["Tot"] > 0)]
-        tot = sub["Tot"].sum()
-        e_pct = (sub["E_pct"] * sub["Tot"]).sum() / tot if tot > 0 else None
-        zone_stats[zone] = {"tot": int(tot), "e_pct": e_pct, "players": sub.sort_values("Tot", ascending=False)}
-
-    fig = go.Figure()
-    fig.add_shape(type="rect", x0=0, y0=0, x1=9, y1=9, line=dict(color="rgba(255,255,255,0.5)", width=2))
-    fig.add_shape(type="line", x0=0, y0=9, x1=9, y1=9, line=dict(color="#ffffff", width=5))
-    fig.add_annotation(x=4.5, y=9.35, text="NET", showarrow=False, font=dict(color="rgba(255,255,255,0.6)", size=11))
-    fig.add_shape(type="line", x0=0, y0=6, x1=9, y1=6, line=dict(color="rgba(255,255,255,0.35)", width=1, dash="dash"))
-    for x in (3, 6):
-        fig.add_shape(type="line", x0=x, y0=0, x1=x, y1=9, line=dict(color="rgba(255,255,255,0.25)", width=1))
-
-    back_zone_labels = {"P5": (1.5, 3), "P6": (4.5, 3), "P1": (7.5, 3)}
-    for label, (x, y) in back_zone_labels.items():
-        fig.add_annotation(x=x, y=y, text=f"<span style='opacity:0.35'>{label}</span>", showarrow=False, font=dict(color="#ffffff", size=13))
-
-    zone_x = {"P4": (0, 3), "P3": (3, 6), "P2": (6, 9)}
-    for zone, (x0, x1) in zone_x.items():
-        stats = zone_stats[zone]
-        fig.add_shape(
-            type="rect", x0=x0, y0=6, x1=x1, y1=9,
-            fillcolor=_zone_color(stats["e_pct"]), line=dict(color="rgba(255,255,255,0.5)", width=1),
-        )
-        roles_txt = " / ".join(ZONE_ROLES[zone])
-        e_txt = f"{stats['e_pct'] * 100:.0f}%" if stats["e_pct"] is not None else "—"
-        fig.add_annotation(
-            x=(x0 + x1) / 2, y=7.5, showarrow=False, font=dict(color="#ffffff", size=13),
-            text=f"<b>{zone}</b> · {roles_txt}<br>E% {e_txt}<br>{stats['tot']} attacks",
-        )
-
-    fig.update_xaxes(visible=False, range=[-0.3, 9.3])
-    fig.update_yaxes(visible=False, range=[-0.3, 9.3], scaleanchor="x")
-    fig.update_layout(
-        height=440, margin=dict(l=10, r=10, t=10, b=10),
-        plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-    )
-    st.plotly_chart(fig, width="stretch")
-
-    cols = st.columns(3)
-    for col, zone in zip(cols, ["P4", "P3", "P2"]):
-        with col:
-            with st.container(border=True):
-                st.markdown(f"**{zone}** · {' / '.join(ZONE_ROLES[zone])}")
-                top = zone_stats[zone]["players"][["player_name", "Tot", "E_pct"]].head(5)
-                if top.empty:
-                    st.caption("No attacks in this scope.")
-                else:
-                    st.dataframe(
-                        top.rename(columns={"player_name": "Player", "Tot": "Attacks", "E_pct": "E%"}),
-                        hide_index=True, width="stretch",
-                        column_config={"E%": st.column_config.NumberColumn(format="percent")},
-                    )
+    st.write("---")
+    _render_zone_distribution(scoped)
 
 
 def _render_raw_sheet(scout: pd.DataFrame, partita_options: list[str], format_partita_option):
@@ -538,8 +698,6 @@ def render():
     if section == "General stats":
         _render_general_stats(scoped)
     elif section == "Game distribution":
-        _render_distribution(scoped, palla_tipi_en)
-    elif section == "Court zones":
-        _render_court_zones(scoped)
+        _render_distribution(scoped, scout, palla_tipi_en)
     else:
         _render_raw_sheet(scout, partita_options, format_partita_option)
