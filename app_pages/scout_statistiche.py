@@ -290,7 +290,7 @@ def _render_general_stats(scoped: pd.DataFrame):
         )
 
 
-def _render_cumulative_actions(scout: pd.DataFrame, fond_sel2: str):
+def _render_cumulative_actions(scout: pd.DataFrame, fond_sel2: str, height: int = 340):
     """Running total of actions per player over the scoped matches, in
     chronological order -- shows workload building up over time rather
     than just the final tally, and who's carrying an increasing share."""
@@ -317,7 +317,7 @@ def _render_cumulative_actions(scout: pd.DataFrame, fond_sel2: str):
         labels={"pdate": "Match date", "cumulative": "Cumulative actions", "player_name": "Player"},
         markers=True,
     )
-    fig.update_layout(legend_title_text="Player", height=340, margin=dict(l=0, r=10, t=10, b=10))
+    fig.update_layout(legend_title_text="Player", height=height, margin=dict(l=0, r=10, t=10, b=10))
     st.plotly_chart(fig, width="stretch")
 
 
@@ -334,12 +334,26 @@ def _add_court_shapes(fig: go.Figure):
         fig.add_annotation(x=x, y=y, text=f"<span style='opacity:0.35'>{label}</span>", showarrow=False, font=dict(color="#ffffff", size=13))
 
 
+# Zero-centered so the RdYlGn scale's pale midpoint sits exactly at E%=0,
+# matching how the colorbar reads (worse than 0 -> red, better -> green).
+ZONE_COLOR_SPAN = 0.6
+
+
 def _zone_color(e_pct) -> str:
     if e_pct is None or pd.isna(e_pct):
         return "rgba(255,255,255,0.08)"
-    t = max(0.0, min(1.0, (e_pct - (-0.2)) / (0.6 - (-0.2))))
+    t = max(0.0, min(1.0, (e_pct + ZONE_COLOR_SPAN) / (2 * ZONE_COLOR_SPAN)))
     rgb = pcolors.sample_colorscale("RdYlGn", [t])[0]
     return rgb.replace("rgb", "rgba").replace(")", ",0.75)")
+
+
+def _zone_text_color(e_pct) -> str:
+    """Near the scale's white/pale midpoint (E% close to 0) the fill is too
+    light for white text to read -- switch to black there; everywhere else
+    (more saturated red or green) white stays legible."""
+    if e_pct is None or pd.isna(e_pct):
+        return "#ffffff"
+    return "#000000" if abs(e_pct) <= 0.2 else "#ffffff"
 
 
 def _render_zone_efficiency_court(attack_totale: pd.DataFrame):
@@ -363,8 +377,8 @@ def _render_zone_efficiency_court(attack_totale: pd.DataFrame):
         )
         e_txt = f"{stats['e_pct'] * 100:.0f}%" if stats["e_pct"] is not None else "—"
         fig.add_annotation(
-            x=(x0 + x1) / 2, y=7.5, showarrow=False, font=dict(color="#ffffff", size=13),
-            text=f"<b>{zone}</b> · {' / '.join(ZONE_ROLES[zone])}<br>E% {e_txt}<br>{stats['tot']} attacks",
+            x=(x0 + x1) / 2, y=7.5, showarrow=False, font=dict(color=_zone_text_color(stats["e_pct"]), size=13),
+            text=f"<b>{zone}</b><br>E% {e_txt}<br>{stats['tot']} attacks",
         )
 
     # Dummy invisible trace, only to host a real gradient colorbar next to
@@ -373,7 +387,7 @@ def _render_zone_efficiency_court(attack_totale: pd.DataFrame):
     fig.add_trace(go.Scatter(
         x=[None], y=[None], mode="markers",
         marker=dict(
-            colorscale="RdYlGn", cmin=-0.2, cmax=0.6, showscale=True, color=[0], size=0.1,
+            colorscale="RdYlGn", cmin=-ZONE_COLOR_SPAN, cmax=ZONE_COLOR_SPAN, showscale=True, color=[0], size=0.1,
             colorbar=dict(title="E%", tickformat=".0%", thickness=15, len=0.6, x=1.02),
         ),
         showlegend=False, hoverinfo="skip",
@@ -382,21 +396,30 @@ def _render_zone_efficiency_court(attack_totale: pd.DataFrame):
     fig.update_xaxes(visible=False, range=[-0.3, 10.8])
     fig.update_yaxes(visible=False, range=[-0.3, 9.3], scaleanchor="x")
     fig.update_layout(height=440, margin=dict(l=10, r=10, t=10, b=10), plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
-    st.plotly_chart(fig, width="stretch")
+    with st.container(border=True):
+        st.plotly_chart(fig, width="stretch")
 
     cols = st.columns(3)
     for col, zone in zip(cols, ["P4", "P3", "P2"]):
         with col:
             with st.container(border=True):
                 st.markdown(f"**{zone}** · {' / '.join(ZONE_ROLES[zone])}")
-                top = zone_stats[zone]["players"][["player_name", "Tot", "E_pct"]].head(5)
+                top = zone_stats[zone]["players"][["player_name", "Tot", "E_pct", "Perfect_pct", "Neutral_pct", "Err_pct"]].head(5)
                 if top.empty:
                     st.caption("No attacks in this scope.")
                 else:
                     st.dataframe(
-                        top.rename(columns={"player_name": "Player", "Tot": "Attacks", "E_pct": "E%"}),
+                        top.rename(columns={
+                            "player_name": "Player", "Tot": "Attacks", "E_pct": "E%",
+                            "Perfect_pct": "#", "Neutral_pct": "!", "Err_pct": "=",
+                        }),
                         hide_index=True, width="stretch",
-                        column_config={"E%": st.column_config.NumberColumn(format="percent")},
+                        column_config={
+                            "E%": st.column_config.NumberColumn(format="percent"),
+                            "#": st.column_config.NumberColumn(format="percent"),
+                            "!": st.column_config.NumberColumn(format="percent"),
+                            "=": st.column_config.NumberColumn(format="percent"),
+                        },
                     )
 
 
@@ -434,17 +457,19 @@ def _render_zone_settype_court(attack_by_type: pd.DataFrame):
             fig.add_shape(type="rect", x0=x0, y0=6, x1=x1, y1=9, fillcolor="rgba(0,0,0,0)", line=dict(color="rgba(255,255,255,0.5)", width=1))
         fig.add_annotation(
             x=(x0 + x1) / 2, y=7.5, showarrow=False, font=dict(color="#ffffff", size=12),
-            text=f"<b>{zone}</b> · {' / '.join(ZONE_ROLES[zone])}<br>{zone_mix[zone]['tot']} attacks",
+            text=f"<b>{zone}</b><br>{zone_mix[zone]['tot']} attacks",
         )
 
     fig.update_xaxes(visible=False, range=[-0.3, 9.3])
     fig.update_yaxes(visible=False, range=[-0.3, 9.3], scaleanchor="x")
     fig.update_layout(height=440, margin=dict(l=10, r=10, t=10, b=10), plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
-    st.plotly_chart(fig, width="stretch")
+    with st.container(border=True):
+        st.plotly_chart(fig, width="stretch")
 
     legend_html = "&nbsp;&nbsp;".join(
         f'<span style="display:inline-block;width:10px;height:10px;background:{PALLA_COLORS[p]};'
-        f'border-radius:2px;margin-right:4px;"></span>{dl.PALLA_LABELS[p]}'
+        f'border-radius:2px;margin-right:4px;"></span>'
+        f'<span style="color:{PALLA_COLORS[p]};">{dl.PALLA_LABELS[p]}</span>'
         for p in RAW_PALLA_ORDER[1:]
     )
     st.markdown(legend_html, unsafe_allow_html=True)
@@ -490,12 +515,7 @@ def _render_zone_distribution(scoped: pd.DataFrame):
         setter_full_names.append(f"{p['first']} {p['last']}" if p else surname)
     title_names = " & ".join(setter_full_names) if setter_full_names else "the setters"
 
-    st.markdown(f"#### Chart 4/5 · Setting distribution — {title_names}")
-    st.caption(
-        "We don't have each attack's real court coordinates, so this assumes the usual front-row "
-        "assignment: Middle Blockers attack from P3, Outside Hitters from P4, Opposites from P2. "
-        "Orro/Prandi's own setting numbers are in the table on the right, not folded into a zone."
-    )
+    st.markdown("#### Setting distribution")
     mode = st.segmented_control(
         "View", ["Efficiency by zone", "Set type by zone"], default="Efficiency by zone",
         required=True, key="zone_mode",
@@ -509,18 +529,21 @@ def _render_zone_distribution(scoped: pd.DataFrame):
             _render_zone_settype_court(attack[attack["palla"] != "Totale"])
     with col_table:
         with st.container(border=True):
-            st.markdown(f"**{title_names}** · setting (Alzata)")
+            st.markdown(f"**{title_names}**")
             if setters_alzata.empty:
                 st.caption("No setting data in this scope.")
             else:
-                tbl = setters_alzata[["player_name", "Tot", "E_pct", "Perfect_pct"]].rename(columns={
-                    "player_name": "Player", "Tot": "Sets", "E_pct": "E%", "Perfect_pct": "% Perfect",
+                tbl = setters_alzata[["player_name", "Tot", "E_pct", "Perfect_pct", "Neutral_pct", "Err_pct"]].rename(columns={
+                    "player_name": "Player", "Tot": "Sets", "E_pct": "E%",
+                    "Perfect_pct": "#", "Neutral_pct": "!", "Err_pct": "=",
                 })
                 st.dataframe(
                     tbl, hide_index=True, width="stretch",
                     column_config={
                         "E%": st.column_config.NumberColumn(format="percent"),
-                        "% Perfect": st.column_config.NumberColumn(format="percent"),
+                        "#": st.column_config.NumberColumn(format="percent"),
+                        "!": st.column_config.NumberColumn(format="percent"),
+                        "=": st.column_config.NumberColumn(format="percent"),
                     },
                 )
 
@@ -572,21 +595,26 @@ def _render_distribution(scoped: pd.DataFrame, scout: pd.DataFrame, palla_tipi_e
     present = set(dist["player_name"])
     ordine_giocatrici = [s for s in role_order if s in present]
 
-    st.markdown("#### Chart 1 · Game map — volume of actions per set type")
-    fig1 = px.bar(
-        dist, x="player_name", y="Tot", color="palla_en",
-        category_orders={"player_name": ordine_giocatrici, "palla_en": palla_tipi_en},
-        color_discrete_map=PALLA_COLORS_EN,
-        labels={"player_name": "", "Tot": "Number of actions", "palla_en": "Set type"},
-        barmode="stack",
-    )
-    fig1.update_layout(legend_title_text="Set type")
-    st.plotly_chart(fig1, width="stretch")
+    col_map, col_cum = st.columns(2)
+    with col_map:
+        with st.container(border=True):
+            st.markdown("**Game map** — volume of actions per set type")
+            fig1 = px.bar(
+                dist, x="player_name", y="Tot", color="palla_en",
+                category_orders={"player_name": ordine_giocatrici, "palla_en": palla_tipi_en},
+                color_discrete_map=PALLA_COLORS_EN,
+                labels={"player_name": "", "Tot": "Number of actions", "palla_en": "Set type"},
+                barmode="stack",
+            )
+            fig1.update_layout(legend_title_text="Set type", height=520)
+            st.plotly_chart(fig1, width="stretch")
 
-    st.markdown("#### Chart 2 · Cumulative actions over time")
-    _render_cumulative_actions(scout, fond_sel2)
+    with col_cum:
+        with st.container(border=True):
+            st.markdown("**Cumulative actions** over time")
+            _render_cumulative_actions(scout, fond_sel2, height=520)
 
-    st.markdown("#### Chart 3 · Heatmap · Volume and effectiveness per player and set type")
+    st.markdown("#### Heatmap · Volume and effectiveness per player and set type")
     pivot_tot = dist.pivot_table(index="player_name", columns="palla_en", values="Tot", aggfunc="sum", observed=True)
     pivot_metrica = dist.pivot_table(index="player_name", columns="palla_en", values=metrica_col, aggfunc="mean", observed=True)
     colonne_ordinate = [p for p in palla_tipi_en if p in pivot_metrica.columns]
@@ -629,9 +657,10 @@ def _render_distribution(scoped: pd.DataFrame, scout: pd.DataFrame, palla_tipi_e
         # new fixed role order upside down): puts ordine_giocatrici[0]
         # (Orro) at the top, reading top-to-bottom like the role list.
         yaxis=dict(categoryorder="array", categoryarray=ordine_giocatrici[::-1]),
-        height=max(320, 40 * len(pivot_metrica.index)),
+        height=max(420, 50 * len(pivot_metrica.index)),
     )
-    st.plotly_chart(fig_heat, width="stretch")
+    with st.container(border=True):
+        st.plotly_chart(fig_heat, width="stretch")
     st.caption(f"In each cell: total number of actions and {metrica_display.lower()}. Rows ordered by role.")
 
     st.write("---")
