@@ -1,4 +1,5 @@
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 
 import calendar_view as cv
@@ -7,9 +8,12 @@ import filters
 import match_calendar as mc
 import players_grid as pg
 import training_load
+from ui_helpers import close_polygon, dark_polar_layout
 
 GOOD_COLOR = "#54A24B"
 LOW_COLOR = "#E45756"
+WARN_COLOR = "#F0A600"
+RECOVERY_THRESHOLD = 15
 
 
 def _render_hero(season: str):
@@ -24,103 +28,160 @@ def _render_hero(season: str):
         )
 
 
-def _snapshot_box(title: str, value_html: str, caption: str):
+def _render_low_recovery(wellness: pd.DataFrame):
+    """Compact list instead of one long run-on sentence -- each player
+    below threshold gets her own row with a colored TQR pill, worst-first,
+    so the most urgent cases are immediately on top instead of buried in text."""
+    last_date = wellness["Data"].max()
+    last_day = wellness[wellness["Data"] == last_date].sort_values("Tqr")
+    below = last_day[last_day["Tqr"] < RECOVERY_THRESHOLD]
+
     with st.container(border=True):
-        st.markdown(f"**{title}**")
-        st.markdown(value_html, unsafe_allow_html=True)
-        st.caption(caption)
+        if below.empty:
+            st.markdown(
+                '<div style="display:flex;align-items:center;gap:12px;">'
+                '<span style="font-size:1.8rem;">✅</span>'
+                f'<div><b style="color:{GOOD_COLOR};font-size:1.05rem;">Recovery on track</b><br>'
+                f'<span style="color:var(--muted);font-size:12.5px;">No player below threshold {RECOVERY_THRESHOLD} '
+                f'on {last_date.strftime("%d/%m/%y")}</span></div></div>',
+                unsafe_allow_html=True,
+            )
+            return
+
+        st.markdown(
+            '<div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">'
+            '<span style="font-size:1.8rem;">⚠️</span>'
+            f'<div><b style="color:{LOW_COLOR};font-size:1.05rem;">Low recovery</b><br>'
+            f'<span style="color:var(--muted);font-size:12.5px;">Below threshold {RECOVERY_THRESHOLD} '
+            f'on {last_date.strftime("%d/%m/%y")}</span></div></div>',
+            unsafe_allow_html=True,
+        )
+        rows = list(below.itertuples())
+        rows_html = "".join(
+            f'<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 2px;'
+            f'{"border-bottom:1px solid var(--line);" if i < len(rows) - 1 else ""}">'
+            f'<span style="font-weight:600;">{r.player_name}</span>'
+            f'<span style="background:rgba(228,87,86,0.15);color:{LOW_COLOR};font-weight:700;'
+            f'border-radius:12px;padding:2px 11px;font-size:12.5px;">TQR {r.Tqr:.1f}</span></div>'
+            for i, r in enumerate(rows)
+        )
+        st.markdown(rows_html, unsafe_allow_html=True)
 
 
-def _render_standings_snapshot(season: str):
-    standings = mc.SEASON_STANDINGS.get(season, [])
-    us = next((r for r in standings if r["is_us"]), None)
-    if us is None:
-        _snapshot_box("League position", '<div style="color:var(--muted);">—</div>', "No standings yet.")
-        return
-    _snapshot_box(
-        "League position",
-        f'<div style="font-size:2rem;font-weight:800;color:var(--accent);">#{us["pos"]}</div>',
-        f"{us['pts']} pts · {us['w']}W–{us['l']}L · {len(standings)} teams",
-    )
+def _render_readiness_gauge(rpe: pd.DataFrame):
+    with st.container(border=True):
+        st.markdown("**Team readiness** · ACWR")
+        team_metrics = training_load.metrics_frame(rpe).dropna(subset=["acwr"])
+        if team_metrics.empty:
+            st.caption("Not enough training history yet.")
+            return
+
+        ref_date = team_metrics.index.max()
+        acwr = float(team_metrics.loc[ref_date, "acwr"])
+        fig = go.Figure(go.Indicator(
+            mode="gauge+number",
+            value=acwr,
+            number=dict(font=dict(size=42, color="#f2f2f2"), valueformat=".2f"),
+            gauge=dict(
+                axis=dict(range=[0, 2], tickfont=dict(color="#9a9a9a")),
+                bar=dict(color="#ffffff", thickness=0.28),
+                bgcolor="rgba(0,0,0,0)",
+                steps=[
+                    {"range": [0, 0.8], "color": WARN_COLOR},
+                    {"range": [0.8, 1.3], "color": GOOD_COLOR},
+                    {"range": [1.3, 1.5], "color": WARN_COLOR},
+                    {"range": [1.5, 2], "color": LOW_COLOR},
+                ],
+            ),
+        ))
+        fig.update_layout(height=230, margin=dict(l=25, r=25, t=10, b=10), paper_bgcolor="rgba(0,0,0,0)")
+        st.plotly_chart(fig, width="stretch")
+        st.caption(f"As of {ref_date.strftime('%d %b %Y')} · green 0.8–1.3 = sweet spot · red >1.5 = spike risk.")
 
 
-def _render_readiness_snapshot(rpe: pd.DataFrame):
-    team_metrics = training_load.metrics_frame(rpe)
-    team_metrics = team_metrics.dropna(subset=["acwr"])
-    if team_metrics.empty:
-        _snapshot_box("Team readiness", '<div style="color:var(--muted);">—</div>', "Not enough training history yet.")
-        return
+def _render_league_position(season: str):
+    with st.container(border=True):
+        st.markdown("**League position**")
+        standings = mc.SEASON_STANDINGS.get(season, [])
+        us = next((r for r in standings if r["is_us"]), None)
+        if us is None or not standings:
+            st.caption("No standings yet.")
+            return
 
-    ref_date = team_metrics.index.max()
-    acwr = team_metrics.loc[ref_date, "acwr"]
-    sweet_spot = 0.8 <= acwr <= 1.3
-    spike = acwr > 1.5
-    status = "Sweet spot" if sweet_spot else ("Spike risk" if spike else "Low load")
-    color = LOW_COLOR if spike else GOOD_COLOR if sweet_spot else "#F0A600"
-    _snapshot_box(
-        "Team readiness (ACWR)",
-        f'<div style="font-size:2rem;font-weight:800;color:{color};">{acwr:.2f}</div>',
-        f"{status} · as of {ref_date.strftime('%d %b %Y')}",
-    )
+        st.markdown(
+            f'<div style="font-size:3.2rem;font-weight:800;color:var(--accent);line-height:1;">#{us["pos"]}</div>'
+            f'<div style="color:var(--muted);font-size:0.9rem;margin-bottom:10px;">'
+            f'of {len(standings)} teams · {us["w"]}W–{us["l"]}L · {us["pts"]} pts</div>',
+            unsafe_allow_html=True,
+        )
+
+        # Compare our points to whichever's more informative: the leader if
+        # we're not #1, otherwise the runner-up (our cushion at the top).
+        other = standings[0] if us["pos"] != 1 else (standings[1] if len(standings) > 1 else None)
+        if other is not None:
+            fig = go.Figure(go.Bar(
+                x=[us["pts"], other["pts"]], y=["Milano", other["team"]], orientation="h",
+                marker_color=["#1655a5", "#8a8a8a"],
+                text=[f"{us['pts']} pts", f"{other['pts']} pts"], textposition="outside",
+                textfont=dict(color="#f2f2f2"),
+            ))
+            fig.update_layout(
+                height=130, margin=dict(l=10, r=50, t=5, b=5),
+                xaxis=dict(visible=False, range=[0, max(us["pts"], other["pts"]) * 1.3]),
+                yaxis=dict(tickfont=dict(size=13)),
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#f2f2f2",
+            )
+            st.plotly_chart(fig, width="stretch")
 
 
 def _render_top_scorer():
-    stats = dl.load_player_stats()
-    if stats.empty:
-        _snapshot_box("Top scorer", '<div style="color:var(--muted);">—</div>', "No season stats yet.")
-        return
-    ranked = stats.sort_values("points", ascending=False)
-    top_name, top = ranked.index[0], ranked.iloc[0]
-    _snapshot_box(
-        "Top scorer this season",
-        f'<div style="font-size:1.5rem;font-weight:800;">{top_name}</div>',
-        f"{int(top['points'])} points · {int(top['appearances'])} matches played",
-    )
+    with st.container(border=True):
+        st.markdown("**Top scorer** this season")
+        stats = dl.load_player_stats()
+        if stats.empty:
+            st.caption("No season stats yet.")
+            return
+
+        ranked = stats.sort_values("points", ascending=False)
+        top_name, top = ranked.index[0], ranked.iloc[0]
+        player = pg.PLAYERS_BY_SURNAME.get(top_name)
+
+        col_photo, col_info = st.columns([1, 1.5], vertical_alignment="center")
+        with col_photo:
+            if player:
+                st.image(pg.photo_path(player), width="stretch")
+        with col_info:
+            st.markdown(f'<div style="font-size:1.7rem;font-weight:800;">{top_name}</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div style="font-size:1.2rem;color:var(--accent);font-weight:700;">{int(top["points"])} points</div>',
+                unsafe_allow_html=True,
+            )
+            st.caption(f"{int(top['appearances'])} matches played")
 
 
-def render():
-    season = filters.season()
-    matches = dl.load_match_list()
-    data = dl.load_wellness_data()
-    wellness = data["wellness"]
+def _render_team_shape():
+    with st.container(border=True):
+        st.markdown("**Team shape** · efficiency (E%) across fundamentals")
+        scout = dl.load_scout_data()
+        team = scout[
+            (scout["match"] == dl.SEASON_LABEL) & scout["is_team"]
+            & (scout["palla"] == "Totale") & (scout["Tot"] > 0)
+        ]
+        present = [f for f in dl.FONDAMENTALE_ORDER if f in set(team["fondamentale"])]
+        if len(present) < 3:
+            st.caption("Not enough season data yet for a radar.")
+            return
 
-    _render_hero(season)
-
-    with st.container(horizontal=True):
-        st.metric("Matches analyzed", len(matches), border=True)
-        st.metric("Players monitored", len(dl.load_player_names()) - 1, border=True)
-        st.metric("First match", cv.fmt_date(min(matches)), border=True)
-        st.metric("Last match", cv.fmt_date(max(matches)), border=True)
-
-    # Recovery alert: lowest TQR recorded on the most recent survey day available
-    last_date = wellness["Data"].max()
-    last_day = wellness[wellness["Data"] == last_date].sort_values("Tqr")
-    threshold = 15
-    below_threshold = last_day[last_day["Tqr"] < threshold]
-
-    if not below_threshold.empty:
-        players_str = " · ".join(f"{r.player_name} (TQR {r.Tqr:.1f})" for r in below_threshold.itertuples())
-        st.markdown(f"""
-            <div class="alert-card" style="background:rgba(228,87,86,0.1); border-color:rgba(228,87,86,0.4);">
-                <b style="color:{LOW_COLOR}">Low recovery</b> — {players_str} below threshold {threshold} on {last_date.strftime('%d/%m/%y')}
-            </div>
-        """, unsafe_allow_html=True)
-    else:
-        st.markdown(f"""
-            <div class="alert-card" style="background:rgba(84,162,75,0.1); border-color:rgba(84,162,75,0.4);">
-                <b style="color:{GOOD_COLOR}">Recovery on track</b> — no player below threshold {threshold} on {last_date.strftime('%d/%m/%y')}
-            </div>
-        """, unsafe_allow_html=True)
-
-    col_standings, col_readiness, col_scorer = st.columns(3)
-    with col_standings:
-        _render_standings_snapshot(season)
-    with col_readiness:
-        _render_readiness_snapshot(data["rpe"])
-    with col_scorer:
-        _render_top_scorer()
-
-    _render_recent_form()
+        labels = [dl.FONDAMENTALE_LABELS[f] for f in present]
+        # +50pp shift, same trick as Scout & Stats' own team radar: E_pct
+        # can be negative, which would collapse/invert a polar shape.
+        values = [team.loc[team["fondamentale"] == f, "E_pct"].iloc[0] + 0.5 for f in present]
+        r, theta = close_polygon(values, labels)
+        fig = go.Figure(go.Scatterpolar(r=r, theta=theta, fill="toself", line_color="#1655a5", fillcolor="rgba(22,85,165,0.35)"))
+        fig.update_layout(**dark_polar_layout([0, 1]))
+        fig.update_layout(polar=dict(radialaxis=dict(showticklabels=False)), height=300, margin=dict(l=30, r=30, t=10, b=10))
+        st.plotly_chart(fig, width="stretch", theme=None)
+        st.caption("Full-season team E% per fundamental, shifted +50pp onto the radial axis so negative E% still plots.")
 
 
 def _render_recent_form():
@@ -142,18 +203,51 @@ def _render_recent_form():
                 color = cv.RESULT_COLORS[mc.result_points(m)]
                 st.markdown(
                     f'<div style="text-align:center">'
-                    f'<div style="width:14px;height:14px;border-radius:50%;background:{color};margin:0 auto 4px;"></div>'
-                    f'<div style="font-size:11px;color:var(--muted);">{cv.fmt_date(m["date"])}</div>'
-                    f'<div style="font-size:11px;font-weight:600;">{m["score"]}</div>'
+                    f'<div style="width:22px;height:22px;border-radius:50%;background:{color};margin:0 auto 6px;"></div>'
+                    f'<div style="font-size:12px;color:var(--muted);">{cv.fmt_date(m["date"])}</div>'
+                    f'<div style="font-size:13px;font-weight:700;">{m["score"]}</div>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
         with cols[-1]:
             wins = sum(1 for m in serie_a1 if mc.is_win(m))
             st.markdown(
-                f'<div style="text-align:center; padding-top:4px;">'
-                f'<div style="font-size:1.1rem;font-weight:700;">{wins}W – {len(serie_a1) - wins}L</div>'
-                f'<div style="font-size:11px;color:var(--muted);">season record</div>'
+                f'<div style="text-align:center; padding-top:6px;">'
+                f'<div style="font-size:1.4rem;font-weight:800;">{wins}W – {len(serie_a1) - wins}L</div>'
+                f'<div style="font-size:12px;color:var(--muted);">season record</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
+
+
+def _render_how_to():
+    st.caption(
+        "**How to use this app** · Pick a season, competition and period in the sidebar -- every page "
+        "reads from it. Switch pages with the top bar. Scout & Stats has four sections (Team Profile, "
+        "General stats, Game distribution, Scout Sheet) picked with the segmented control at its top. "
+        "Upload your own scouting or wellness files in Data Entry to see what the app reads from them."
+    )
+
+
+def render():
+    season = filters.season()
+    data = dl.load_wellness_data()
+    wellness = data["wellness"]
+
+    _render_hero(season)
+    _render_low_recovery(wellness)
+
+    col_gauge, col_league = st.columns(2)
+    with col_gauge:
+        _render_readiness_gauge(data["rpe"])
+    with col_league:
+        _render_league_position(season)
+
+    col_scorer, col_shape = st.columns(2)
+    with col_scorer:
+        _render_top_scorer()
+    with col_shape:
+        _render_team_shape()
+
+    _render_recent_form()
+    _render_how_to()
