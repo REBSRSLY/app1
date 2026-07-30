@@ -12,7 +12,7 @@ import match_calendar as mc
 import player_colors as pc
 import players_grid as pg
 import training_load
-from ui_helpers import close_polygon, dark_polar_layout
+from ui_helpers import close_polygon, dark_polar_layout, tqr_yaxis_ticks
 
 GOOD_COLOR = "#54A24B"
 LOW_COLOR = "#E45756"
@@ -344,7 +344,7 @@ def _extra_wellness_individual_tqr():
         fig.add_hline(y=RECOVERY_THRESHOLD, line_dash="dash", line_color=LOW_COLOR)
         fig.update_layout(
             height=340, margin=dict(l=10, r=10, t=10, b=10),
-            yaxis=dict(title="TQR", range=[6, 20]), legend_title_text="Player",
+            yaxis=dict(title="TQR", range=[6, 20], **tqr_yaxis_ticks()), legend_title_text="Player",
         )
         st.plotly_chart(fig, width="stretch")
 

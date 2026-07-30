@@ -15,7 +15,25 @@ WELLNESS_ICONS = {"Fatica": "🔋", "Sonno": "😴", "Doms": "💪", "Stress": "
 # banner) so the same cutoff and color always mean the same thing.
 GOOD_COLOR = "#54A24B"
 LOW_COLOR = "#E45756"
+WARN_COLOR = "#FFC107"
 RECOVERY_THRESHOLD = 15
+
+
+def tqr_yaxis_ticks(tickvals=(6, 8, 10, 12, 14, 15, 16, 18, 20)) -> dict:
+    """Y-axis tick config for a TQR line chart: the recovery threshold
+    itself in yellow, values below it in red, values above it in green --
+    makes the threshold legible straight from the axis labels, since a
+    dashed reference line alone is easy to lose among many player lines."""
+    ticktext = []
+    for v in tickvals:
+        if v == RECOVERY_THRESHOLD:
+            color = WARN_COLOR
+        elif v < RECOVERY_THRESHOLD:
+            color = LOW_COLOR
+        else:
+            color = GOOD_COLOR
+        ticktext.append(f'<span style="color:{color}">{v}</span>')
+    return dict(tickvals=list(tickvals), ticktext=ticktext)
 
 
 def rgba_from_hex(hex_color: str, alpha: float) -> str:

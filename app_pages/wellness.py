@@ -8,7 +8,7 @@ import data_loader as dl
 import filters
 import player_colors as pc
 import players_grid as pg
-from ui_helpers import GOOD_COLOR, LOW_COLOR, RECOVERY_THRESHOLD, WELLNESS_ICONS, close_polygon, dark_polar_layout
+from ui_helpers import GOOD_COLOR, LOW_COLOR, RECOVERY_THRESHOLD, WELLNESS_ICONS, close_polygon, dark_polar_layout, tqr_yaxis_ticks
 
 # Wellness questionnaire items: all 1-5, high = worse (confirmed by negative
 # correlation with Tqr, which is 6-20 with high = better).
@@ -202,7 +202,8 @@ def _render_individual_tqr_trends(period: pd.DataFrame):
     )
     fig.update_layout(
         height=360, margin=dict(l=10, r=10, t=10, b=10),
-        yaxis=dict(title="TQR", range=[6, 20]), xaxis_title=None, legend_title_text="Player",
+        yaxis=dict(title="TQR", range=[6, 20], **tqr_yaxis_ticks()),
+        xaxis_title=None, legend_title_text="Player",
     )
     st.plotly_chart(fig, width="stretch")
     st.caption(f"Individual TQR per day, one line per player. Dashed line = recovery threshold ({RECOVERY_THRESHOLD}).")
