@@ -28,6 +28,17 @@ def _render_hero(season: str):
         )
 
 
+def _topic_label(name: str):
+    """Small gray label naming which page a group of widgets below it is
+    pulled from -- lets each widget stay a quick glance while still
+    pointing to where to go for the full picture."""
+    st.markdown(
+        f'<div style="color:var(--muted);font-size:11px;text-transform:uppercase;'
+        f'letter-spacing:0.07em;font-weight:700;margin:2px 0 6px;">{name}</div>',
+        unsafe_allow_html=True,
+    )
+
+
 def _render_low_recovery(wellness: pd.DataFrame):
     """Compact list instead of one long run-on sentence -- each player
     below threshold gets her own row with a colored TQR pill, worst-first,
@@ -134,29 +145,31 @@ def _render_league_position(season: str):
             st.plotly_chart(fig, width="stretch")
 
 
-def _render_top_scorer():
+def _render_top_scorers():
+    """Top 3, ranked list -- a photo for just the #1 gave that single
+    player disproportionate visual weight for what's meant to be a quick
+    top-3 leaderboard, not a player spotlight."""
     with st.container(border=True):
-        st.markdown("**Top scorer** this season")
+        st.markdown("**Top scorers** this season")
         stats = dl.load_player_stats()
         if stats.empty:
             st.caption("No season stats yet.")
             return
 
-        ranked = stats.sort_values("points", ascending=False)
-        top_name, top = ranked.index[0], ranked.iloc[0]
-        player = pg.PLAYERS_BY_SURNAME.get(top_name)
-
-        col_photo, col_info = st.columns([1, 1.5], vertical_alignment="center")
-        with col_photo:
-            if player:
-                st.image(pg.photo_path(player), width="stretch")
-        with col_info:
-            st.markdown(f'<div style="font-size:1.7rem;font-weight:800;">{top_name}</div>', unsafe_allow_html=True)
-            st.markdown(
-                f'<div style="font-size:1.2rem;color:var(--accent);font-weight:700;">{int(top["points"])} points</div>',
-                unsafe_allow_html=True,
-            )
-            st.caption(f"{int(top['appearances'])} matches played")
+        ranked = stats.sort_values("points", ascending=False).head(3)
+        medals = ["🥇", "🥈", "🥉"]
+        rows = list(ranked.itertuples())
+        rows_html = "".join(
+            f'<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 2px;'
+            f'{"border-bottom:1px solid var(--line);" if i < len(rows) - 1 else ""}">'
+            f'<span style="font-size:1.15rem;">{medals[i]}</span>'
+            f'<span style="flex:1;padding-left:10px;font-weight:700;font-size:1.05rem;">{r.Index}</span>'
+            f'<span style="color:var(--accent);font-weight:700;">{int(r.points)} pts</span>'
+            f'</div>'
+            for i, r in enumerate(rows)
+        )
+        st.markdown(rows_html, unsafe_allow_html=True)
+        st.caption(" · ".join(f"{r.Index}: {int(r.appearances)} matches" for r in rows))
 
 
 def _render_team_shape():
@@ -173,12 +186,17 @@ def _render_team_shape():
             return
 
         labels = [dl.FONDAMENTALE_LABELS[f] for f in present]
-        # +50pp shift, same trick as Scout & Stats' own team radar: E_pct
-        # can be negative, which would collapse/invert a polar shape.
+        # +50pp shift, same trick as Scout & Stats' own (Ind-based) team
+        # radar: E_pct can be negative, which would collapse/invert a polar
+        # shape around the origin. But E_pct also reaches ~90% here (Set),
+        # so shifted values can reach ~1.4 -- a [0, 1] axis clipped that
+        # part of the shape flat against the rim. [0, 1.5] gives the full
+        # +50pp-shifted range (-100%..+100% => 0..2, but this scope tops
+        # out well under that) room to actually plot.
         values = [team.loc[team["fondamentale"] == f, "E_pct"].iloc[0] + 0.5 for f in present]
         r, theta = close_polygon(values, labels)
         fig = go.Figure(go.Scatterpolar(r=r, theta=theta, fill="toself", line_color="#1655a5", fillcolor="rgba(22,85,165,0.35)"))
-        fig.update_layout(**dark_polar_layout([0, 1]))
+        fig.update_layout(**dark_polar_layout([0, 1.5]))
         fig.update_layout(polar=dict(radialaxis=dict(showticklabels=False)), height=300, margin=dict(l=30, r=30, t=10, b=10))
         st.plotly_chart(fig, width="stretch", theme=None)
         st.caption("Full-season team E% per fundamental, shifted +50pp onto the radial axis so negative E% still plots.")
@@ -235,19 +253,27 @@ def render():
     wellness = data["wellness"]
 
     _render_hero(season)
-    _render_low_recovery(wellness)
 
-    col_gauge, col_league = st.columns(2)
-    with col_gauge:
-        _render_readiness_gauge(data["rpe"])
+    _topic_label("Wellness")
+    col_recovery, _ = st.columns([1, 1])
+    with col_recovery:
+        _render_low_recovery(wellness)
+
+    _topic_label("Loads")
+    _render_readiness_gauge(data["rpe"])
+
+    _topic_label("Matches")
+    col_league, col_form = st.columns(2)
     with col_league:
         _render_league_position(season)
+    with col_form:
+        _render_recent_form()
 
-    col_scorer, col_shape = st.columns(2)
-    with col_scorer:
-        _render_top_scorer()
+    _topic_label("Scout & Stats")
+    col_scorers, col_shape = st.columns(2)
+    with col_scorers:
+        _render_top_scorers()
     with col_shape:
         _render_team_shape()
 
-    _render_recent_form()
     _render_how_to()
