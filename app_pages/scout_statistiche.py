@@ -412,9 +412,9 @@ def _render_general_stats(scoped: pd.DataFrame):
             fig_effp = px.bar(
                 players_eff, x="E_pct", y="player_name", orientation="h",
                 labels={"E_pct": "Efficiency E%", "player_name": ""},
-                color="E_pct", color_continuous_scale="RdBu", color_continuous_midpoint=0,
+                color="player_name", color_discrete_map=pc.color_map(players_eff["player_name"].unique()),
             )
-            fig_effp.update_layout(coloraxis_showscale=False, xaxis_tickformat=".0%")
+            fig_effp.update_layout(showlegend=False, xaxis_tickformat=".0%")
             st.plotly_chart(fig_effp, width="stretch")
 
     with st.container(border=True):
