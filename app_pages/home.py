@@ -62,7 +62,11 @@ def _render_hero(season: str) -> list[str]:
 
     selected: list[str] = []
     with col_customize:
-        with st.popover("Customize", icon=":material/tune:", width="stretch"):
+        st.markdown(
+            "<style>.st-key-home_customize_box button{white-space:nowrap;}</style>",
+            unsafe_allow_html=True,
+        )
+        with st.container(key="home_customize_box"), st.popover("Customize", icon=":material/tune:", width="stretch"):
             st.markdown("**Add charts from other pages**")
             st.caption("Pick any chart from any screen to show below, grouped by where it comes from.")
             by_page: dict[str, list[tuple[str, str]]] = {}
@@ -103,30 +107,26 @@ def _render_low_recovery(wellness: pd.DataFrame):
     with st.container(border=True):
         if below.empty:
             st.markdown(
-                '<div style="display:flex;align-items:center;gap:9px;">'
-                '<span style="font-size:1.3rem;">✅</span>'
-                f'<div><b style="color:{GOOD_COLOR};font-size:0.92rem;">Recovery on track</b><br>'
-                f'<span style="color:var(--muted);font-size:11px;">No player below threshold {RECOVERY_THRESHOLD} '
-                f'on {last_date.strftime("%d/%m/%y")}</span></div></div>',
+                '<div style="display:flex;align-items:center;gap:10px;">'
+                '<span style="font-size:1.6rem;">✅</span>'
+                f'<b style="color:{GOOD_COLOR};font-size:1.1rem;">Recovery on track</b></div>',
                 unsafe_allow_html=True,
             )
             return
 
         st.markdown(
-            '<div style="display:flex;align-items:center;gap:9px;margin-bottom:6px;">'
-            '<span style="font-size:1.3rem;">⚠️</span>'
-            f'<div><b style="color:{LOW_COLOR};font-size:0.92rem;">Low recovery</b><br>'
-            f'<span style="color:var(--muted);font-size:11px;">Below threshold {RECOVERY_THRESHOLD} '
-            f'on {last_date.strftime("%d/%m/%y")}</span></div></div>',
+            '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">'
+            '<span style="font-size:1.6rem;">⚠️</span>'
+            f'<b style="color:{LOW_COLOR};font-size:1.1rem;">Low recovery</b></div>',
             unsafe_allow_html=True,
         )
         rows = list(below.itertuples())
         rows_html = "".join(
             f'<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 2px;'
             f'{"border-bottom:1px solid var(--line);" if i < len(rows) - 1 else ""}">'
-            f'<span style="font-weight:600;font-size:0.85rem;">{r.player_name}</span>'
+            f'<span style="font-weight:600;font-size:0.92rem;">{r.player_name}</span>'
             f'<span style="background:rgba(228,87,86,0.15);color:{LOW_COLOR};font-weight:700;'
-            f'border-radius:10px;padding:1px 8px;font-size:11px;">TQR {r.Tqr:.1f}</span></div>'
+            f'border-radius:10px;padding:1px 9px;font-size:12px;">TQR {r.Tqr:.1f}</span></div>'
             for i, r in enumerate(rows)
         )
         st.markdown(rows_html, unsafe_allow_html=True)
@@ -145,7 +145,7 @@ def _render_readiness_gauge(rpe: pd.DataFrame):
         fig = go.Figure(go.Indicator(
             mode="gauge+number",
             value=acwr,
-            number=dict(font=dict(size=30, color="#f2f2f2"), valueformat=".2f"),
+            number=dict(font=dict(size=36, color="#f2f2f2"), valueformat=".2f"),
             gauge=dict(
                 axis=dict(range=[0, 2], tickfont=dict(color="#9a9a9a")),
                 bar=dict(color="#ffffff", thickness=0.28),
@@ -158,9 +158,8 @@ def _render_readiness_gauge(rpe: pd.DataFrame):
                 ],
             ),
         ))
-        fig.update_layout(height=170, margin=dict(l=20, r=20, t=5, b=5), paper_bgcolor="rgba(0,0,0,0)")
+        fig.update_layout(height=160, margin=dict(l=20, r=20, t=0, b=0), paper_bgcolor="rgba(0,0,0,0)")
         st.plotly_chart(fig, width="stretch")
-        st.caption(f"As of {ref_date.strftime('%d %b %Y')} · green 0.8–1.3 = sweet spot · red >1.5 = spike risk.")
 
 
 def _render_league_position(season: str):
@@ -173,9 +172,8 @@ def _render_league_position(season: str):
             return
 
         st.markdown(
-            f'<div style="font-size:2.2rem;font-weight:800;color:var(--accent);line-height:1;">#{us["pos"]}</div>'
-            f'<div style="color:var(--muted);font-size:0.8rem;margin-bottom:6px;">'
-            f'of {len(standings)} teams · {us["w"]}W–{us["l"]}L · {us["pts"]} pts</div>',
+            f'<div style="font-size:2.8rem;font-weight:800;color:var(--accent);line-height:1;'
+            f'margin-bottom:6px;">#{us["pos"]}</div>',
             unsafe_allow_html=True,
         )
 
@@ -213,16 +211,17 @@ def _render_top_scorers():
         medals = ["🥇", "🥈", "🥉"]
         rows = list(ranked.itertuples())
         rows_html = "".join(
-            f'<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 2px;'
+            f'<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 2px;'
             f'{"border-bottom:1px solid var(--line);" if i < len(rows) - 1 else ""}">'
-            f'<span style="font-size:0.95rem;">{medals[i]}</span>'
-            f'<span style="flex:1;padding-left:8px;font-weight:700;font-size:0.88rem;">{r.Index}</span>'
-            f'<span style="color:var(--accent);font-weight:700;font-size:0.85rem;">{int(r.points)} pts</span>'
-            f'</div>'
+            f'<span style="font-size:1.05rem;">{medals[i]}</span>'
+            f'<span style="flex:1;padding-left:8px;font-weight:700;font-size:0.95rem;">{r.Index}</span>'
+            f'<span style="text-align:right;line-height:1.25;">'
+            f'<span style="color:var(--accent);font-weight:700;font-size:0.92rem;">{int(r.points)} pts</span><br>'
+            f'<span style="color:var(--muted);font-size:10.5px;">{int(r.appearances)} matches</span>'
+            f'</span></div>'
             for i, r in enumerate(rows)
         )
         st.markdown(rows_html, unsafe_allow_html=True)
-        st.caption(" · ".join(f"{r.Index}: {int(r.appearances)} matches" for r in rows))
 
 
 def _render_team_shape():
@@ -231,7 +230,7 @@ def _render_team_shape():
     for the most recent match in scope layered on top -- instead of a
     single flat shape that only shows one snapshot."""
     with st.container(border=True):
-        st.markdown("**Team shape** · efficiency (E%) across fundamentals")
+        st.markdown("**Team shape** · efficiency (E%)")
         scout = dl.load_scout_data()
         in_scope = {m["date"] for m in filters.matches_in_scope()}
         d = scout[
@@ -285,12 +284,11 @@ def _render_team_shape():
 
         top = max(max(upper, default=1.0), max(last_values, default=1.0)) * 1.1 or 1.5
         fig.update_layout(**dark_polar_layout([0, top]))
-        fig.update_layout(polar=dict(radialaxis=dict(showticklabels=False)), height=220, margin=dict(l=20, r=20, t=5, b=5))
-        st.plotly_chart(fig, width="stretch", theme=None)
-        st.caption(
-            "Team E% per fundamental, shifted +50pp onto the radial axis so negative E% still plots. "
-            "Faint band = ±1 std dev over this period · solid line = most recent day in range."
+        fig.update_layout(
+            polar=dict(radialaxis=dict(showticklabels=False), angularaxis=dict(tickfont=dict(size=9))),
+            height=230, margin=dict(l=55, r=55, t=25, b=25),
         )
+        st.plotly_chart(fig, width="stretch", theme=None)
 
 
 def _render_recent_form():
@@ -303,7 +301,7 @@ def _render_recent_form():
     if not serie_a1:
         return
 
-    recent = serie_a1[-5:]
+    recent = serie_a1[-4:]
     with st.container(border=True):
         st.markdown("**Recent form** · Serie A1")
         cols = st.columns(len(recent) + 1)
@@ -313,17 +311,16 @@ def _render_recent_form():
                 st.markdown(
                     f'<div style="text-align:center">'
                     f'<div style="width:15px;height:15px;border-radius:50%;background:{color};margin:0 auto 4px;"></div>'
-                    f'<div style="font-size:10.5px;color:var(--muted);">{cv.fmt_date(m["date"])}</div>'
-                    f'<div style="font-size:11.5px;font-weight:700;">{m["score"]}</div>'
+                    f'<div style="font-size:10px;color:var(--muted);white-space:nowrap;">{cv.fmt_date(m["date"])}</div>'
+                    f'<div style="font-size:11.5px;font-weight:700;white-space:nowrap;">{m["score"]}</div>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
         with cols[-1]:
             wins = sum(1 for m in serie_a1 if mc.is_win(m))
             st.markdown(
-                f'<div style="text-align:center; padding-top:4px;">'
-                f'<div style="font-size:1.1rem;font-weight:800;">{wins}W – {len(serie_a1) - wins}L</div>'
-                f'<div style="font-size:10.5px;color:var(--muted);">season record</div>'
+                f'<div style="text-align:center; padding-top:8px;">'
+                f'<div style="font-size:1.05rem;font-weight:800;white-space:nowrap;">{wins}W–{len(serie_a1) - wins}L</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
