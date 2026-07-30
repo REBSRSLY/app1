@@ -171,7 +171,7 @@ def _render_team_profile(scoped: pd.DataFrame, metric_label: str):
 
 
 def _render_team_radar(scoped: pd.DataFrame):
-    """Same team E% data as the bar above, but as a radar -- the overall
+    """Team Index (Ind) across every fundamental, as a radar -- the overall
     'shape' of team performance (well-rounded vs. lopsided) reads faster
     from a polygon than from a list of bars."""
     team = scoped[scoped["is_team"] & (scoped["palla"] == "Totale") & (scoped["Tot"] > 0)].copy()
@@ -181,32 +181,51 @@ def _render_team_radar(scoped: pd.DataFrame):
         return
 
     labels = [dl.FONDAMENTALE_LABELS[f] for f in present]
-    values = [team.loc[team["fondamentale"] == f, "E_pct"].iloc[0] for f in present]
-    # E_pct can be negative, which would collapse/invert a polar shape
-    # around the origin -- shift every value up by 50pp onto a 0-1+ radial
-    # axis instead, purely for plotting (the caption spells this out).
-    shifted = [v + 0.5 for v in values]
-    r, theta = close_polygon(shifted, labels)
+    values = [team.loc[team["fondamentale"] == f, "Ind"].iloc[0] for f in present]
+    # Ind (unlike E_pct) has no fixed +-1 bound, so there's no need for the
+    # zero-crossing shift the old E% version needed -- just scale the axis
+    # to whatever this scope's values actually reach.
+    top = max(values) * 1.15 if values else 1.0
+    r, theta = close_polygon(values, labels)
     fig = go.Figure(go.Scatterpolar(r=r, theta=theta, fill="toself", line_color="#1655a5", fillcolor="rgba(22,85,165,0.3)"))
-    fig.update_layout(**dark_polar_layout([0, 1]))
+    fig.update_layout(**dark_polar_layout([0, top]))
     fig.update_layout(height=320, margin=dict(l=30, r=30, t=20, b=20))
     st.plotly_chart(fig, width="stretch", theme=None)
-    st.caption("Team efficiency (E%) per fundamental, shifted +50pp onto the radial axis so negative E% still plots.")
+    st.caption("Team Index (Ind) per fundamental.")
 
 
-def _render_team_volume_share(scoped: pd.DataFrame):
-    """Share of the team's total scouted actions going to each fundamental
-    -- a proportion, not an effectiveness measure, so a donut fits better
-    here than another bar chart."""
-    team = scoped[scoped["is_team"] & (scoped["palla"] == "Totale") & (scoped["Tot"] > 0)].copy()
+def _render_team_serve_outcome(scoped: pd.DataFrame):
+    """Team-wide Serve outcome mix -- share of every serve landing in each
+    outcome bucket (=/-/!/+/#, plus the slash), not just the headline E%
+    that collapses all of that into one number."""
+    team = scoped[
+        scoped["is_team"] & (scoped["fondamentale"] == "Battuta")
+        & (scoped["palla"] == "Totale") & (scoped["Tot"] > 0)
+    ]
     if team.empty:
+        st.info("No serve data in this scope.")
         return
-    team["Fundamental"] = team["fondamentale"].map(dl.FONDAMENTALE_LABELS)
-    fig = px.pie(team, names="Fundamental", values="Tot", hole=0.5)
+
+    row = team.iloc[0]
+    legenda = dl.legenda_fondamentale("Battuta")
+    rows = []
+    for simbolo, nome, _ in legenda:
+        col = SYMBOL_TO_COL.get(simbolo)
+        if col is None:
+            continue
+        count = row.get(col, 0)
+        rows.append({"Outcome": f"{nome} ({simbolo})", "count": 0 if pd.isna(count) else count, "symbol": simbolo})
+    d = pd.DataFrame(rows)
+    if d.empty or d["count"].sum() == 0:
+        st.info("No serve outcome data in this scope.")
+        return
+
+    color_map = {f"{nome} ({simbolo})": OUTCOME_COLORS.get(simbolo, "#888888") for simbolo, nome, _ in legenda}
+    fig = px.pie(d, names="Outcome", values="count", hole=0.5, color="Outcome", color_discrete_map=color_map)
     fig.update_traces(textinfo="percent+label")
     fig.update_layout(height=320, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
     st.plotly_chart(fig, width="stretch")
-    st.caption("Share of total scouted actions per fundamental.")
+    st.caption("Team serve outcome mix -- share of total serves landing in each outcome.")
 
 
 def _render_team_trend(scout: pd.DataFrame):
@@ -260,12 +279,12 @@ def _render_team_profile_section(scoped: pd.DataFrame, scout: pd.DataFrame):
     col_radar, col_pie = st.columns(2)
     with col_radar:
         with st.container(border=True):
-            st.markdown("**Team shape** · efficiency radar across fundamentals")
+            st.markdown("**Team shape** · Index radar across fundamentals")
             _render_team_radar(scoped)
     with col_pie:
         with st.container(border=True):
-            st.markdown("**Volume share** · actions per fundamental")
-            _render_team_volume_share(scoped)
+            st.markdown("**Serve outcome mix** · team")
+            _render_team_serve_outcome(scoped)
 
     with st.container(border=True):
         st.markdown("**Trend over time** · team efficiency per match")
