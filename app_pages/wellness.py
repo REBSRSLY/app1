@@ -1,10 +1,12 @@
 import pandas as pd
 import plotly.colors as pcolors
+import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
 import data_loader as dl
 import filters
+import player_colors as pc
 import players_grid as pg
 from ui_helpers import GOOD_COLOR, LOW_COLOR, RECOVERY_THRESHOLD, WELLNESS_ICONS, close_polygon, dark_polar_layout
 
@@ -130,28 +132,36 @@ def _render_player_radar(p_period, use_icons=False, height=None, show_caption=Fa
 
 
 def _render_team_tqr_trend(period: pd.DataFrame):
-    """Team-average TQR per day, with a +/-1 std dev band and the recovery
-    threshold marked -- a trend line is the natural read for "is the team's
-    readiness holding up over this period", which none of the per-player or
+    """Team-average TQR per day, with a band showing how spread out players'
+    individual TQR values are that day (not day-to-day noise in the average
+    -- a wide band means the squad's readiness is uneven that day, a narrow
+    one means everyone's in a similar place) and the recovery threshold
+    marked. A trend line is the natural read for "is the team's readiness
+    holding up over this period", which none of the per-player or
     per-parameter snapshots above actually show."""
     daily = period.groupby("Data")["Tqr"].agg(["mean", "std", "count"]).reset_index()
-    daily = daily[daily["count"] > 0]
+    daily = daily[daily["count"] > 0].sort_values("Data")
     if daily.empty:
         st.info("No wellness data in this date range.")
         return
     daily["std"] = daily["std"].fillna(0)
+    # The raw daily std swings a lot with how many players reported that
+    # day, which makes the band's edges jagged enough to obscure the trend
+    # -- a light 3-day rolling smooth on the band only (not the mean line
+    # itself) keeps it readable as a corridor instead of noise.
+    band = daily["std"].rolling(3, min_periods=1, center=True).mean()
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(
-        x=daily["Data"], y=daily["mean"] + daily["std"], mode="lines", line=dict(width=0),
+        x=daily["Data"], y=daily["mean"] + band, mode="lines", line=dict(width=0),
         showlegend=False, hoverinfo="skip",
     ))
     fig.add_trace(go.Scatter(
-        x=daily["Data"], y=daily["mean"] - daily["std"], mode="lines", fill="tonext", line=dict(width=0),
-        fillcolor="rgba(46,204,113,0.15)", showlegend=False, hoverinfo="skip",
+        x=daily["Data"], y=daily["mean"] - band, mode="lines", fill="tonext", line=dict(width=0),
+        fillcolor="rgba(46,204,113,0.18)", name="Spread across players (±1 std dev)", hoverinfo="skip",
     ))
     fig.add_trace(go.Scatter(
-        x=daily["Data"], y=daily["mean"], mode="lines+markers", name="Team avg TQR",
+        x=daily["Data"], y=daily["mean"], mode="lines+markers", name="Team average TQR",
         line=dict(color="#2ecc71", width=2),
     ))
     fig.add_hline(
@@ -160,11 +170,42 @@ def _render_team_tqr_trend(period: pd.DataFrame):
         annotation_font=dict(color=LOW_COLOR, size=11),
     )
     fig.update_layout(
-        height=280, margin=dict(l=10, r=10, t=10, b=10), showlegend=False,
+        height=280, margin=dict(l=10, r=10, t=30, b=10),
         yaxis=dict(title="TQR", range=[6, 20]), xaxis_title=None,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
     )
     st.plotly_chart(fig, width="stretch")
-    st.caption(f"Team average TQR per day (±1 std dev band). Dashed line = recovery threshold ({RECOVERY_THRESHOLD}).")
+    st.caption(
+        "Solid line = team average TQR per day. Shaded band = how spread out players' individual TQR "
+        "values are that day (±1 std dev), not noise in the average. Dashed line = recovery threshold."
+    )
+
+
+def _render_individual_tqr_trends(period: pd.DataFrame):
+    """Same TQR-over-time view as the team chart above, but one line per
+    player in her own color -- shows who's driving the team average and who
+    has been running consistently low, which the aggregate above can't."""
+    daily = period.dropna(subset=["Tqr"]).groupby(["Data", "player_name"], as_index=False)["Tqr"].mean().sort_values("Data")
+    if daily.empty:
+        st.info("No wellness data in this date range.")
+        return
+
+    fig = px.line(
+        daily, x="Data", y="Tqr", color="player_name",
+        color_discrete_map=pc.color_map(daily["player_name"].unique()),
+        labels={"Data": "Date", "Tqr": "TQR", "player_name": "Player"},
+    )
+    fig.add_hline(
+        y=RECOVERY_THRESHOLD, line_dash="dash", line_color=LOW_COLOR,
+        annotation_text=f"Recovery threshold ({RECOVERY_THRESHOLD})", annotation_position="bottom right",
+        annotation_font=dict(color=LOW_COLOR, size=11),
+    )
+    fig.update_layout(
+        height=360, margin=dict(l=10, r=10, t=10, b=10),
+        yaxis=dict(title="TQR", range=[6, 20]), xaxis_title=None, legend_title_text="Player",
+    )
+    st.plotly_chart(fig, width="stretch")
+    st.caption(f"Individual TQR per day, one line per player. Dashed line = recovery threshold ({RECOVERY_THRESHOLD}).")
 
 
 def render():
@@ -229,6 +270,10 @@ def render():
     with st.container(border=True):
         st.markdown("**Team TQR** · trend over time")
         _render_team_tqr_trend(period)
+
+    with st.container(border=True):
+        st.markdown("**Individual TQR** · trend over time")
+        _render_individual_tqr_trends(period)
 
     st.write("---")
     st.markdown("**All players**")
