@@ -232,29 +232,65 @@ def render():
             players = sorted(period["player_name"].unique())
             if role_sel != "All roles":
                 players = [p for p in players if role_map.get(p) == role_sel]
-            team_avg = period.groupby("player_name")[param].mean().reindex(players)
+            d = period[period["player_name"].isin(players)]
+            agg = d.groupby("player_name")[param].agg(["mean", "std"]).reindex(players)
 
-            if team_avg.empty:
+            if agg["mean"].isna().all():
                 st.info("No data in this date range.")
             else:
                 lo, hi = PARAM_RANGE[param]
                 is_negative = param in NEGATIVE_PARAMS
-                # Same inversion as the individual radars below: these
-                # params are 1-5 with high = worse, so plotting the raw
-                # value would make a *bad* score look bigger on the
-                # chart. Flip to lo+hi-x so bigger always means better,
-                # like Tqr (and the individual charts) already do.
-                values = [lo + hi - v for v in team_avg.values] if is_negative else list(team_avg.values)
-                r, theta = close_polygon(values, list(team_avg.index))
-                fig = go.Figure(go.Scatterpolar(
-                    r=r, theta=theta, fill="toself",
-                    line_color="#2ecc71", fillcolor="rgba(46,204,113,0.25)",
+
+                def _invert(s):
+                    # Same inversion as the individual radars: these params
+                    # are 1-5 with high = worse, so plotting the raw value
+                    # would make a *bad* score look bigger on the chart.
+                    # Flip to lo+hi-x so bigger always means better, like
+                    # Tqr (and the individual charts) already do.
+                    return lo + hi - s if is_negative else s
+
+                # Same enriched radar as the individual charts: a faint
+                # mean shape, a +/-1 std dev band around it, and a solid
+                # outline for each player's most recent day in range.
+                last_per_player = d.sort_values("Data").groupby("player_name").tail(1).set_index("player_name")[param]
+                last_per_player = last_per_player.reindex(players)
+
+                values = _invert(agg["mean"]).fillna(lo).tolist()
+                stds = agg["std"].fillna(0).tolist()
+                last_values = _invert(last_per_player).fillna(pd.Series(values, index=players)).tolist()
+                upper = [min(hi, v + s) for v, s in zip(values, stds)]
+                lower = [max(lo, v - s) for v, s in zip(values, stds)]
+
+                fig = go.Figure()
+                r_lower, theta_lower = close_polygon(lower, players)
+                fig.add_trace(go.Scatterpolar(
+                    r=r_lower, theta=theta_lower, mode="lines", line=dict(width=0),
+                    showlegend=False, hoverinfo="skip",
+                ))
+                r_upper, theta_upper = close_polygon(upper, players)
+                fig.add_trace(go.Scatterpolar(
+                    r=r_upper, theta=theta_upper, mode="lines", fill="tonext",
+                    line=dict(width=0), fillcolor="rgba(46,204,113,0.18)",
+                    showlegend=False, hoverinfo="skip",
+                ))
+                r, theta = close_polygon(values, players)
+                fig.add_trace(go.Scatterpolar(
+                    r=r, theta=theta, mode="lines", line=dict(color="rgba(46,204,113,0.7)", width=1.2),
+                    showlegend=False,
+                ))
+                r_last, theta_last = close_polygon(last_values, players)
+                fig.add_trace(go.Scatterpolar(
+                    r=r_last, theta=theta_last, mode="lines+markers",
+                    line=dict(color="#2ecc71", width=2), marker=dict(color="#2ecc71", size=6),
+                    showlegend=False,
                 ))
                 fig.update_layout(**dark_polar_layout([lo, hi]))
                 fig.update_layout(polar=dict(radialaxis=dict(showticklabels=False)))
                 st.plotly_chart(fig, width="stretch", theme=None)
+                caption = "Faint band = ±1 std dev over this period · solid line = most recent day in range."
                 if is_negative:
-                    st.caption("Axis inverted so bigger = better.")
+                    caption = "Axis inverted so bigger = better. " + caption
+                st.caption(caption)
 
     with col_player:
         with st.container(border=True):

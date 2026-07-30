@@ -171,9 +171,10 @@ def _render_team_profile(scoped: pd.DataFrame, metric_label: str):
 
 
 def _render_team_radar(scoped: pd.DataFrame):
-    """Team Index (Ind) across every fundamental, as a radar -- the overall
-    'shape' of team performance (well-rounded vs. lopsided) reads faster
-    from a polygon than from a list of bars."""
+    """Team #% (green) and =% (red) overlaid across every fundamental --
+    where the team scores/points vs. where it makes errors, at a glance.
+    Both are plain 0-and-up rates, so no zero-crossing shift is needed
+    (unlike the old E%-based version)."""
     team = scoped[scoped["is_team"] & (scoped["palla"] == "Totale") & (scoped["Tot"] > 0)].copy()
     present = [f for f in dl.FONDAMENTALE_ORDER if f in set(team["fondamentale"])]
     if len(present) < 3:
@@ -181,17 +182,23 @@ def _render_team_radar(scoped: pd.DataFrame):
         return
 
     labels = [dl.FONDAMENTALE_LABELS[f] for f in present]
-    values = [team.loc[team["fondamentale"] == f, "Ind"].iloc[0] for f in present]
-    # Ind (unlike E_pct) has no fixed +-1 bound, so there's no need for the
-    # zero-crossing shift the old E% version needed -- just scale the axis
-    # to whatever this scope's values actually reach.
-    top = max(values) * 1.15 if values else 1.0
-    r, theta = close_polygon(values, labels)
-    fig = go.Figure(go.Scatterpolar(r=r, theta=theta, fill="toself", line_color="#1655a5", fillcolor="rgba(22,85,165,0.3)"))
+    perfect_vals = [team.loc[team["fondamentale"] == f, "Perfect_pct"].iloc[0] for f in present]
+    err_vals = [team.loc[team["fondamentale"] == f, "Err_pct"].iloc[0] for f in present]
+    top = max(max(perfect_vals, default=0), max(err_vals, default=0)) * 1.2 or 1.0
+
+    fig = go.Figure()
+    r, theta = close_polygon(perfect_vals, labels)
+    fig.add_trace(go.Scatterpolar(r=r, theta=theta, name="#%", fill="toself", line_color="#2E7D32", fillcolor="rgba(46,125,50,0.3)"))
+    r, theta = close_polygon(err_vals, labels)
+    fig.add_trace(go.Scatterpolar(r=r, theta=theta, name="=%", fill="toself", line_color="#E45756", fillcolor="rgba(228,87,86,0.3)"))
     fig.update_layout(**dark_polar_layout([0, top]))
-    fig.update_layout(height=320, margin=dict(l=30, r=30, t=20, b=20))
+    fig.update_layout(
+        polar=dict(radialaxis=dict(tickformat=".0%")),
+        legend=dict(orientation="h", yanchor="bottom", y=1.05, x=0.35),
+        height=320, margin=dict(l=30, r=30, t=30, b=20),
+    )
     st.plotly_chart(fig, width="stretch", theme=None)
-    st.caption("Team Index (Ind) per fundamental.")
+    st.caption("Team % Point/Perfect (#, green) vs % Error (=, red) per fundamental.")
 
 
 def _render_team_serve_outcome(scoped: pd.DataFrame):
@@ -279,7 +286,7 @@ def _render_team_profile_section(scoped: pd.DataFrame, scout: pd.DataFrame):
     col_radar, col_pie = st.columns(2)
     with col_radar:
         with st.container(border=True):
-            st.markdown("**Team shape** · Index radar across fundamentals")
+            st.markdown("**Team shape** · # % vs = % across fundamentals")
             _render_team_radar(scoped)
     with col_pie:
         with st.container(border=True):

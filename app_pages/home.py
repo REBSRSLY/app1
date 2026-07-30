@@ -1,4 +1,7 @@
+from collections import Counter
+
 import pandas as pd
+import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
@@ -6,6 +9,7 @@ import calendar_view as cv
 import data_loader as dl
 import filters
 import match_calendar as mc
+import player_colors as pc
 import players_grid as pg
 import training_load
 from ui_helpers import close_polygon, dark_polar_layout
@@ -15,9 +19,36 @@ LOW_COLOR = "#E45756"
 WARN_COLOR = "#F0A600"
 RECOVERY_THRESHOLD = 15
 
+# Same convention as scout_statistiche.py's own OUTCOME_COLORS/SYMBOL_TO_COL
+# -- duplicated here (rather than imported across pages) just for the one
+# optional "Serve outcome mix" extra widget below.
+_OUTCOME_COLORS = {"=": "#E45756", "-": "#F58518", "!": "#B0B0B0", "+": "#54A24B", "#": "#2E7D32", "/": "#8D6E63"}
+_SYMBOL_TO_COL = {"=": "Err", "-": "Neg", "!": "Neutral", "+": "Pos", "#": "Perfect", "/": "Slash"}
 
-def _render_hero(season: str):
-    col_crest, col_title = st.columns([0.1, 1], vertical_alignment="center")
+# key -> (label, source page) -- the picker in the "Customize" popover lets
+# the user add any of these below the fixed widgets already on the page.
+# Dict order is preserved, so entries are grouped page-by-page here on
+# purpose -- the popover renders one section per page, in this order.
+EXTRA_WIDGETS = {
+    "wellness_individual_tqr": ("Individual TQR trends", "Wellness"),
+    "loads_acwr_chart": ("Team ACWR & weekly load", "Loads"),
+    "loads_jumps": ("Jumps per player", "Loads"),
+    "loads_rpe_by_role": ("RPE distribution by role", "Loads"),
+    "loads_rpe_scatter": ("RPE vs. session duration", "Loads"),
+    "matches_score_patterns": ("Score patterns", "Matches"),
+    "matches_per_month": ("Matches per month by competition", "Matches"),
+    "scout_serve_outcome": ("Serve outcome mix (team)", "Scout & Stats"),
+    "scout_team_profile_bar": ("Team profile · E% per fundamental (bar)", "Scout & Stats"),
+}
+
+
+def _render_hero(season: str) -> list[str]:
+    """Returns the list of extra widget keys currently checked in the
+    Customize popover -- built straight from this run's checkboxes (rather
+    than read back from st.session_state under a different key) so the
+    rest of render() always sees this run's actual selection immediately,
+    not whatever was true before this rerun."""
+    col_crest, col_title, col_customize = st.columns([0.1, 0.68, 0.22], vertical_alignment="center")
     with col_crest:
         st.image(pg.CREST_PATH, width="stretch")
     with col_title:
@@ -26,6 +57,26 @@ def _render_hero(season: str):
             f'<div style="color:var(--muted);font-size:0.95rem;">Technical Staff · A1 Women\'s · Season {season}</div>',
             unsafe_allow_html=True,
         )
+
+    selected: list[str] = []
+    with col_customize:
+        with st.popover("Customize", icon=":material/tune:", width="stretch"):
+            st.markdown("**Add charts from other pages**")
+            st.caption("Pick any chart from any screen to show below, grouped by where it comes from.")
+            by_page: dict[str, list[tuple[str, str]]] = {}
+            for key, (label, page) in EXTRA_WIDGETS.items():
+                by_page.setdefault(page, []).append((key, label))
+            for i, (page, items) in enumerate(by_page.items()):
+                border = "border-top:1px solid var(--line);padding-top:8px;" if i > 0 else ""
+                st.markdown(
+                    f'<div style="color:var(--muted);font-size:11px;text-transform:uppercase;'
+                    f'letter-spacing:0.06em;font-weight:700;margin-top:8px;{border}">{page}</div>',
+                    unsafe_allow_html=True,
+                )
+                for key, label in items:
+                    if st.checkbox(label, key=f"home_extra_{key}"):
+                        selected.append(key)
+    return selected
 
 
 def _topic_label(name: str):
@@ -173,33 +224,71 @@ def _render_top_scorers():
 
 
 def _render_team_shape():
+    """Same enriched radar principle as the Wellness page's own radars: a
+    faint mean shape, a +/-1 std dev band around it, and a solid outline
+    for the most recent match in scope layered on top -- instead of a
+    single flat shape that only shows one snapshot."""
     with st.container(border=True):
         st.markdown("**Team shape** · efficiency (E%) across fundamentals")
         scout = dl.load_scout_data()
-        team = scout[
-            (scout["match"] == dl.SEASON_LABEL) & scout["is_team"]
+        in_scope = {m["date"] for m in filters.matches_in_scope()}
+        d = scout[
+            scout["match"].isin(in_scope) & scout["is_team"]
             & (scout["palla"] == "Totale") & (scout["Tot"] > 0)
-        ]
-        present = [f for f in dl.FONDAMENTALE_ORDER if f in set(team["fondamentale"])]
+        ].copy()
+        present = [f for f in dl.FONDAMENTALE_ORDER if f in set(d["fondamentale"])]
         if len(present) < 3:
-            st.caption("Not enough season data yet for a radar.")
+            st.caption("Not enough data in this scope for a radar.")
             return
 
         labels = [dl.FONDAMENTALE_LABELS[f] for f in present]
-        # +50pp shift, same trick as Scout & Stats' own (Ind-based) team
-        # radar: E_pct can be negative, which would collapse/invert a polar
-        # shape around the origin. But E_pct also reaches ~90% here (Set),
-        # so shifted values can reach ~1.4 -- a [0, 1] axis clipped that
-        # part of the shape flat against the rim. [0, 1.5] gives the full
-        # +50pp-shifted range (-100%..+100% => 0..2, but this scope tops
-        # out well under that) room to actually plot.
-        values = [team.loc[team["fondamentale"] == f, "E_pct"].iloc[0] + 0.5 for f in present]
+        agg = d.groupby("fondamentale")["E_pct"].agg(["mean", "std"]).reindex(present)
+        d["pdate"] = pd.to_datetime(d["match"].apply(mc.parsed_date))
+        last_date = d["pdate"].max()
+        last_per_fond = d[d["pdate"] == last_date].groupby("fondamentale")["E_pct"].mean().reindex(present)
+
+        # +50pp shift, same trick as the Wellness/Scout & Stats radars: E_pct
+        # can be negative, which would collapse/invert a polar shape around
+        # the origin. It also reaches ~90% here (Set), so shifted values can
+        # reach ~1.4 -- [0, 1.5] gives that room instead of clipping at 1.
+        values = (agg["mean"] + 0.5).fillna(0.5).tolist()
+        stds = agg["std"].fillna(0).tolist()
+        last_values = (last_per_fond + 0.5).fillna(pd.Series(values, index=present)).tolist()
+        upper = [v + s for v, s in zip(values, stds)]
+        lower = [v - s for v, s in zip(values, stds)]
+
+        fig = go.Figure()
+        r_lower, theta_lower = close_polygon(lower, labels)
+        fig.add_trace(go.Scatterpolar(
+            r=r_lower, theta=theta_lower, mode="lines", line=dict(width=0),
+            showlegend=False, hoverinfo="skip",
+        ))
+        r_upper, theta_upper = close_polygon(upper, labels)
+        fig.add_trace(go.Scatterpolar(
+            r=r_upper, theta=theta_upper, mode="lines", fill="tonext",
+            line=dict(width=0), fillcolor="rgba(22,85,165,0.18)",
+            showlegend=False, hoverinfo="skip",
+        ))
         r, theta = close_polygon(values, labels)
-        fig = go.Figure(go.Scatterpolar(r=r, theta=theta, fill="toself", line_color="#1655a5", fillcolor="rgba(22,85,165,0.35)"))
-        fig.update_layout(**dark_polar_layout([0, 1.5]))
+        fig.add_trace(go.Scatterpolar(
+            r=r, theta=theta, mode="lines", line=dict(color="rgba(22,85,165,0.7)", width=1.2),
+            showlegend=False,
+        ))
+        r_last, theta_last = close_polygon(last_values, labels)
+        fig.add_trace(go.Scatterpolar(
+            r=r_last, theta=theta_last, mode="lines+markers",
+            line=dict(color="#1655a5", width=2), marker=dict(color="#1655a5", size=6),
+            showlegend=False,
+        ))
+
+        top = max(max(upper, default=1.0), max(last_values, default=1.0)) * 1.1 or 1.5
+        fig.update_layout(**dark_polar_layout([0, top]))
         fig.update_layout(polar=dict(radialaxis=dict(showticklabels=False)), height=300, margin=dict(l=30, r=30, t=10, b=10))
         st.plotly_chart(fig, width="stretch", theme=None)
-        st.caption("Full-season team E% per fundamental, shifted +50pp onto the radial axis so negative E% still plots.")
+        st.caption(
+            "Team E% per fundamental, shifted +50pp onto the radial axis so negative E% still plots. "
+            "Faint band = ±1 std dev over this period · solid line = most recent day in range."
+        )
 
 
 def _render_recent_form():
@@ -238,6 +327,218 @@ def _render_recent_form():
             )
 
 
+def _extra_wellness_individual_tqr():
+    with st.container(border=True):
+        st.markdown("**Individual TQR** · trend over time")
+        wellness = dl.load_wellness_data()["wellness"]
+        period = filters.filter_by_date_col(wellness)
+        daily = period.dropna(subset=["Tqr"]).groupby(["Data", "player_name"], as_index=False)["Tqr"].mean().sort_values("Data")
+        if daily.empty:
+            st.info("No wellness data in this date range.")
+            return
+        fig = px.line(
+            daily, x="Data", y="Tqr", color="player_name",
+            color_discrete_map=pc.color_map(daily["player_name"].unique()),
+            labels={"Data": "Date", "Tqr": "TQR", "player_name": "Player"},
+        )
+        fig.add_hline(y=RECOVERY_THRESHOLD, line_dash="dash", line_color=LOW_COLOR)
+        fig.update_layout(
+            height=340, margin=dict(l=10, r=10, t=10, b=10),
+            yaxis=dict(title="TQR", range=[6, 20]), legend_title_text="Player",
+        )
+        st.plotly_chart(fig, width="stretch")
+
+
+def _extra_loads_acwr_chart():
+    with st.container(border=True):
+        st.markdown("**Team ACWR** & weekly load")
+        rpe = dl.load_wellness_data()["rpe"]
+        start, end = filters.period()
+        team_metrics = training_load.metrics_frame(rpe)
+        d = team_metrics.loc[
+            (team_metrics.index >= pd.Timestamp(start)) & (team_metrics.index <= pd.Timestamp(end))
+        ].dropna(subset=["acwr"])
+        if d.empty:
+            st.info("Not enough training history in this period to compute ACWR (needs 28+ days of prior data).")
+            return
+
+        top = max(2.5, float(d["acwr"].max()) + 0.2)
+        fig = go.Figure()
+        fig.add_trace(go.Bar(x=d.index, y=d["acute"], name="Weekly load (7d)", marker_color="#4C78A8", opacity=0.55))
+        fig.add_trace(go.Scatter(x=d.index, y=d["acwr"], name="ACWR", yaxis="y2", line=dict(color="#E45756", width=2)))
+        fig.add_hrect(y0=0.8, y1=1.3, yref="y2", fillcolor="rgba(84,162,75,0.18)", line_width=0)
+        fig.add_hrect(y0=1.5, y1=top, yref="y2", fillcolor="rgba(228,87,86,0.14)", line_width=0)
+        fig.update_layout(
+            yaxis=dict(title="Weekly load (TL)"), yaxis2=dict(title="ACWR", overlaying="y", side="right", range=[0, top]),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
+            height=320, margin=dict(l=10, r=10, t=40, b=10),
+        )
+        st.plotly_chart(fig, width="stretch")
+
+
+def _extra_loads_jumps():
+    with st.container(border=True):
+        st.markdown("**Jumps** · per player")
+        salti = dl.load_wellness_data()["salti"]
+        period = filters.filter_by_date_col(salti).dropna(subset=["SALTI"])
+        if period.empty:
+            st.info("No jump data in this date range.")
+            return
+        daily = period.groupby(["Data", "player_name"], as_index=False)["SALTI"].sum()
+        fig = px.bar(
+            daily, x="Data", y="SALTI", color="player_name", barmode="stack",
+            color_discrete_map=pc.color_map(daily["player_name"].unique()),
+            labels={"Data": "Date", "SALTI": "Jumps", "player_name": "Player"},
+        )
+        fig.update_layout(legend_title_text="Player", height=320, margin=dict(l=10, r=10, t=10, b=10))
+        st.plotly_chart(fig, width="stretch")
+
+
+def _extra_loads_rpe_by_role():
+    with st.container(border=True):
+        st.markdown("**RPE distribution** · by role")
+        rpe = dl.load_wellness_data()["rpe"]
+        period = filters.filter_by_date_col(rpe)
+        d = period.dropna(subset=["Rpe", "RUOLO"]).copy()
+        if d.empty:
+            st.info("No RPE data in this period.")
+            return
+        d["Role"] = d["RUOLO"].map(dl.ROLE_LABELS)
+        order = d.groupby("Role")["Rpe"].median().sort_values().index.tolist()
+        fig = px.box(
+            d, x="Rpe", y="Role", orientation="h", points="outliers",
+            category_orders={"Role": order}, color="Role", color_discrete_map=pg.ROLE_COLORS,
+            labels={"Rpe": "RPE", "Role": ""},
+        )
+        fig.update_layout(showlegend=False, height=280, margin=dict(l=0, r=10, t=10, b=10))
+        st.plotly_chart(fig, width="stretch")
+
+
+def _extra_loads_rpe_scatter():
+    with st.container(border=True):
+        st.markdown("**RPE** vs. session duration")
+        rpe = dl.load_wellness_data()["rpe"]
+        period = filters.filter_by_date_col(rpe)
+        d = period.dropna(subset=["Rpe", "Time"])
+        if d.empty:
+            st.info("No RPE data in this period.")
+            return
+        fig = px.scatter(
+            d, x="Time", y="Rpe", color="player_name", opacity=0.65,
+            color_discrete_map=pc.color_map(d["player_name"].unique()),
+            labels={"Time": "Duration (min)", "Rpe": "RPE"},
+        )
+        fig.update_layout(showlegend=False, height=280, margin=dict(l=0, r=10, t=10, b=10))
+        st.plotly_chart(fig, width="stretch")
+
+
+_SCORE_POINTS = {"3-0": 3, "3-1": 3, "3-2": 2, "2-3": 1, "1-3": 0, "0-3": 0}
+_MONTH_NAMES = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
+def _extra_matches_score_patterns():
+    with st.container(border=True):
+        st.markdown("**Score patterns**")
+        matches = filters.matches_in_scope()
+        if not matches:
+            st.info("No matches in this scope.")
+            return
+        counts = Counter(m["score"] for m in matches)
+        scores = sorted(counts.keys(), key=lambda s: _SCORE_POINTS.get(s, 0))
+        fig = go.Figure(go.Bar(
+            x=[counts[s] for s in scores], y=scores, orientation="h",
+            marker_color=[cv.RESULT_COLORS[_SCORE_POINTS.get(s, 0)] for s in scores],
+        ))
+        fig.update_layout(height=260, margin=dict(l=10, r=10, t=10, b=10), xaxis_title="Matches", yaxis_title="")
+        st.plotly_chart(fig, width="stretch")
+
+
+def _extra_matches_per_month():
+    with st.container(border=True):
+        st.markdown("**Matches per month** · by competition")
+        season_matches = mc.matches_for_season(filters.season())
+        if not season_matches:
+            st.info("No matches this season.")
+            return
+        df = pd.DataFrame(season_matches)
+        order = sorted({(d.year, d.month) for d in df["pdate"]})
+        order_labels = [f"{_MONTH_NAMES[m]} {y}" for y, m in order]
+        df["month"] = df["pdate"].apply(lambda d: f"{_MONTH_NAMES[d.month]} {d.year}")
+        counts = df.groupby(["month", "competition"], observed=True).size().reset_index(name="count")
+        fig = px.bar(
+            counts, x="month", y="count", color="competition",
+            category_orders={"month": order_labels, "competition": mc.COMPETITION_ORDER},
+            color_discrete_map={k: v["color"] for k, v in mc.COMPETITIONS.items()},
+            labels={"month": "", "count": "Matches", "competition": ""},
+        )
+        fig.update_layout(
+            height=260, margin=dict(l=10, r=10, t=10, b=10),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
+        )
+        st.plotly_chart(fig, width="stretch")
+
+
+def _extra_scout_serve_outcome():
+    with st.container(border=True):
+        st.markdown("**Serve outcome mix** · team")
+        scout = dl.load_scout_data()
+        team = scout[
+            (scout["match"] == dl.SEASON_LABEL) & scout["is_team"]
+            & (scout["fondamentale"] == "Battuta") & (scout["palla"] == "Totale") & (scout["Tot"] > 0)
+        ]
+        if team.empty:
+            st.info("No serve data available.")
+            return
+
+        row = team.iloc[0]
+        legenda = dl.legenda_fondamentale("Battuta")
+        rows = []
+        for simbolo, nome, _ in legenda:
+            col = _SYMBOL_TO_COL.get(simbolo)
+            if col is None:
+                continue
+            count = row.get(col, 0)
+            rows.append({"Outcome": f"{nome} ({simbolo})", "count": 0 if pd.isna(count) else count})
+        d = pd.DataFrame(rows)
+        if d.empty or d["count"].sum() == 0:
+            st.info("No serve outcome data available.")
+            return
+
+        color_map = {f"{nome} ({simbolo})": _OUTCOME_COLORS.get(simbolo, "#888888") for simbolo, nome, _ in legenda}
+        fig = px.pie(d, names="Outcome", values="count", hole=0.5, color="Outcome", color_discrete_map=color_map)
+        fig.update_traces(textinfo="percent+label")
+        fig.update_layout(height=320, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
+        st.plotly_chart(fig, width="stretch")
+
+
+def _extra_scout_team_profile_bar():
+    with st.container(border=True):
+        st.markdown("**Team profile** · E% per fundamental (bar)")
+        scout = dl.load_scout_data()
+        team = scout[
+            (scout["match"] == dl.SEASON_LABEL) & scout["is_team"]
+            & (scout["palla"] == "Totale") & (scout["Tot"] > 0)
+        ].copy()
+        present = [f for f in dl.FONDAMENTALE_ORDER if f in set(team["fondamentale"])]
+        if not present:
+            st.info("No season data yet.")
+            return
+        order_labels = [dl.FONDAMENTALE_LABELS[f] for f in present]
+        team["Fundamental"] = team["fondamentale"].map(dl.FONDAMENTALE_LABELS)
+        fig = px.bar(
+            team, x="E_pct", y="Fundamental", orientation="h",
+            category_orders={"Fundamental": order_labels},
+            color="E_pct", color_continuous_scale="RdBu", color_continuous_midpoint=0,
+            labels={"E_pct": "Efficiency E%", "Fundamental": ""},
+        )
+        fig.update_layout(
+            coloraxis_showscale=False, xaxis_tickformat=".0%", height=260,
+            yaxis=dict(categoryorder="array", categoryarray=order_labels[::-1]),
+            margin=dict(l=0, r=10, t=10, b=10),
+        )
+        st.plotly_chart(fig, width="stretch")
+
+
 def _render_how_to():
     st.caption(
         "**How to use this app** · Pick a season, competition and period in the sidebar -- every page "
@@ -252,15 +553,25 @@ def render():
     data = dl.load_wellness_data()
     wellness = data["wellness"]
 
-    _render_hero(season)
+    extra = _render_hero(season)
 
-    _topic_label("Wellness")
-    col_recovery, _ = st.columns([1, 1])
-    with col_recovery:
+    col_wellness, col_loads = st.columns(2)
+    with col_wellness:
+        _topic_label("Wellness")
         _render_low_recovery(wellness)
-
-    _topic_label("Loads")
-    _render_readiness_gauge(data["rpe"])
+        if "wellness_individual_tqr" in extra:
+            _extra_wellness_individual_tqr()
+    with col_loads:
+        _topic_label("Loads")
+        _render_readiness_gauge(data["rpe"])
+        if "loads_acwr_chart" in extra:
+            _extra_loads_acwr_chart()
+        if "loads_jumps" in extra:
+            _extra_loads_jumps()
+        if "loads_rpe_by_role" in extra:
+            _extra_loads_rpe_by_role()
+        if "loads_rpe_scatter" in extra:
+            _extra_loads_rpe_scatter()
 
     _topic_label("Matches")
     col_league, col_form = st.columns(2)
@@ -268,6 +579,10 @@ def render():
         _render_league_position(season)
     with col_form:
         _render_recent_form()
+    if "matches_score_patterns" in extra:
+        _extra_matches_score_patterns()
+    if "matches_per_month" in extra:
+        _extra_matches_per_month()
 
     _topic_label("Scout & Stats")
     col_scorers, col_shape = st.columns(2)
@@ -275,5 +590,9 @@ def render():
         _render_top_scorers()
     with col_shape:
         _render_team_shape()
+    if "scout_serve_outcome" in extra:
+        _extra_scout_serve_outcome()
+    if "scout_team_profile_bar" in extra:
+        _extra_scout_team_profile_bar()
 
     _render_how_to()
