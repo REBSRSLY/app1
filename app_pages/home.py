@@ -48,13 +48,15 @@ def _render_hero(season: str) -> list[str]:
     than read back from st.session_state under a different key) so the
     rest of render() always sees this run's actual selection immediately,
     not whatever was true before this rerun."""
-    col_crest, col_title, col_customize = st.columns([0.1, 0.68, 0.22], vertical_alignment="center")
+    spacer_l, col_crest, col_title, col_customize, spacer_r = st.columns(
+        [0.03, 0.09, 0.58, 0.24, 0.03], vertical_alignment="center"
+    )
     with col_crest:
-        st.image(pg.CREST_PATH, width="stretch")
+        st.image(pg.CREST_PATH, width=52)
     with col_title:
         st.markdown(
-            '<div style="font-size:1.9rem;font-weight:800;line-height:1.15;">Vero Volley Milano</div>'
-            f'<div style="color:var(--muted);font-size:0.95rem;">Technical Staff · A1 Women\'s · Season {season}</div>',
+            '<div style="font-size:1.4rem;font-weight:800;line-height:1.15;">Vero Volley Milano</div>'
+            f'<div style="color:var(--muted);font-size:0.8rem;">Technical Staff · A1 Women\'s · Season {season}</div>',
             unsafe_allow_html=True,
         )
 
@@ -101,30 +103,30 @@ def _render_low_recovery(wellness: pd.DataFrame):
     with st.container(border=True):
         if below.empty:
             st.markdown(
-                '<div style="display:flex;align-items:center;gap:12px;">'
-                '<span style="font-size:1.8rem;">✅</span>'
-                f'<div><b style="color:{GOOD_COLOR};font-size:1.05rem;">Recovery on track</b><br>'
-                f'<span style="color:var(--muted);font-size:12.5px;">No player below threshold {RECOVERY_THRESHOLD} '
+                '<div style="display:flex;align-items:center;gap:9px;">'
+                '<span style="font-size:1.3rem;">✅</span>'
+                f'<div><b style="color:{GOOD_COLOR};font-size:0.92rem;">Recovery on track</b><br>'
+                f'<span style="color:var(--muted);font-size:11px;">No player below threshold {RECOVERY_THRESHOLD} '
                 f'on {last_date.strftime("%d/%m/%y")}</span></div></div>',
                 unsafe_allow_html=True,
             )
             return
 
         st.markdown(
-            '<div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">'
-            '<span style="font-size:1.8rem;">⚠️</span>'
-            f'<div><b style="color:{LOW_COLOR};font-size:1.05rem;">Low recovery</b><br>'
-            f'<span style="color:var(--muted);font-size:12.5px;">Below threshold {RECOVERY_THRESHOLD} '
+            '<div style="display:flex;align-items:center;gap:9px;margin-bottom:6px;">'
+            '<span style="font-size:1.3rem;">⚠️</span>'
+            f'<div><b style="color:{LOW_COLOR};font-size:0.92rem;">Low recovery</b><br>'
+            f'<span style="color:var(--muted);font-size:11px;">Below threshold {RECOVERY_THRESHOLD} '
             f'on {last_date.strftime("%d/%m/%y")}</span></div></div>',
             unsafe_allow_html=True,
         )
         rows = list(below.itertuples())
         rows_html = "".join(
-            f'<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 2px;'
+            f'<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 2px;'
             f'{"border-bottom:1px solid var(--line);" if i < len(rows) - 1 else ""}">'
-            f'<span style="font-weight:600;">{r.player_name}</span>'
+            f'<span style="font-weight:600;font-size:0.85rem;">{r.player_name}</span>'
             f'<span style="background:rgba(228,87,86,0.15);color:{LOW_COLOR};font-weight:700;'
-            f'border-radius:12px;padding:2px 11px;font-size:12.5px;">TQR {r.Tqr:.1f}</span></div>'
+            f'border-radius:10px;padding:1px 8px;font-size:11px;">TQR {r.Tqr:.1f}</span></div>'
             for i, r in enumerate(rows)
         )
         st.markdown(rows_html, unsafe_allow_html=True)
@@ -143,7 +145,7 @@ def _render_readiness_gauge(rpe: pd.DataFrame):
         fig = go.Figure(go.Indicator(
             mode="gauge+number",
             value=acwr,
-            number=dict(font=dict(size=42, color="#f2f2f2"), valueformat=".2f"),
+            number=dict(font=dict(size=30, color="#f2f2f2"), valueformat=".2f"),
             gauge=dict(
                 axis=dict(range=[0, 2], tickfont=dict(color="#9a9a9a")),
                 bar=dict(color="#ffffff", thickness=0.28),
@@ -156,7 +158,7 @@ def _render_readiness_gauge(rpe: pd.DataFrame):
                 ],
             ),
         ))
-        fig.update_layout(height=230, margin=dict(l=25, r=25, t=10, b=10), paper_bgcolor="rgba(0,0,0,0)")
+        fig.update_layout(height=170, margin=dict(l=20, r=20, t=5, b=5), paper_bgcolor="rgba(0,0,0,0)")
         st.plotly_chart(fig, width="stretch")
         st.caption(f"As of {ref_date.strftime('%d %b %Y')} · green 0.8–1.3 = sweet spot · red >1.5 = spike risk.")
 
@@ -171,8 +173,8 @@ def _render_league_position(season: str):
             return
 
         st.markdown(
-            f'<div style="font-size:3.2rem;font-weight:800;color:var(--accent);line-height:1;">#{us["pos"]}</div>'
-            f'<div style="color:var(--muted);font-size:0.9rem;margin-bottom:10px;">'
+            f'<div style="font-size:2.2rem;font-weight:800;color:var(--accent);line-height:1;">#{us["pos"]}</div>'
+            f'<div style="color:var(--muted);font-size:0.8rem;margin-bottom:6px;">'
             f'of {len(standings)} teams · {us["w"]}W–{us["l"]}L · {us["pts"]} pts</div>',
             unsafe_allow_html=True,
         )
@@ -188,9 +190,9 @@ def _render_league_position(season: str):
                 textfont=dict(color="#f2f2f2"),
             ))
             fig.update_layout(
-                height=130, margin=dict(l=10, r=50, t=5, b=5),
+                height=95, margin=dict(l=8, r=40, t=2, b=2),
                 xaxis=dict(visible=False, range=[0, max(us["pts"], other["pts"]) * 1.3]),
-                yaxis=dict(tickfont=dict(size=13)),
+                yaxis=dict(tickfont=dict(size=11)),
                 paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#f2f2f2",
             )
             st.plotly_chart(fig, width="stretch")
@@ -211,11 +213,11 @@ def _render_top_scorers():
         medals = ["🥇", "🥈", "🥉"]
         rows = list(ranked.itertuples())
         rows_html = "".join(
-            f'<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 2px;'
+            f'<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 2px;'
             f'{"border-bottom:1px solid var(--line);" if i < len(rows) - 1 else ""}">'
-            f'<span style="font-size:1.15rem;">{medals[i]}</span>'
-            f'<span style="flex:1;padding-left:10px;font-weight:700;font-size:1.05rem;">{r.Index}</span>'
-            f'<span style="color:var(--accent);font-weight:700;">{int(r.points)} pts</span>'
+            f'<span style="font-size:0.95rem;">{medals[i]}</span>'
+            f'<span style="flex:1;padding-left:8px;font-weight:700;font-size:0.88rem;">{r.Index}</span>'
+            f'<span style="color:var(--accent);font-weight:700;font-size:0.85rem;">{int(r.points)} pts</span>'
             f'</div>'
             for i, r in enumerate(rows)
         )
@@ -283,7 +285,7 @@ def _render_team_shape():
 
         top = max(max(upper, default=1.0), max(last_values, default=1.0)) * 1.1 or 1.5
         fig.update_layout(**dark_polar_layout([0, top]))
-        fig.update_layout(polar=dict(radialaxis=dict(showticklabels=False)), height=300, margin=dict(l=30, r=30, t=10, b=10))
+        fig.update_layout(polar=dict(radialaxis=dict(showticklabels=False)), height=220, margin=dict(l=20, r=20, t=5, b=5))
         st.plotly_chart(fig, width="stretch", theme=None)
         st.caption(
             "Team E% per fundamental, shifted +50pp onto the radial axis so negative E% still plots. "
@@ -310,18 +312,18 @@ def _render_recent_form():
                 color = cv.RESULT_COLORS[mc.result_points(m)]
                 st.markdown(
                     f'<div style="text-align:center">'
-                    f'<div style="width:22px;height:22px;border-radius:50%;background:{color};margin:0 auto 6px;"></div>'
-                    f'<div style="font-size:12px;color:var(--muted);">{cv.fmt_date(m["date"])}</div>'
-                    f'<div style="font-size:13px;font-weight:700;">{m["score"]}</div>'
+                    f'<div style="width:15px;height:15px;border-radius:50%;background:{color};margin:0 auto 4px;"></div>'
+                    f'<div style="font-size:10.5px;color:var(--muted);">{cv.fmt_date(m["date"])}</div>'
+                    f'<div style="font-size:11.5px;font-weight:700;">{m["score"]}</div>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
         with cols[-1]:
             wins = sum(1 for m in serie_a1 if mc.is_win(m))
             st.markdown(
-                f'<div style="text-align:center; padding-top:6px;">'
-                f'<div style="font-size:1.4rem;font-weight:800;">{wins}W – {len(serie_a1) - wins}L</div>'
-                f'<div style="font-size:12px;color:var(--muted);">season record</div>'
+                f'<div style="text-align:center; padding-top:4px;">'
+                f'<div style="font-size:1.1rem;font-weight:800;">{wins}W – {len(serie_a1) - wins}L</div>'
+                f'<div style="font-size:10.5px;color:var(--muted);">season record</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
@@ -343,7 +345,7 @@ def _extra_wellness_individual_tqr():
         )
         fig.add_hline(y=RECOVERY_THRESHOLD, line_dash="dash", line_color=LOW_COLOR)
         fig.update_layout(
-            height=340, margin=dict(l=10, r=10, t=10, b=10),
+            height=250, margin=dict(l=10, r=10, t=10, b=10),
             yaxis=dict(title="TQR", range=[6, 20], **tqr_yaxis_ticks()), legend_title_text="Player",
         )
         st.plotly_chart(fig, width="stretch")
@@ -371,7 +373,7 @@ def _extra_loads_acwr_chart():
         fig.update_layout(
             yaxis=dict(title="Weekly load (TL)"), yaxis2=dict(title="ACWR", overlaying="y", side="right", range=[0, top]),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
-            height=320, margin=dict(l=10, r=10, t=40, b=10),
+            height=240, margin=dict(l=10, r=10, t=40, b=10),
         )
         st.plotly_chart(fig, width="stretch")
 
@@ -390,7 +392,7 @@ def _extra_loads_jumps():
             color_discrete_map=pc.color_map(daily["player_name"].unique()),
             labels={"Data": "Date", "SALTI": "Jumps", "player_name": "Player"},
         )
-        fig.update_layout(legend_title_text="Player", height=320, margin=dict(l=10, r=10, t=10, b=10))
+        fig.update_layout(legend_title_text="Player", height=240, margin=dict(l=10, r=10, t=10, b=10))
         st.plotly_chart(fig, width="stretch")
 
 
@@ -410,7 +412,7 @@ def _extra_loads_rpe_by_role():
             category_orders={"Role": order}, color="Role", color_discrete_map=pg.ROLE_COLORS,
             labels={"Rpe": "RPE", "Role": ""},
         )
-        fig.update_layout(showlegend=False, height=280, margin=dict(l=0, r=10, t=10, b=10))
+        fig.update_layout(showlegend=False, height=210, margin=dict(l=0, r=10, t=10, b=10))
         st.plotly_chart(fig, width="stretch")
 
 
@@ -428,7 +430,7 @@ def _extra_loads_rpe_scatter():
             color_discrete_map=pc.color_map(d["player_name"].unique()),
             labels={"Time": "Duration (min)", "Rpe": "RPE"},
         )
-        fig.update_layout(showlegend=False, height=280, margin=dict(l=0, r=10, t=10, b=10))
+        fig.update_layout(showlegend=False, height=210, margin=dict(l=0, r=10, t=10, b=10))
         st.plotly_chart(fig, width="stretch")
 
 
@@ -449,7 +451,7 @@ def _extra_matches_score_patterns():
             x=[counts[s] for s in scores], y=scores, orientation="h",
             marker_color=[cv.RESULT_COLORS[_SCORE_POINTS.get(s, 0)] for s in scores],
         ))
-        fig.update_layout(height=260, margin=dict(l=10, r=10, t=10, b=10), xaxis_title="Matches", yaxis_title="")
+        fig.update_layout(height=200, margin=dict(l=10, r=10, t=10, b=10), xaxis_title="Matches", yaxis_title="")
         st.plotly_chart(fig, width="stretch")
 
 
@@ -472,7 +474,7 @@ def _extra_matches_per_month():
             labels={"month": "", "count": "Matches", "competition": ""},
         )
         fig.update_layout(
-            height=260, margin=dict(l=10, r=10, t=10, b=10),
+            height=200, margin=dict(l=10, r=10, t=10, b=10),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
         )
         st.plotly_chart(fig, width="stretch")
@@ -507,7 +509,7 @@ def _extra_scout_serve_outcome():
         color_map = {f"{nome} ({simbolo})": _OUTCOME_COLORS.get(simbolo, "#888888") for simbolo, nome, _ in legenda}
         fig = px.pie(d, names="Outcome", values="count", hole=0.5, color="Outcome", color_discrete_map=color_map)
         fig.update_traces(textinfo="percent+label")
-        fig.update_layout(height=320, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
+        fig.update_layout(height=240, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
         st.plotly_chart(fig, width="stretch")
 
 
@@ -532,7 +534,7 @@ def _extra_scout_team_profile_bar():
             labels={"E_pct": "Efficiency E%", "Fundamental": ""},
         )
         fig.update_layout(
-            coloraxis_showscale=False, xaxis_tickformat=".0%", height=260,
+            coloraxis_showscale=False, xaxis_tickformat=".0%", height=200,
             yaxis=dict(categoryorder="array", categoryarray=order_labels[::-1]),
             margin=dict(l=0, r=10, t=10, b=10),
         )
@@ -554,8 +556,9 @@ def render():
     wellness = data["wellness"]
 
     extra = _render_hero(season)
+    margin = 0.06
 
-    col_wellness, col_loads = st.columns(2)
+    _, col_wellness, col_loads, _ = st.columns([margin, 0.44, 0.44, margin])
     with col_wellness:
         _topic_label("Wellness")
         _render_low_recovery(wellness)
@@ -573,26 +576,33 @@ def render():
         if "loads_rpe_scatter" in extra:
             _extra_loads_rpe_scatter()
 
-    _topic_label("Matches")
-    col_league, col_form = st.columns(2)
+    _, mid, _ = st.columns([margin, 1 - 2 * margin, margin])
+    with mid:
+        _topic_label("Matches")
+    _, col_league, col_form, _ = st.columns([margin, 0.44, 0.44, margin])
     with col_league:
         _render_league_position(season)
     with col_form:
         _render_recent_form()
-    if "matches_score_patterns" in extra:
-        _extra_matches_score_patterns()
-    if "matches_per_month" in extra:
-        _extra_matches_per_month()
+    _, mid, _ = st.columns([margin, 1 - 2 * margin, margin])
+    with mid:
+        if "matches_score_patterns" in extra:
+            _extra_matches_score_patterns()
+        if "matches_per_month" in extra:
+            _extra_matches_per_month()
 
-    _topic_label("Scout & Stats")
-    col_scorers, col_shape = st.columns(2)
+    _, mid, _ = st.columns([margin, 1 - 2 * margin, margin])
+    with mid:
+        _topic_label("Scout & Stats")
+    _, col_scorers, col_shape, _ = st.columns([margin, 0.44, 0.44, margin])
     with col_scorers:
         _render_top_scorers()
     with col_shape:
         _render_team_shape()
-    if "scout_serve_outcome" in extra:
-        _extra_scout_serve_outcome()
-    if "scout_team_profile_bar" in extra:
-        _extra_scout_team_profile_bar()
-
-    _render_how_to()
+    _, mid, _ = st.columns([margin, 1 - 2 * margin, margin])
+    with mid:
+        if "scout_serve_outcome" in extra:
+            _extra_scout_serve_outcome()
+        if "scout_team_profile_bar" in extra:
+            _extra_scout_team_profile_bar()
+        _render_how_to()
