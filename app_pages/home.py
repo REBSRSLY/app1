@@ -553,15 +553,16 @@ def render():
     wellness = data["wellness"]
 
     extra = _render_hero(season)
-    margin = 0.06
+    margin = 0.03
+    col_w = (1 - 2 * margin) / 3
 
-    _, col_wellness, col_loads, _ = st.columns([margin, 0.44, 0.44, margin])
-    with col_wellness:
+    _, col_a, col_b, col_c, _ = st.columns([margin, col_w, col_w, col_w, margin])
+
+    with col_a:
         _topic_label("Wellness")
         _render_low_recovery(wellness)
         if "wellness_individual_tqr" in extra:
             _extra_wellness_individual_tqr()
-    with col_loads:
         _topic_label("Loads")
         _render_readiness_gauge(data["rpe"])
         if "loads_acwr_chart" in extra:
@@ -573,33 +574,24 @@ def render():
         if "loads_rpe_scatter" in extra:
             _extra_loads_rpe_scatter()
 
-    _, mid, _ = st.columns([margin, 1 - 2 * margin, margin])
-    with mid:
+    with col_b:
         _topic_label("Matches")
-    _, col_league, col_form, _ = st.columns([margin, 0.44, 0.44, margin])
-    with col_league:
         _render_league_position(season)
-    with col_form:
         _render_recent_form()
-    _, mid, _ = st.columns([margin, 1 - 2 * margin, margin])
-    with mid:
         if "matches_score_patterns" in extra:
             _extra_matches_score_patterns()
         if "matches_per_month" in extra:
             _extra_matches_per_month()
 
-    _, mid, _ = st.columns([margin, 1 - 2 * margin, margin])
-    with mid:
+    with col_c:
         _topic_label("Scout & Stats")
-    _, col_scorers, col_shape, _ = st.columns([margin, 0.44, 0.44, margin])
-    with col_scorers:
         _render_top_scorers()
-    with col_shape:
         _render_team_shape()
-    _, mid, _ = st.columns([margin, 1 - 2 * margin, margin])
-    with mid:
         if "scout_serve_outcome" in extra:
             _extra_scout_serve_outcome()
         if "scout_team_profile_bar" in extra:
             _extra_scout_team_profile_bar()
+
+    _, mid, _ = st.columns([margin, 1 - 2 * margin, margin])
+    with mid:
         _render_how_to()
