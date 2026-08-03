@@ -1,5 +1,3 @@
-from itertools import groupby
-
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -399,7 +397,14 @@ def render():
     st.session_state.setdefault("selected_player", "Orro")
     selected = st.session_state["selected_player"]
     stats = dl.load_player_stats()
-    groups = {role: list(g) for role, g in groupby(pg.ALL_PLAYERS, key=lambda p: p["role"])}
+    # A plain dict-append instead of itertools.groupby -- ALL_PLAYERS is no
+    # longer sorted by role (players_grid.GRID_ROWS interleaves a Libero at
+    # the end of each row for the Wellness page's 3x5 grid), and groupby
+    # only merges *consecutive* matching items, silently dropping all but
+    # the last same-role run otherwise.
+    groups: dict[str, list[dict]] = {}
+    for p in pg.ALL_PLAYERS:
+        groups.setdefault(p["role"], []).append(p)
 
     # Grid gets more than half the width: the Setter/Opposite boxes each
     # only fit 2 cards side by side, so per-card space is tighter there than
