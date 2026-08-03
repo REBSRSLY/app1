@@ -32,6 +32,34 @@ PARAM_RANGE = {
     "Fatica": (1, 5), "Sonno": (1, 5), "Doms": (1, 5),
     "Stress": (1, 5), "Mood": (1, 5), "Tqr": (6, 20),
 }
+# Short description of each of the 5 daily self-reported items -- all rated
+# 1-5 with high = worse (see NEGATIVE_PARAMS above), shown in the intro
+# expander so a new reader doesn't have to guess what each icon/label means.
+PARAM_DESCRIPTIONS = {
+    "Fatica": "Overall tiredness reported that day. 1 = fresh, 5 = exhausted.",
+    "Sonno": "Sleep quality the night before. 1 = great sleep, 5 = poor/disturbed sleep.",
+    "Doms": "Delayed-onset muscle soreness from recent training. 1 = none, 5 = severe.",
+    "Stress": "Perceived mental/emotional stress. 1 = relaxed, 5 = very stressed.",
+    "Mood": "General mood. 1 = great mood, 5 = very low mood.",
+}
+
+
+def _render_how_to():
+    with st.expander("How to read this page", icon=":material/menu_book:"):
+        st.markdown(
+            "**TQR (Total Quality Recovery)** is a self-reported recovery score on a "
+            f"6–20 scale, higher = better recovered. The club treats **{RECOVERY_THRESHOLD} "
+            f"and above as optimal recovery** — a value below {RECOVERY_THRESHOLD} means the "
+            "player hasn't bounced back enough since her last session, and is the trigger "
+            "for the Home page's low-recovery alert."
+        )
+        st.markdown("**The 5 daily wellness items** (each rated 1–5 by the player):")
+        for p in NEGATIVE_PARAMS:
+            st.markdown(f"**{WELLNESS_ICONS[p]} {PARAM_LABELS[p]}** — {PARAM_DESCRIPTIONS[p]}")
+        st.caption(
+            "All 5 items are \"high = worse\" as reported, but every chart on this page "
+            "inverts them so bigger always reads as better, consistent with TQR."
+        )
 
 
 def _player_role_map() -> dict[str, str]:
@@ -132,53 +160,27 @@ def _render_player_radar(p_period, use_icons=False, height=None, show_caption=Fa
 
 
 def _render_team_tqr_trend(period: pd.DataFrame):
-    """Team-average TQR per day, with a band showing how spread out players'
-    individual TQR values are that day (not day-to-day noise in the average
-    -- a wide band means the squad's readiness is uneven that day, a narrow
-    one means everyone's in a similar place) and the recovery threshold
-    marked. A trend line is the natural read for "is the team's readiness
-    holding up over this period", which none of the per-player or
-    per-parameter snapshots above actually show."""
-    daily = period.groupby("Data")["Tqr"].agg(["mean", "std", "count"]).reset_index()
-    daily = daily[daily["count"] > 0].sort_values("Data")
+    """Team-average TQR per day against the recovery threshold -- the y-axis
+    ticks themselves are colored (red below, yellow at, green above the
+    threshold) so the read doesn't depend on spotting the dashed line."""
+    daily = period.groupby("Data")["Tqr"].mean().reset_index().dropna(subset=["Tqr"]).sort_values("Data")
     if daily.empty:
         st.info("No wellness data in this date range.")
         return
-    daily["std"] = daily["std"].fillna(0)
-    # The raw daily std swings a lot with how many players reported that
-    # day, which makes the band's edges jagged enough to obscure the trend
-    # -- a light 3-day rolling smooth on the band only (not the mean line
-    # itself) keeps it readable as a corridor instead of noise.
-    band = daily["std"].rolling(3, min_periods=1, center=True).mean()
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(
-        x=daily["Data"], y=daily["mean"] + band, mode="lines", line=dict(width=0),
-        showlegend=False, hoverinfo="skip",
-    ))
-    fig.add_trace(go.Scatter(
-        x=daily["Data"], y=daily["mean"] - band, mode="lines", fill="tonext", line=dict(width=0),
-        fillcolor="rgba(46,204,113,0.18)", name="Spread across players (±1 std dev)", hoverinfo="skip",
-    ))
-    fig.add_trace(go.Scatter(
-        x=daily["Data"], y=daily["mean"], mode="lines+markers", name="Team average TQR",
+        x=daily["Data"], y=daily["Tqr"], mode="lines+markers", name="Team average TQR",
         line=dict(color="#2ecc71", width=2),
     ))
-    fig.add_hline(
-        y=RECOVERY_THRESHOLD, line_dash="dash", line_color=LOW_COLOR,
-        annotation_text=f"Recovery threshold ({RECOVERY_THRESHOLD})", annotation_position="bottom right",
-        annotation_font=dict(color=LOW_COLOR, size=11),
-    )
+    fig.add_hline(y=RECOVERY_THRESHOLD, line_dash="dash", line_color=LOW_COLOR)
     fig.update_layout(
-        height=280, margin=dict(l=10, r=10, t=30, b=10),
-        yaxis=dict(title="TQR", range=[6, 20]), xaxis_title=None,
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
+        height=280, margin=dict(l=10, r=10, t=10, b=10),
+        yaxis=dict(title="TQR", range=[6, 20], **tqr_yaxis_ticks()), xaxis_title=None,
+        showlegend=False,
     )
     st.plotly_chart(fig, width="stretch")
-    st.caption(
-        "Solid line = team average TQR per day. Shaded band = how spread out players' individual TQR "
-        "values are that day (±1 std dev), not noise in the average. Dashed line = recovery threshold."
-    )
+    st.caption(f"Team average TQR per day. Dashed line = recovery threshold ({RECOVERY_THRESHOLD}).")
 
 
 def _render_individual_tqr_trends(period: pd.DataFrame):
@@ -209,14 +211,26 @@ def _render_individual_tqr_trends(period: pd.DataFrame):
     st.caption(f"Individual TQR per day, one line per player. Dashed line = recovery threshold ({RECOVERY_THRESHOLD}).")
 
 
+def _player_card_border_css() -> str:
+    """Colors each "All players" card border with that player's own color
+    (the same hue used everywhere else in the app) via the st-key trick --
+    st.container(border=True) has no color parameter of its own."""
+    rules = [
+        f'[class*="st-key-wellness_card_{p["surname"]}"] {{ border-color: {pc.color_for(p["surname"])} !important; }}'
+        for p in pg.ALL_PLAYERS
+    ]
+    return f"<style>{''.join(rules)}</style>"
+
+
 def render():
     wellness = dl.load_wellness_data()["wellness"]
     period = filters.filter_by_date_col(wellness)
 
-    col_team, col_player = st.columns(2)
+    _render_how_to()
 
     role_map = _player_role_map()
 
+    col_team, col_team_trend = st.columns([0.38, 0.62])
     with col_team:
         with st.container(border=True):
             st.markdown("**Team · by parameter**")
@@ -292,7 +306,12 @@ def render():
                 if is_negative:
                     caption = "Axis inverted so bigger = better. " + caption
                 st.caption(caption)
+    with col_team_trend:
+        with st.container(border=True):
+            st.markdown("**Team TQR** · trend over time")
+            _render_team_tqr_trend(period)
 
+    col_player, col_ind_trend = st.columns([0.38, 0.62])
     with col_player:
         with st.container(border=True):
             st.markdown("**Individual player**")
@@ -303,26 +322,19 @@ def render():
             tqr_avg = _render_player_radar(p_period, show_caption=True)
             if tqr_avg is None:
                 st.info("No data for this player in this date range.")
-
-    with st.container(border=True):
-        st.markdown("**Team TQR** · trend over time")
-        _render_team_tqr_trend(period)
-
-    with st.container(border=True):
-        st.markdown("**Individual TQR** · trend over time")
-        _render_individual_tqr_trends(period)
+    with col_ind_trend:
+        with st.container(border=True):
+            st.markdown("**Individual TQR** · trend over time")
+            _render_individual_tqr_trends(period)
 
     st.write("---")
     st.markdown("**All players**")
+    st.markdown(_player_card_border_css(), unsafe_allow_html=True)
     for row in pg.GRID_ROWS:
-        cols = st.columns(4)
+        cols = st.columns(5)
         for col, player in zip(cols, row):
             with col:
-                if player is None:
-                    with st.container(border=True):
-                        st.image(pg.CREST_PATH, width="stretch")
-                    continue
-                with st.container(border=True):
+                with st.container(border=True, key=f"wellness_card_{player['surname']}"):
                     st.caption(player["last"])
                     p_period = period[period["player_name"] == player["surname"]]
                     tqr_avg = _render_player_radar(

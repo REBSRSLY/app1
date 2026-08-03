@@ -1,10 +1,11 @@
-"""Fixed 4x4 roster grid for the Players page (photo + role + season stats).
-
-Layout is by role, not starter/bench (unlike roster.py, which the Lineups
-page still uses): row 1 = Setters + Opposites, row 2 = Outside Hitters,
-row 3 = Middle Blockers, row 4 = Liberos + the club crest. Role assignment
-for all 15 players (including Heyrman and Daalderop, who only exist as
-another player's "alt" in roster.py) comes from data_loader.load_player_roles(),
+"""Fixed 3x5 roster grid for the Wellness page's "All players" section
+(photo/name + per-player recovery radar). Layout is by role, not
+starter/bench (unlike roster.py, which the Lineups page still uses):
+row 1 = Setters + Opposites, row 2 = Outside Hitters, row 3 = Middle
+Blockers -- each row ending with one of the 3 Liberos, so all 15 players
+fill the grid exactly with no empty slot. Role assignment for all 15
+players (including Heyrman and Daalderop, who only exist as another
+player's "alt" in roster.py) comes from data_loader.load_player_roles(),
 which reads the real Anagrafica sheet.
 """
 
@@ -30,24 +31,21 @@ GRID_ROWS = [
         {"first": "Vittoria", "last": "Prandi", "surname": "Prandi", "role": "Setter", "number": 11},
         {"first": "Paola", "last": "Egonu", "surname": "Egonu", "role": "Opposite", "number": 18},
         {"first": "Adhouljok", "last": "Malual", "surname": "Malual", "role": "Opposite", "number": 3},
+        {"first": "Brenda", "last": "Castillo", "surname": "Castillo", "role": "Libero", "number": 55},
     ],
     [
         {"first": "Myriam", "last": "Sylla", "surname": "Sylla", "role": "Outside Hitter", "number": 17},
         {"first": "Helena", "last": "Cazaute", "surname": "Cazaute", "role": "Outside Hitter", "number": 1},
         {"first": "Nika", "last": "Daalderop", "surname": "Daalderop", "role": "Outside Hitter", "number": 19},
         {"first": "Kara", "last": "Bajema", "surname": "Bajema", "role": "Outside Hitter", "number": 15},
+        {"first": "Beatrice", "last": "Parrocchiale", "surname": "Parrocchiale", "role": "Libero", "number": 23},
     ],
     [
         {"first": "Raphaela", "last": "Folie", "surname": "Folie", "role": "Middle Blocker", "number": 7},
         {"first": "Laura", "last": "Heyrman", "surname": "Heyrman", "role": "Middle Blocker", "number": 5},
         {"first": "Dana", "last": "Rettke", "surname": "Rettke", "role": "Middle Blocker", "number": 14},
         {"first": "Sonia", "last": "Candi", "surname": "Candi", "role": "Middle Blocker", "number": 28},
-    ],
-    [
-        {"first": "Brenda", "last": "Castillo", "surname": "Castillo", "role": "Libero", "number": 55},
-        {"first": "Beatrice", "last": "Parrocchiale", "surname": "Parrocchiale", "role": "Libero", "number": 23},
         {"first": "Teodora", "last": "Pusic", "surname": "Pusic", "role": "Libero", "number": 12},
-        None,  # club crest, not a player
     ],
 ]
 
