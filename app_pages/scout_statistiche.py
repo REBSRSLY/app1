@@ -976,6 +976,8 @@ def _render_raw_sheet(scout: pd.DataFrame):
                 table[label] = block[col]
                 if label in RAW_PERCENT_COLUMNS:
                     column_config[label] = st.column_config.NumberColumn(label, format="percent")
+                else:
+                    column_config[label] = st.column_config.NumberColumn(label, format="%d")
 
         # Each row's text colored by the athlete's assigned color (same
         # hue as every other chart in the app); the team row instead
