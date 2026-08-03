@@ -129,8 +129,8 @@ def _render_team_profile(scoped: pd.DataFrame, metric_label: str):
 
     metric_col, axis_label, is_pct = TEAM_PROFILE_METRICS[metric_label]
     present = [f for f in dl.FONDAMENTALE_ORDER if f in set(team["fondamentale"])]
-    order_labels = [dl.FONDAMENTALE_LABELS[f] for f in present]
-    team["Fundamental"] = team["fondamentale"].map(dl.FONDAMENTALE_LABELS)
+    order_labels = [dl.FONDAMENTALE_ABBR[f] for f in present]
+    team["Fundamental"] = team["fondamentale"].map(dl.FONDAMENTALE_ABBR)
 
     if metric_col == "E_pct":
         # Only E% is a diverging (can-go-negative) measure -- the others
@@ -181,7 +181,7 @@ def _render_team_radar(scoped: pd.DataFrame):
         st.info("Not enough fundamentals in this scope for a radar.")
         return
 
-    labels = [dl.FONDAMENTALE_LABELS[f] for f in present]
+    labels = [dl.FONDAMENTALE_ABBR[f] for f in present]
     perfect_vals = [team.loc[team["fondamentale"] == f, "Perfect_pct"].iloc[0] for f in present]
     err_vals = [team.loc[team["fondamentale"] == f, "Err_pct"].iloc[0] for f in present]
     top = max(max(perfect_vals, default=0), max(err_vals, default=0)) * 1.2 or 1.0

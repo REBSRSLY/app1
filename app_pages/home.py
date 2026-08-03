@@ -275,7 +275,7 @@ def _render_team_shape():
             st.caption("Not enough data in this scope for a radar.")
             return
 
-        labels = [dl.FONDAMENTALE_LABELS[f] for f in present]
+        labels = [dl.FONDAMENTALE_ABBR[f] for f in present]
         agg = d.groupby("fondamentale")["E_pct"].agg(["mean", "std"]).reindex(present)
         d["pdate"] = pd.to_datetime(d["match"].apply(mc.parsed_date))
         last_date = d["pdate"].max()
@@ -557,8 +557,8 @@ def _extra_scout_team_profile_bar():
         if not present:
             st.info("No season data yet.")
             return
-        order_labels = [dl.FONDAMENTALE_LABELS[f] for f in present]
-        team["Fundamental"] = team["fondamentale"].map(dl.FONDAMENTALE_LABELS)
+        order_labels = [dl.FONDAMENTALE_ABBR[f] for f in present]
+        team["Fundamental"] = team["fondamentale"].map(dl.FONDAMENTALE_ABBR)
         fig = px.bar(
             team, x="E_pct", y="Fundamental", orientation="h",
             category_orders={"Fundamental": order_labels},

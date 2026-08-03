@@ -1,4 +1,4 @@
-"""Competition boxes + month-grid calendar + standings table for the Matches page.
+"""Competition boxes + standings table for the Matches page.
 
 Plain HTML/CSS (no extra dependency), styled to match the app's dark theme
 (styles.py CSS variables) rather than introducing a second design language.
@@ -6,88 +6,17 @@ Plain HTML/CSS (no extra dependency), styled to match the app's dark theme
 
 from __future__ import annotations
 
-import calendar as _calendar
-
 import match_calendar as mc
 
 MONTH_NAMES = [
     "", "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December",
 ]
-WEEKDAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 # Same win-margin colour scale everywhere a result is shown (box rows,
 # standings "last 5" dots): 3pt = clear win, 2pt = tie-break win,
 # 1pt = tie-break loss, 0pt = clear loss.
 RESULT_COLORS = {3: "#2E7D32", 2: "#8BC34A", 1: "#FFA726", 0: "#E53935"}
-
-CALENDAR_CSS = """
-<style>
-    .cal-legend { display:flex; flex-wrap:wrap; gap:14px; margin-bottom:14px; font-size:12.5px; color:var(--muted); }
-    .cal-legend-item { display:flex; align-items:center; gap:6px; }
-    .cal-legend-swatch { width:10px; height:10px; border-radius:3px; display:inline-block; }
-    .cal-grid { display:grid; grid-template-columns: repeat(7, 1fr); gap:5px; margin-bottom:4px; }
-    .cal-weekday { text-align:center; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.04em; padding-bottom:6px; }
-    .cal-day { border:1px solid var(--line); border-radius:7px; min-height:52px; padding:4px 5px; background:var(--surface); }
-    .cal-day.cal-empty { border:none; background:transparent; }
-    .cal-daynum { font-size:11px; color:var(--muted); margin-bottom:3px; font-weight:600; }
-    .cal-event { font-size:10px; line-height:1.25; border-radius:4px; padding:1px 5px; margin-bottom:2px; color:#ffffff; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .cal-jump-dot { display:inline-block; width:7px; height:7px; border-radius:50%; margin-top:2px; }
-</style>
-"""
-
-
-def render_legend() -> str:
-    items = "".join(
-        f'<div class="cal-legend-item"><span class="cal-legend-swatch" '
-        f'style="background:{c["color"]}"></span>{c["label"]}</div>'
-        for c in mc.COMPETITIONS.values()
-    )
-    return f'<div class="cal-legend">{items}</div>'
-
-
-def _events_for_month(matches: list[dict], year: int, month: int) -> dict[int, list[dict]]:
-    events: dict[int, list[dict]] = {}
-    for m in matches:
-        d = m["pdate"]
-        if d.year != year or d.month != month:
-            continue
-        comp = mc.COMPETITIONS[m["competition"]]
-        events.setdefault(d.day, []).append({
-            "color": comp["color"],
-            "title": f"{m['opponent']} {m['score']}",
-        })
-    return events
-
-
-def render_month_calendar(matches: list[dict], year: int, month: int, salti_dates: list) -> str:
-    """`matches` is a list of match dicts that already carry a parsed `pdate`."""
-    events = _events_for_month(matches, year, month)
-    jump_days = {d.day for d in salti_dates if d.year == year and d.month == month}
-
-    weeks = _calendar.Calendar(firstweekday=0).monthdayscalendar(year, month)
-    header = "".join(f'<div class="cal-weekday">{w}</div>' for w in WEEKDAY_NAMES)
-
-    cells = []
-    for week in weeks:
-        for day in week:
-            if day == 0:
-                cells.append('<div class="cal-day cal-empty"></div>')
-                continue
-            pills = "".join(
-                f'<div class="cal-event" style="background:{e["color"]}" title="{e["title"]}">{e["title"]}</div>'
-                for e in events.get(day, [])
-            )
-            jump_dot = ""
-            if day in jump_days:
-                jump_dot = (
-                    f'<span class="cal-jump-dot" style="background:{mc.COMPETITIONS["Jump session"]["color"]}" '
-                    f'title="Jump session"></span>'
-                )
-            cells.append(f'<div class="cal-day"><div class="cal-daynum">{day} {jump_dot}</div>{pills}</div>')
-
-    return f'<div class="cal-grid">{header}{"".join(cells)}</div>'
-
 
 # ---------------------------------------------------------------------------
 # Per-competition boxes

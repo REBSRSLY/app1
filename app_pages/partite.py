@@ -6,7 +6,6 @@ import plotly.graph_objects as go
 import streamlit as st
 
 import calendar_view as cv
-import data_loader as dl
 import filters
 import match_calendar as mc
 
@@ -79,13 +78,15 @@ def _render_by_competition(season: str, matches: list[dict]):
                     st.markdown(cv.render_competition_box(comp, matches), unsafe_allow_html=True)
 
 
-def _render_month_distribution(season_matches: list[dict]):
-    """Matches per month, stacked by competition -- context for which
-    months are worth picking below."""
-    if not season_matches:
+def _render_month_distribution(matches: list[dict]):
+    """Matches per month, stacked by competition -- scoped to the active
+    period like everything else in this section (used to be the whole
+    season regardless of period, back when this lived in its own "Full
+    calendar" section)."""
+    if not matches:
         return
 
-    df = pd.DataFrame(season_matches)
+    df = pd.DataFrame(matches)
     order = sorted({(d.year, d.month) for d in df["pdate"]})
     order_labels = [f"{cv.MONTH_NAMES[m][:3]} {y}" for y, m in order]
     df["month"] = df["pdate"].apply(lambda d: f"{cv.MONTH_NAMES[d.month][:3]} {d.year}")
@@ -97,28 +98,8 @@ def _render_month_distribution(season_matches: list[dict]):
         color_discrete_map={k: v["color"] for k, v in mc.COMPETITIONS.items()},
         labels={"month": "", "count": "Matches", "competition": ""},
     )
-    fig.update_layout(height=170, margin=dict(l=10, r=10, t=10, b=10), legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0))
+    fig.update_layout(height=200, margin=dict(l=10, r=10, t=10, b=10), legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0))
     st.plotly_chart(fig, width="stretch")
-
-
-def _render_full_calendar(season: str, season_matches: list[dict]):
-    st.markdown(cv.CALENDAR_CSS, unsafe_allow_html=True)
-
-    st.markdown("**Matches per month**")
-    _render_month_distribution(season_matches)
-
-    st.markdown(cv.render_legend(), unsafe_allow_html=True)
-
-    salti_dates = sorted(dl.load_wellness_data()["salti"]["Data"].dt.date.unique())
-    months = mc.season_months(season)
-    if not months:
-        st.info("No matches to show on the calendar for this season.")
-        return
-
-    labels = [f"{cv.MONTH_NAMES[m]} {y}" for y, m in months]
-    picked = st.selectbox("Month", options=list(range(len(months))), format_func=lambda i: labels[i], key=f"month_{season}")
-    year, month = months[picked]
-    st.markdown(cv.render_month_calendar(season_matches, year, month, salti_dates), unsafe_allow_html=True)
 
 
 def _render_score_distribution(matches: list[dict]):
@@ -131,7 +112,7 @@ def _render_score_distribution(matches: list[dict]):
         x=[counts[s] for s in scores], y=scores, orientation="h",
         marker_color=[cv.RESULT_COLORS[_SCORE_POINTS.get(s, 0)] for s in scores],
     ))
-    fig.update_layout(height=210, margin=dict(l=10, r=10, t=10, b=10), xaxis_title="Matches", yaxis_title="")
+    fig.update_layout(height=200, margin=dict(l=10, r=10, t=10, b=10), xaxis_title="Matches", yaxis_title="")
     st.plotly_chart(fig, width="stretch")
 
 
@@ -140,8 +121,17 @@ def _render_all_matches(matches: list[dict]):
         st.info("No matches for this selection.")
         return
 
-    st.markdown("**Score patterns**")
-    _render_score_distribution(matches)
+    # Score patterns + Matches per month side by side, narrower and the
+    # same height, above the search box -- Month used to be a whole
+    # separate "Full calendar" section on the full season regardless of
+    # period; folded in here so both charts read the same active scope.
+    col_score, col_month = st.columns(2)
+    with col_score:
+        st.markdown("**Score patterns**")
+        _render_score_distribution(matches)
+    with col_month:
+        st.markdown("**Matches per month**")
+        _render_month_distribution(matches)
 
     df = pd.DataFrame(matches).sort_values("date")
     df["Date"] = df["date"].apply(cv.fmt_date)
@@ -168,7 +158,7 @@ def _render_all_matches(matches: list[dict]):
     )
 
 
-SECTIONS = ["By competition", "Full calendar", "All matches"]
+SECTIONS = ["By competition", "All matches"]
 
 
 def render():
@@ -184,9 +174,5 @@ def render():
 
     if section == "By competition":
         _render_by_competition(season, scoped_matches)
-    elif section == "Full calendar":
-        comp = filters.competition()
-        calendar_matches = season_matches if comp == filters.ALL_COMPETITIONS else [m for m in season_matches if m["competition"] == comp]
-        _render_full_calendar(season, calendar_matches)
     else:
         _render_all_matches(scoped_matches)

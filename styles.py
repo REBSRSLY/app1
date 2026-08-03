@@ -4,6 +4,21 @@ import streamlit as st
 
 CUSTOM_CSS = """
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@700&display=swap');
+
+        /* Every chart/section title in the app follows the same
+           "**Title** · subtitle" markdown convention -- the leading bold
+           phrase in a markdown block is the title, so giving it a
+           distinct, recognizable font (rather than the body's default)
+           makes titles pop consistently everywhere without having to
+           touch every individual st.markdown() call. Scoped to
+           <strong>, not <b>, since raw-HTML stat displays (TQR pills,
+           scores, etc.) use <b> and are deliberately left alone. */
+        [data-testid="stMarkdownContainer"] > p > strong:first-child {
+            font-family: 'Roboto', sans-serif;
+            font-weight: 700;
+        }
+
         /* General variables and styles. --accent/--accent-2 are the club
            logo's own blue/red, used for the nav bar, buttons and other
            brand chrome (charts keep their own established per-role/

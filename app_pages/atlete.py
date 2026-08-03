@@ -96,6 +96,12 @@ BASE_CARD_CSS = """
     }
     .overview-name { font-size: 1.2rem; font-weight: 700; }
     .overview-role { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    /* Breathing room between the overview panel's stacked charts (Efficiency
+       + Index in Performance view) -- they were butted directly against
+       each other with no gap. */
+    .st-key-player_overview_box [data-testid="stPlotlyChart"] {
+        margin-bottom: 14px;
+    }
 </style>
 """
 
@@ -221,9 +227,9 @@ def _performance_bar(recent: pd.DataFrame, value_col: str, title: str, color: st
         st.info(f"No {title.lower()} data in the last {RECENT_MATCHES_N} matches.")
         return
 
-    agg["Fundamental"] = agg["fondamentale"].map(dl.FONDAMENTALE_LABELS)
+    agg["Fundamental"] = agg["fondamentale"].map(dl.FONDAMENTALE_ABBR)
     order = _ordered_fundamentals(set(agg["fondamentale"]))
-    order_labels = [dl.FONDAMENTALE_LABELS[f] for f in order]
+    order_labels = [dl.FONDAMENTALE_ABBR[f] for f in order]
 
     fig = px.bar(
         agg, x="mean", y="Fundamental", orientation="h", error_x="std",
@@ -379,7 +385,7 @@ def _render_overview(surname: str):
     color = pc.color_for(surname)
     stats = dl.load_player_stats()
 
-    with st.container(border=True):
+    with st.container(border=True, key="player_overview_box"):
         col_photo, col_info = st.columns([0.8, 2.2])
         with col_photo:
             st.image(pg.photo_path(player), width="stretch")
@@ -423,11 +429,11 @@ def render():
     for p in pg.ALL_PLAYERS:
         groups.setdefault(p["role"], []).append(p)
 
-    # Grid gets more than half the width: the Setter/Opposite boxes each
-    # only fit 2 cards side by side, so per-card space is tighter there than
-    # in the 4-card rows -- a wider grid column is what keeps every card
-    # readable instead of being squeezed by the overview panel next to it.
-    col_grid, col_overview = st.columns([3, 2])
+    # Narrower than the overview panel now (was the other way round) --
+    # the detail charts need the room more than the roster cards do, and
+    # BASE_CARD_CSS's min-width:92px keeps cards from getting unreadably
+    # squeezed even in the tighter 2-card Setter/Opposite rows.
+    col_grid, col_overview = st.columns([2, 3])
 
     with col_grid:
         # Row 1: Setter + Opposite side by side, in separate boxes (2 cards

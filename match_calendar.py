@@ -169,16 +169,3 @@ def matches_for_season(season: str) -> list[dict]:
     return [{**m, "pdate": parsed_date(m["date"])} for m in SEASON_MATCHES.get(season, [])]
 
 
-def season_months(season: str) -> list[tuple[int, int]]:
-    """Chronological (year, month) pairs spanning the season's matches."""
-    matches = matches_for_season(season)
-    if not matches:
-        return []
-    dates = sorted(m["pdate"] for m in matches)
-    months, seen = [], set()
-    for d in dates:
-        key = (d.year, d.month)
-        if key not in seen:
-            seen.add(key)
-            months.append(key)
-    return months
