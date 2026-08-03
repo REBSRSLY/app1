@@ -300,10 +300,25 @@ def _render_team_profile_section(scoped: pd.DataFrame, scout: pd.DataFrame):
 
 def _render_how_to_expander(fond_sel: str, fond_label: str):
     legenda = dl.legenda_fondamentale(fond_sel)
-    if legenda:
-        with st.expander(f"How to read \"{fond_label}\"", icon=":material/menu_book:"):
-            for simbolo, nome, descrizione in legenda:
-                st.markdown(f"**{simbolo}** · {nome} — {descrizione}")
+    formule = dl.formula_fondamentale(fond_sel)
+    if not legenda and not formule:
+        return
+    with st.expander(f"How to read \"{fond_label}\"", icon=":material/menu_book:"):
+        for simbolo, nome, descrizione in legenda:
+            st.markdown(f"**{simbolo}** · {nome} — {descrizione}")
+        if formule:
+            st.markdown("---")
+            st.markdown(f"**E%** = `{formule['e_pct']}`")
+            if formule["ind_kind"] == "rate":
+                st.markdown(
+                    f"**Ind** = `{formule['ind']}` — a 0–10 rate of how often the "
+                    f"outcome is perfect (#), *not* a weighted average across all grades."
+                )
+            else:
+                st.markdown(
+                    f"**Ind** = `{formule['ind']}` — a 0–100 weighted average across "
+                    f"all 6 grades, higher weight = better outcome."
+                )
 
 
 def _render_outcome_distribution(base: pd.DataFrame, fond_sel: str, player_order: list[str]):

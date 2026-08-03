@@ -190,6 +190,64 @@ GLOSSARIO = {
 GLOSSARIO["Att dopo Ricez"] = GLOSSARIO["Attacco"]
 GLOSSARIO["Contrattacco"] = GLOSSARIO["Attacco"]
 
+# ---------------------------------------------------------------------------
+# E% and Ind formulas, reverse-engineered from a season's worth of real scout
+# rows (regression + exhaustive small-integer weight search against the
+# actual Ind/E_pct columns -- these aren't computed by this app, they come
+# straight from the Data Volley export, see SCOUT_COLS above). Verified to
+# within rounding noise (E%: max 0.005 on a value stored to 2 decimals;
+# Ind: exact or off-by-1 on a small share of very-low-Tot rows).
+#
+# "weighted": Ind is a 0-100 weighted average across all 6 grades (higher
+# weight = better outcome) -- fundamentals with a genuine quality spectrum.
+# "rate": Ind is just round(10 * # / Tot), a 0-10 "how often is it a
+# perfect" rate -- fundamentals where only the best outcome is tracked.
+# ---------------------------------------------------------------------------
+FORMULE = {
+    "Battuta": {
+        "e_pct": "(# − =) / Tot",
+        "ind": "(100·# + 71·/ + 46·+ + 39·! + 33·−) / Tot",
+        "ind_kind": "weighted",
+    },
+    "Ricezione": {
+        "e_pct": "(# + + − / − =) / Tot",
+        "ind": "(71·# + 67·+ + 61·! + 54·− + 29·/) / Tot",
+        "ind_kind": "weighted",
+    },
+    "Attacco": {
+        "e_pct": "(# − / − =) / Tot",
+        "ind": "(100·# + 71·+ + 58·! + 48·−) / Tot",
+        "ind_kind": "weighted",
+    },
+    "Muro": {
+        "e_pct": "(# + + + ! − / − =) / Tot",
+        "ind": "round(10 × # / Tot)",
+        "ind_kind": "rate",
+    },
+    "Difesa": {
+        "e_pct": "(# + + + !) / Tot",
+        "ind": "round(10 × # / Tot)",
+        "ind_kind": "rate",
+    },
+    "Free ball": {
+        "e_pct": "(# + + − / − =) / Tot",
+        "ind": "round(10 × # / Tot)",
+        "ind_kind": "rate",
+    },
+    "Alzata": {
+        "e_pct": "(# + + − / − =) / Tot",
+        "ind": "round(10 × # / Tot)",
+        "ind_kind": "rate",
+    },
+}
+FORMULE["Att dopo Ricez"] = FORMULE["Attacco"]
+FORMULE["Contrattacco"] = FORMULE["Attacco"]
+
+
+def formula_fondamentale(fondamentale: str) -> dict:
+    """E%/Ind formula info for the given fundamental (see FORMULE above)."""
+    return FORMULE.get(fondamentale, {})
+
 
 def perfetto_label(fondamentale: str) -> str:
     """Name of the best outcome (symbol '#') for the given fundamental."""
