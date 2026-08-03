@@ -387,7 +387,8 @@ def render():
                         tqr_html = f'<span style="color:{tqr_color};font-weight:700;">{tqr_avg:.1f}</span>'
                     st.markdown(
                         '<div style="display:flex;justify-content:space-between;align-items:baseline;">'
-                        f'<span style="font-weight:800;font-size:1.05rem;text-transform:uppercase;'
+                        f'<span style="font-family:var(--display);font-weight:700;font-size:1.05rem;'
+                        f'text-transform:uppercase;letter-spacing:0.02em;'
                         f'color:{name_color};">{player["last"]}</span>{tqr_html}</div>',
                         unsafe_allow_html=True,
                     )

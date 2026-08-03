@@ -182,7 +182,7 @@ def _apply_match_pick():
     st.session_state["flt_has_end"] = False
 
 
-LOGO_WHITE_PATH = "Volley graphic design/logo_white.png"
+LOGO_WHITE_PATH = "Volley graphic design/image-removebg-preview (16) (1).png"
 
 
 def render_sidebar_tools():
@@ -195,6 +195,7 @@ def render_sidebar_tools():
     with col_brand:
         st.markdown('<div class="brand-title">Vero Volley Milano</div>', unsafe_allow_html=True)
         st.markdown('<div class="brand-subtitle">Technical Staff · A1 Women\'s</div>', unsafe_allow_html=True)
+    st.markdown('<div class="brand-stripe"></div>', unsafe_allow_html=True)
 
     st.selectbox("Season", mc.SEASONS, key="flt_season", on_change=_on_season_change)
     st.selectbox("Competition", [ALL_COMPETITIONS] + mc.COMPETITION_ORDER, key="flt_competition")

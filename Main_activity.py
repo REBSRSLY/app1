@@ -80,7 +80,11 @@ NAV_CSS = """
     [class*="st-key-topnav_"] button {
         border: 2px solid var(--accent) !important;
         border-radius: 8px !important;
-        font-weight: 600;
+        font-family: var(--display);
+        font-weight: 700;
+        font-size: 13.5px !important;
+        text-transform: uppercase;
+        letter-spacing: 0.01em;
     }
     [class*="st-key-topnav_"] button[kind="primary"] {
         background: linear-gradient(90deg, var(--accent) 0%, var(--accent-2) 100%) !important;

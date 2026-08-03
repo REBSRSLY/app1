@@ -70,9 +70,10 @@ BASE_CARD_CSS = """
         writing-mode: vertical-rl;
         transform: rotate(180deg);
         text-align: center;
+        font-family: var(--display);
         font-weight: 700;
         font-size: 11px;
-        letter-spacing: 0.08em;
+        letter-spacing: 0.1em;
         text-transform: uppercase;
         color: var(--muted);
         display: flex;
@@ -94,8 +95,8 @@ BASE_CARD_CSS = """
         height: auto !important;
         align-items: flex-start !important;
     }
-    .overview-name { font-size: 1.2rem; font-weight: 700; }
-    .overview-role { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .overview-name { font-family: var(--display); font-size: 1.3rem; font-weight: 700; letter-spacing: 0.01em; }
+    .overview-role { font-family: var(--display); font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; }
     /* Breathing room between the overview panel's stacked charts (Efficiency
        + Index in Performance view) -- they were butted directly against
        each other with no gap. */

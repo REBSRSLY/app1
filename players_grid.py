@@ -50,7 +50,9 @@ GRID_ROWS = [
 ]
 
 PHOTO_DIR = "Volley graphic design/Team Photos"
-CREST_PATH = "Volley graphic design/logo_white.png"
+# White (reversed) monochrome mark -- for use on dark surfaces (sidebar,
+# hero, dark cards). See Identity/brand-guidelines.md §2.1.
+CREST_PATH = "Volley graphic design/image-removebg-preview (16) (1).png"
 
 
 def photo_path(player: dict) -> str:

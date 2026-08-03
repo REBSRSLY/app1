@@ -55,7 +55,8 @@ def _render_hero(season: str) -> list[str]:
         st.image(pg.CREST_PATH, width=52)
     with col_title:
         st.markdown(
-            '<div style="font-size:1.4rem;font-weight:800;line-height:1.15;">Vero Volley Milano</div>'
+            '<div style="font-family:var(--display);font-size:1.5rem;font-weight:700;'
+            'line-height:1.15;text-transform:uppercase;letter-spacing:0.01em;">Vero Volley Milano</div>'
             f'<div style="color:var(--muted);font-size:0.8rem;">Technical Staff · A1 Women\'s · Season {season}</div>',
             unsafe_allow_html=True,
         )
@@ -90,8 +91,8 @@ def _topic_label(name: str):
     pulled from -- lets each widget stay a quick glance while still
     pointing to where to go for the full picture."""
     st.markdown(
-        f'<div style="color:var(--muted);font-size:11px;text-transform:uppercase;'
-        f'letter-spacing:0.07em;font-weight:700;margin:2px 0 6px;">{name}</div>',
+        f'<div style="font-family:var(--display);color:var(--muted);font-size:11px;text-transform:uppercase;'
+        f'letter-spacing:0.1em;font-weight:700;margin:2px 0 6px;">{name}</div>',
         unsafe_allow_html=True,
     )
 
