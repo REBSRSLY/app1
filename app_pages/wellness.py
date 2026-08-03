@@ -264,8 +264,6 @@ def _render_individual_legend_box():
             f"**Trend** — one line per player, legend grouped by role below the chart · "
             f"dashed line = recovery threshold ({RECOVERY_THRESHOLD})."
         )
-        st.markdown("**Wellness items**")
-        st.markdown(" · ".join(f"{WELLNESS_ICONS[p]} {PARAM_LABELS[p]}" for p in NEGATIVE_PARAMS))
 
 
 def render():
