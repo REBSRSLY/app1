@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 620" font-family="Roboto, Arial, sans-serif">
+  <rect width="1600" height="620" fill="#0B0D10"/>
+
+  <text x="40" y="55" fill="#FFFFFF" font-size="28" font-weight="700" font-family="Oswald, Arial, sans-serif" letter-spacing="1">VERO VOLLEY MILANO — PALETTE</text>
+  <text x="40" y="82" fill="#9AA3AF" font-size="14">Colori di marchio (primari) e colori di energia (campagna 2025/26)</text>
+
+  <!-- Primary brand colors -->
+  <text x="40" y="130" fill="#F3343D" font-size="13" font-weight="700" letter-spacing="2">PRIMARI</text>
+
+  <g transform="translate(40,150)">
+    <rect width="170" height="170" rx="12" fill="#1655A5"/>
+    <text x="0" y="196" fill="#FFFFFF" font-size="15" font-weight="700">Blu Vero</text>
+    <text x="0" y="216" fill="#9AA3AF" font-size="13">#1655A5</text>
+  </g>
+
+  <g transform="translate(230,150)">
+    <rect width="170" height="170" rx="12" fill="#F3343D"/>
+    <text x="0" y="196" fill="#FFFFFF" font-size="15" font-weight="700">Rosso Volley</text>
+    <text x="0" y="216" fill="#9AA3AF" font-size="13">#F3343D</text>
+  </g>
+
+  <g transform="translate(420,150)">
+    <rect width="170" height="170" rx="12" fill="#101418" stroke="#2A2A2A"/>
+    <text x="0" y="196" fill="#FFFFFF" font-size="15" font-weight="700">Nero Palestra</text>
+    <text x="0" y="216" fill="#9AA3AF" font-size="13">#101418</text>
+  </g>
+
+  <g transform="translate(610,150)">
+    <rect width="170" height="170" rx="12" fill="#FFFFFF"/>
+    <text x="0" y="196" fill="#FFFFFF" font-size="15" font-weight="700">Bianco</text>
+    <text x="0" y="216" fill="#9AA3AF" font-size="13">#FFFFFF</text>
+  </g>
+
+  <!-- Energy colors -->
+  <text x="850" y="130" fill="#E0158C" font-size="13" font-weight="700" letter-spacing="2">ENERGIA — CAMPAGNA 25/26</text>
+
+  <g transform="translate(850,150)">
+    <rect width="170" height="170" rx="12" fill="#E0158C"/>
+    <text x="0" y="196" fill="#FFFFFF" font-size="15" font-weight="700">Magenta Numia</text>
+    <text x="0" y="216" fill="#9AA3AF" font-size="13">#E0158C</text>
+  </g>
+
+  <g transform="translate(1040,150)">
+    <rect width="170" height="170" rx="12" fill="#0B2F6B"/>
+    <text x="0" y="196" fill="#FFFFFF" font-size="15" font-weight="700">Navy Notte</text>
+    <text x="0" y="216" fill="#9AA3AF" font-size="13">#0B2F6B</text>
+  </g>
+
+  <g transform="translate(1230,150)">
+    <rect width="170" height="170" rx="12" fill="#F6D9EC"/>
+    <text x="0" y="196" fill="#FFFFFF" font-size="15" font-weight="700">Rosa Quarzo</text>
+    <text x="0" y="216" fill="#9AA3AF" font-size="13">#F6D9EC</text>
+  </g>
+
+  <g transform="translate(1420,150)">
+    <rect width="140" height="170" rx="12" fill="#9AA3AF"/>
+    <text x="0" y="196" fill="#FFFFFF" font-size="15" font-weight="700">Grigio Rete</text>
+    <text x="0" y="216" fill="#9AA3AF" font-size="13">#9AA3AF</text>
+  </g>
+
+  <!-- usage rule -->
+  <g transform="translate(40,400)">
+    <text x="0" y="0" fill="#FFFFFF" font-size="13" font-weight="700" letter-spacing="2">REGOLA 80 / 15 / 5</text>
+    <rect x="0" y="20" width="1000" height="28" rx="4" fill="#101418" stroke="#2A2A2A"/>
+    <rect x="0" y="20" width="800" height="28" rx="4" fill="#1655A5"/>
+    <rect x="800" y="20" width="150" height="28" fill="#F3343D"/>
+    <rect x="950" y="20" width="50" height="28" rx="4" fill="#E0158C"/>
+    <text x="0" y="70" fill="#9AA3AF" font-size="13">80% blu/nero/bianco (identità tecnica)   ·   15% rosso (accento storico)   ·   5% magenta (energia, evento)</text>
+  </g>
+</svg>

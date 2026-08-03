@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 620" font-family="Roboto, Arial, sans-serif">
+  <defs>
+    <pattern id="seams" width="120" height="120" patternUnits="userSpaceOnUse" patternTransform="rotate(8)">
+      <rect width="120" height="120" fill="#0B2F6B"/>
+      <path d="M -10 60 Q 30 10 60 60 Q 90 110 130 60" fill="none" stroke="#1655A5" stroke-width="6" opacity="0.55"/>
+      <path d="M 0 -10 Q 30 30 0 60 Q -30 90 0 130" fill="none" stroke="#1655A5" stroke-width="6" opacity="0.55"/>
+    </pattern>
+    <linearGradient id="meshgrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F6A6D8"/>
+      <stop offset="35%" stop-color="#E0158C"/>
+      <stop offset="70%" stop-color="#3A2E7C"/>
+      <stop offset="100%" stop-color="#1655A5"/>
+    </linearGradient>
+    <radialGradient id="meshglow" cx="25%" cy="20%" r="70%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1600" height="620" fill="#0B0D10"/>
+  <text x="40" y="55" fill="#FFFFFF" font-size="28" font-weight="700" font-family="Oswald, Arial, sans-serif" letter-spacing="1">MOTIVI GRAFICI</text>
+  <text x="40" y="82" fill="#9AA3AF" font-size="14">Tre elementi ricorrenti, derivati dai materiali esistenti del club</text>
+
+  <!-- Panel 1: ball seam -->
+  <g transform="translate(40,120)">
+    <rect width="460" height="420" rx="16" fill="url(#seams)"/>
+    <rect width="460" height="420" rx="16" fill="none" stroke="#2A2A2A"/>
+    <rect x="0" y="360" width="460" height="60" fill="#0B0D10" opacity="0.001"/>
+    <text x="20" y="450" fill="#FFFFFF" font-size="16" font-weight="700">Cucitura del pallone</text>
+    <text x="20" y="472" fill="#9AA3AF" font-size="12">Separatori di sezione, texture di sfondo a bassa opacità</text>
+  </g>
+
+  <!-- Panel 2: diagonal ribbon -->
+  <g transform="translate(570,120)">
+    <clipPath id="ribbonClip"><rect width="460" height="420" rx="16"/></clipPath>
+    <g clip-path="url(#ribbonClip)">
+      <rect width="460" height="420" fill="#101418"/>
+      <polygon points="-40,120 200,-40 280,-40 -40,220" fill="#E0158C"/>
+      <polygon points="-40,260 340,-40 420,-40 -40,360" fill="#F3343D" opacity="0.85"/>
+      <text x="60" y="230" fill="#FFFFFF" font-size="30" font-weight="700" font-family="Oswald, Arial, sans-serif" transform="rotate(-24 60 230)">SERIE A1</text>
+    </g>
+    <rect width="460" height="420" rx="16" fill="none" stroke="#2A2A2A"/>
+    <text x="20" y="450" fill="#FFFFFF" font-size="16" font-weight="700">Diagonale / ribbon</text>
+    <text x="20" y="472" fill="#9AA3AF" font-size="12">Badge, tag data/competizione, titoli campagna</text>
+  </g>
+
+  <!-- Panel 3: mesh gradient -->
+  <g transform="translate(1100,120)">
+    <rect width="460" height="420" rx="16" fill="url(#meshgrad)"/>
+    <rect width="460" height="420" rx="16" fill="url(#meshglow)"/>
+    <rect width="460" height="420" rx="16" fill="none" stroke="#2A2A2A"/>
+    <text x="20" y="450" fill="#FFFFFF" font-size="16" font-weight="700">Mesh gradient magenta → navy</text>
+    <text x="20" y="472" fill="#9AA3AF" font-size="12">Sfondi hero a piena larghezza, copertine social</text>
+  </g>
+</svg>
