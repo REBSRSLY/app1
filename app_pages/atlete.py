@@ -10,6 +10,12 @@ from ui_helpers import GOOD_COLOR, LOW_COLOR, RECOVERY_THRESHOLD, WELLNESS_ICONS
 
 RECENT_MATCHES_N = 5
 
+# English labels for the 5 wellness items, paired with WELLNESS_ICONS for
+# the emoji legend under the wellness radar (duplicated from wellness.py's
+# PARAM_LABELS rather than cross-imported, per this app's convention for
+# small stable per-page constants).
+WELLNESS_PARAM_LABELS = {"Fatica": "Fatigue", "Sonno": "Sleep", "Doms": "Muscle soreness", "Stress": "Stress", "Mood": "Mood"}
+
 BASE_CARD_CSS = """
 <style>
     /* Wide/short (not square) so First name, SURNAME, Score and Conv. each
@@ -226,7 +232,7 @@ def _performance_bar(recent: pd.DataFrame, value_col: str, title: str, color: st
         color_discrete_sequence=[color],
     )
     fig.update_layout(
-        height=190, margin=dict(l=0, r=10, t=25, b=10),
+        height=170, margin=dict(l=0, r=10, t=25, b=10),
         title=dict(text=title, font=dict(size=12)),
         xaxis=dict(range=x_range),
         yaxis=dict(categoryorder="array", categoryarray=order_labels[::-1]),
@@ -238,16 +244,19 @@ def _performance_bar(recent: pd.DataFrame, value_col: str, title: str, color: st
 def _performance_range(recent: pd.DataFrame, value_col: str, title: str, color: str, is_percent: bool, x_range: list):
     """One scatter dot per match, per fundamental -- more recent matches
     more opaque. Thin gridlines across the fixed axis range (rather than
-    an outline bar) are what makes each row readable now."""
+    an outline bar) are what makes each row readable now. Rows use the
+    short fundamental acronyms (dl.FONDAMENTALE_ABBR) instead of full
+    names -- "Attack after Reception" alone would crowd this tight a
+    chart."""
     d = recent[recent["Tot"] > 0].copy()
     if d.empty:
         st.info(f"No {title.lower()} data in the last {RECENT_MATCHES_N} matches.")
         return
 
-    d["Fundamental"] = d["fondamentale"].map(dl.FONDAMENTALE_LABELS)
+    d["Fundamental"] = d["fondamentale"].map(dl.FONDAMENTALE_ABBR)
     d["opacity"] = d.groupby("fondamentale", group_keys=False).apply(_recency_opacity)
     order = _ordered_fundamentals(set(d["fondamentale"]))
-    order_labels = [dl.FONDAMENTALE_LABELS[f] for f in order]
+    order_labels = [dl.FONDAMENTALE_ABBR[f] for f in order]
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(
@@ -257,12 +266,19 @@ def _performance_range(recent: pd.DataFrame, value_col: str, title: str, color: 
         customdata=d["match"],
         hovertemplate="%{y} · %{customdata}: %{x" + (":.0%" if is_percent else "") + "}<extra></extra>",
     ))
+    dtick = (x_range[1] - x_range[0]) / 4
+    # A tick exactly at the range's own edge (e.g. 100%) can get clipped by
+    # the plot border -- padding the range slightly beyond it, while
+    # keeping tickvals at the true round numbers, keeps that last label
+    # fully visible without shifting the gridlines/zeroline themselves.
+    pad = dtick * 0.12
     fig.update_layout(
-        height=190, margin=dict(l=0, r=10, t=25, b=10),
+        height=170, margin=dict(l=0, r=10, t=25, b=10),
         title=dict(text=title, font=dict(size=12)),
         xaxis=dict(
-            range=x_range, tickformat=".0%" if is_percent else None,
-            dtick=(x_range[1] - x_range[0]) / 4,
+            range=[x_range[0] - pad, x_range[1] + pad],
+            tickmode="linear", tick0=x_range[0], dtick=dtick,
+            tickformat=".0%" if is_percent else None,
             showgrid=True, gridcolor="rgba(255,255,255,0.14)", gridwidth=1,
             zeroline=True, zerolinecolor="rgba(255,255,255,0.3)", zerolinewidth=1,
         ),
@@ -347,7 +363,7 @@ def _render_wellness_radar(surname: str, color: str):
     ))
     fig.update_layout(**dark_polar_layout([1, 5]))
     fig.update_layout(
-        height=280, margin=dict(l=45, r=45, t=35, b=35),
+        height=245, margin=dict(l=40, r=40, t=30, b=30),
         polar=dict(
             radialaxis=dict(showticklabels=False, showline=False),
             angularaxis=dict(tickfont=dict(size=26)),
@@ -355,6 +371,7 @@ def _render_wellness_radar(surname: str, color: str):
     )
     st.plotly_chart(fig, width="stretch", theme=None)
     st.caption("Last 7 days, bigger = feeling better. Faint band = ±1 std dev · solid line = most recent day.")
+    st.caption(" · ".join(f"{WELLNESS_ICONS[p]} {WELLNESS_PARAM_LABELS[p]}" for p in WELLNESS_ICONS))
 
 
 def _render_overview(surname: str):

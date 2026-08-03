@@ -49,6 +49,21 @@ FONDAMENTALE_LABELS = {
     "Alzata": "Set",
 }
 
+# Short acronyms for the same fundamentals -- used where full names (esp.
+# "Attack after Reception") would crowd a tight axis, e.g. the Players
+# page's per-fundamental Efficiency chart.
+FONDAMENTALE_ABBR = {
+    "Battuta": "SRV",
+    "Ricezione": "REC",
+    "Attacco": "ATT",
+    "Att dopo Ricez": "AAR",
+    "Contrattacco": "CTR",
+    "Muro": "BLK",
+    "Difesa": "DIG",
+    "Free ball": "FB",
+    "Alzata": "SET",
+}
+
 PALLA_LABELS = {
     "Alta": "High",
     "Media": "Medium",

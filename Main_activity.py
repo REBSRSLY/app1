@@ -14,6 +14,7 @@ instead of each keeping its own local date picker.
 """
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 import filters
 import styles
@@ -86,9 +87,47 @@ NAV_CSS = """
         border: 2px solid transparent !important;
         color: #ffffff !important;
     }
+    /* The sidebar's filter tools (Season/Competition/Match/Period + preset
+       buttons) can run taller than the viewport; rather than an internal
+       scrollbar, just clip -- everything above the fold is still reachable,
+       and switching pages auto-collapses the sidebar anyway (see the
+       components.html script below). */
+    [data-testid="stSidebarContent"] {
+        overflow-y: hidden !important;
+    }
 </style>
 """
 st.markdown(NAV_CSS, unsafe_allow_html=True)
+
+# Auto-collapses the sidebar the moment a topnav page button is clicked.
+# st.set_page_config(initial_sidebar_state=...) can't do this -- it only
+# takes effect on the very first mount, not on later reruns -- so this
+# reaches into the parent document (components.html renders in an iframe,
+# but same-origin means window.parent.document is the real app DOM) and
+# clicks Streamlit's own collapse button directly. Guarded by a flag on
+# window.parent so the listener is attached once, not once per rerun.
+components.html(
+    """
+    <script>
+    (function () {
+        const doc = window.parent.document;
+        if (doc.__vvmSidebarAutocloseAttached) return;
+        doc.__vvmSidebarAutocloseAttached = true;
+        doc.addEventListener("click", function (e) {
+            if (!e.target.closest('[class*="st-key-topnav_"] button')) return;
+            setTimeout(function () {
+                const sidebar = doc.querySelector('[data-testid="stSidebar"]');
+                if (sidebar && sidebar.getAttribute("aria-expanded") === "true") {
+                    const collapseBtn = doc.querySelector('[data-testid="stSidebarCollapseButton"] button');
+                    if (collapseBtn) collapseBtn.click();
+                }
+            }, 150);
+        });
+    })();
+    </script>
+    """,
+    height=0,
+)
 
 nav_cols = st.columns(len(PAGES))
 for col, (name, icon) in zip(nav_cols, PAGE_ICONS.items()):

@@ -798,7 +798,6 @@ def _render_distribution(scoped: pd.DataFrame, scout: pd.DataFrame, palla_tipi_e
         key="dist_fond",
     )
     fond2_label = dl.FONDAMENTALE_LABELS.get(fond_sel2, fond_sel2)
-    st.caption(f"For **{fond2_label}**: \"#\" = {dl.perfetto_label(fond_sel2)}, \"=\" = {dl.errore_label(fond_sel2)}.")
     _render_how_to_expander(fond_sel2, fond2_label)
 
     dist = scoped[
