@@ -70,13 +70,14 @@ def _player_role_map() -> dict[str, str]:
     return {names[code]: dl.ROLE_LABELS.get(r, r) for code, r in roles.items() if code in names}
 
 
-def _render_player_radar(p_period, use_icons=False, height=None, show_caption=False, key=None):
+def _render_player_radar(p_period, use_icons=False, height=None, show_header=True, key=None):
     """Same enriched radar as the Players page overview: a faint mean
     shape, a shaded +/-1 std dev band around it, and a solid outline for
     the most recent day in range layered on top -- instead of one flat
     shape, this shows both the period's overall picture and how the latest
-    check-in compares to it. Renders the chart itself (and a colored TQR
-    header above it); returns the average TQR, or None if there's no data."""
+    check-in compares to it. Renders the chart itself (and, unless the
+    caller builds its own header, a colored TQR header above it); returns
+    the average TQR, or None if there's no data."""
     if p_period.empty:
         return None
 
@@ -102,12 +103,13 @@ def _render_player_radar(p_period, use_icons=False, height=None, show_caption=Fa
     fill_faint = color.replace("rgb", "rgba").replace(")", ",0.18)")
     line_faint = color.replace("rgb", "rgba").replace(")", ",0.7)")
 
-    tqr_color = LOW_COLOR if tqr_avg < RECOVERY_THRESHOLD else GOOD_COLOR
-    font_size = "0.95rem" if use_icons else "1.15rem"
-    st.markdown(
-        f'<div style="text-align:center; font-size:{font_size}; font-weight:700; color:{tqr_color};">TQR {tqr_avg:.1f}</div>',
-        unsafe_allow_html=True,
-    )
+    if show_header:
+        tqr_color = LOW_COLOR if tqr_avg < RECOVERY_THRESHOLD else GOOD_COLOR
+        font_size = "0.95rem" if use_icons else "1.15rem"
+        st.markdown(
+            f'<div style="text-align:center; font-size:{font_size}; font-weight:700; color:{tqr_color};">TQR {tqr_avg:.1f}</div>',
+            unsafe_allow_html=True,
+        )
 
     fig = go.Figure()
     # ±1 std dev band: filled only between the lower and upper polygons
@@ -153,9 +155,6 @@ def _render_player_radar(p_period, use_icons=False, height=None, show_caption=Fa
         fig.update_layout(polar=dict(angularaxis=dict(tickfont=dict(size=18))))
     st.plotly_chart(fig, width="stretch", theme=None, key=key)
 
-    if show_caption:
-        st.caption("Bigger = feeling better. Faint band = ±1 std dev over this period · solid line = most recent day in range.")
-
     return tqr_avg
 
 
@@ -180,35 +179,47 @@ def _render_team_tqr_trend(period: pd.DataFrame):
         showlegend=False,
     )
     st.plotly_chart(fig, width="stretch")
-    st.caption(f"Team average TQR per day. Dashed line = recovery threshold ({RECOVERY_THRESHOLD}).")
+
+
+# Order the 5-role legend below the individual TQR trend chart is grouped
+# into -- matches the role groupings used throughout the app (GRID_ROWS,
+# the Team radar's role filter).
+ROLE_ORDER = ["Setter", "Opposite", "Outside Hitter", "Middle Blocker", "Libero"]
 
 
 def _render_individual_tqr_trends(period: pd.DataFrame):
     """Same TQR-over-time view as the team chart above, but one line per
     player in her own color -- shows who's driving the team average and who
-    has been running consistently low, which the aggregate above can't."""
+    has been running consistently low, which the aggregate above can't.
+    The legend is grouped by role (one column per role) below the chart
+    instead of a single flat player list to the side."""
     daily = period.dropna(subset=["Tqr"]).groupby(["Data", "player_name"], as_index=False)["Tqr"].mean().sort_values("Data")
     if daily.empty:
         st.info("No wellness data in this date range.")
         return
 
-    fig = px.line(
-        daily, x="Data", y="Tqr", color="player_name",
-        color_discrete_map=pc.color_map(daily["player_name"].unique()),
-        labels={"Data": "Date", "Tqr": "TQR", "player_name": "Player"},
-    )
-    fig.add_hline(
-        y=RECOVERY_THRESHOLD, line_dash="dash", line_color=LOW_COLOR,
-        annotation_text=f"Recovery threshold ({RECOVERY_THRESHOLD})", annotation_position="bottom right",
-        annotation_font=dict(color=LOW_COLOR, size=11),
-    )
+    role_map = _player_role_map()
+    color_map = pc.color_map(daily["player_name"].unique())
+
+    fig = go.Figure()
+    for role in ROLE_ORDER:
+        players_in_role = sorted(p for p in daily["player_name"].unique() if role_map.get(p) == role)
+        for i, player in enumerate(players_in_role):
+            d = daily[daily["player_name"] == player]
+            group_kwargs = {"legendgrouptitle_text": role} if i == 0 else {}
+            fig.add_trace(go.Scatter(
+                x=d["Data"], y=d["Tqr"], mode="lines", name=player,
+                line=dict(color=color_map.get(player)),
+                legendgroup=role, **group_kwargs,
+            ))
+    fig.add_hline(y=RECOVERY_THRESHOLD, line_dash="dash", line_color=LOW_COLOR)
     fig.update_layout(
-        height=360, margin=dict(l=10, r=10, t=10, b=10),
+        height=420, margin=dict(l=10, r=10, t=10, b=150),
         yaxis=dict(title="TQR", range=[6, 20], **tqr_yaxis_ticks()),
-        xaxis_title=None, legend_title_text="Player",
+        xaxis_title=None,
+        legend=dict(orientation="h", yanchor="top", y=-0.2, x=0, groupclick="togglegroup", tracegroupgap=15),
     )
     st.plotly_chart(fig, width="stretch")
-    st.caption(f"Individual TQR per day, one line per player. Dashed line = recovery threshold ({RECOVERY_THRESHOLD}).")
 
 
 def _player_card_border_css() -> str:
@@ -222,6 +233,41 @@ def _player_card_border_css() -> str:
     return f"<style>{''.join(rules)}</style>"
 
 
+def _render_team_legend_box():
+    """Explains the Team radar + Team TQR trend together -- placed below
+    the (shorter) trend chart, in the vertical space the taller radar box
+    next to it leaves empty, instead of a caption under each chart."""
+    with st.container(border=True):
+        st.markdown("**How to read** · Team charts")
+        st.markdown(
+            "**Radar** — faint shaded band = ±1 std dev across players over this period · "
+            "solid outline = most recent day in range. Axis inverted where needed so bigger "
+            "always means better, matching TQR."
+        )
+        st.markdown(
+            f"**Trend** — solid line = team average TQR per day · dashed line = recovery "
+            f"threshold ({RECOVERY_THRESHOLD}) · y-axis numbers colored red/yellow/green around it."
+        )
+
+
+def _render_individual_legend_box():
+    """Same idea as the team legend box above, for the Individual player
+    radar + Individual TQR trend, plus the emoji legend used on the
+    per-player radars further down the page."""
+    with st.container(border=True):
+        st.markdown("**How to read** · Individual charts")
+        st.markdown(
+            "**Radar** — bigger = feeling better. Faint shaded band = ±1 std dev over this "
+            "period · solid outline = most recent day in range."
+        )
+        st.markdown(
+            f"**Trend** — one line per player, legend grouped by role below the chart · "
+            f"dashed line = recovery threshold ({RECOVERY_THRESHOLD})."
+        )
+        st.markdown("**Wellness items**")
+        st.markdown(" · ".join(f"{WELLNESS_ICONS[p]} {PARAM_LABELS[p]}" for p in NEGATIVE_PARAMS))
+
+
 def render():
     wellness = dl.load_wellness_data()["wellness"]
     period = filters.filter_by_date_col(wellness)
@@ -230,7 +276,7 @@ def render():
 
     role_map = _player_role_map()
 
-    col_team, col_team_trend = st.columns([0.38, 0.62])
+    col_team, col_team_trend = st.columns([0.28, 0.72])
     with col_team:
         with st.container(border=True):
             st.markdown("**Team · by parameter**")
@@ -302,16 +348,13 @@ def render():
                 fig.update_layout(**dark_polar_layout([lo, hi]))
                 fig.update_layout(polar=dict(radialaxis=dict(showticklabels=False)))
                 st.plotly_chart(fig, width="stretch", theme=None)
-                caption = "Faint band = ±1 std dev over this period · solid line = most recent day in range."
-                if is_negative:
-                    caption = "Axis inverted so bigger = better. " + caption
-                st.caption(caption)
     with col_team_trend:
         with st.container(border=True):
             st.markdown("**Team TQR** · trend over time")
             _render_team_tqr_trend(period)
+        _render_team_legend_box()
 
-    col_player, col_ind_trend = st.columns([0.38, 0.62])
+    col_player, col_ind_trend = st.columns([0.28, 0.72])
     with col_player:
         with st.container(border=True):
             st.markdown("**Individual player**")
@@ -319,13 +362,14 @@ def render():
             player_sel = st.selectbox("Player", all_players, key="wellness_player")
             p_period = period[period["player_name"] == player_sel]
 
-            tqr_avg = _render_player_radar(p_period, show_caption=True)
+            tqr_avg = _render_player_radar(p_period)
             if tqr_avg is None:
                 st.info("No data for this player in this date range.")
     with col_ind_trend:
         with st.container(border=True):
             st.markdown("**Individual TQR** · trend over time")
             _render_individual_tqr_trends(period)
+        _render_individual_legend_box()
 
     st.write("---")
     st.markdown("**All players**")
@@ -335,10 +379,23 @@ def render():
         for col, player in zip(cols, row):
             with col:
                 with st.container(border=True, key=f"wellness_card_{player['surname']}"):
-                    st.caption(player["last"])
                     p_period = period[period["player_name"] == player["surname"]]
-                    tqr_avg = _render_player_radar(
-                        p_period, use_icons=True, height=195, key=f"radar_{player['surname']}",
+                    tqr_avg = None if p_period.empty else p_period["Tqr"].mean()
+                    name_color = pc.color_for(player["surname"])
+                    if tqr_avg is None or pd.isna(tqr_avg):
+                        tqr_html = '<span style="color:var(--muted);font-weight:700;">—</span>'
+                    else:
+                        tqr_color = LOW_COLOR if tqr_avg < RECOVERY_THRESHOLD else GOOD_COLOR
+                        tqr_html = f'<span style="color:{tqr_color};font-weight:700;">{tqr_avg:.1f}</span>'
+                    st.markdown(
+                        '<div style="display:flex;justify-content:space-between;align-items:baseline;">'
+                        f'<span style="font-weight:800;font-size:1.05rem;text-transform:uppercase;'
+                        f'color:{name_color};">{player["last"]}</span>{tqr_html}</div>',
+                        unsafe_allow_html=True,
                     )
-                    if tqr_avg is None:
+                    result = _render_player_radar(
+                        p_period, use_icons=True, height=195, key=f"radar_{player['surname']}",
+                        show_header=False,
+                    )
+                    if result is None:
                         st.caption("No data")
