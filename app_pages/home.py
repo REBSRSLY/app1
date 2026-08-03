@@ -99,12 +99,19 @@ def _topic_label(name: str):
 def _render_low_recovery(wellness: pd.DataFrame):
     """Compact list instead of one long run-on sentence -- each player
     below threshold gets her own row with a colored TQR pill, worst-first,
-    so the most urgent cases are immediately on top instead of buried in text."""
-    last_date = wellness["Data"].max()
-    last_day = wellness[wellness["Data"] == last_date].sort_values("Tqr")
-    below = last_day[last_day["Tqr"] < RECOVERY_THRESHOLD]
-
+    so the most urgent cases are immediately on top instead of buried in text.
+    `wellness` is already scoped to the sidebar's active period by the caller,
+    so "last day" here means the last day *in range*, not the dataset's
+    global last day."""
     with st.container(border=True):
+        if wellness.empty:
+            st.caption("No wellness data in this date range.")
+            return
+
+        last_date = wellness["Data"].max()
+        last_day = wellness[wellness["Data"] == last_date].sort_values("Tqr")
+        below = last_day[last_day["Tqr"] < RECOVERY_THRESHOLD]
+
         if below.empty:
             st.markdown(
                 '<div style="display:flex;align-items:center;gap:10px;">'
@@ -133,6 +140,11 @@ def _render_low_recovery(wellness: pd.DataFrame):
 
 
 def _render_readiness_gauge(rpe: pd.DataFrame):
+    """ACWR needs a rolling history *before* the reference day to compute
+    validly, so team_metrics is built from the full rpe history rather than
+    a period-filtered slice -- only the reference day itself (the most
+    recent training day at or before the active period's end, matching
+    loads.py's own _reference_date) is bounded by the sidebar's period."""
     with st.container(border=True):
         st.markdown("**Team readiness** · ACWR")
         team_metrics = training_load.metrics_frame(rpe).dropna(subset=["acwr"])
@@ -140,7 +152,13 @@ def _render_readiness_gauge(rpe: pd.DataFrame):
             st.caption("Not enough training history yet.")
             return
 
-        ref_date = team_metrics.index.max()
+        _, period_end = filters.period()
+        in_range = team_metrics.index[team_metrics.index <= pd.Timestamp(period_end)]
+        if in_range.empty:
+            st.caption("No training data at or before the end of this date range.")
+            return
+
+        ref_date = in_range.max()
         acwr = float(team_metrics.loc[ref_date, "acwr"])
         fig = go.Figure(go.Indicator(
             mode="gauge+number",
@@ -199,13 +217,28 @@ def _render_league_position(season: str):
 def _render_top_scorers():
     """Top 3, ranked list -- a photo for just the #1 gave that single
     player disproportionate visual weight for what's meant to be a quick
-    top-3 leaderboard, not a player spotlight."""
+    top-3 leaderboard, not a player spotlight. Scoped to the sidebar's
+    active period (unlike dl.load_player_stats(), which is always the
+    season total) by recomputing points/appearances straight from the
+    in-scope match rows, the same way _render_team_shape already does."""
     with st.container(border=True):
-        st.markdown("**Top scorers** this season")
-        stats = dl.load_player_stats()
+        st.markdown("**Top scorers** in this scope")
+        scout = dl.load_scout_data()
+        in_scope = {m["date"] for m in filters.matches_in_scope()}
+        base = scout[scout["match"].isin(in_scope) & (~scout["is_team"]) & (scout["palla"] == "Totale")]
+        points = (
+            base[base["fondamentale"].isin(dl.POINT_FONDAMENTALI)]
+            .groupby("player_code")["Perfect"].sum()
+        )
+        appearances = base.groupby("player_code")["match"].nunique()
+        stats = pd.DataFrame({"points": points, "appearances": appearances}).fillna(0)
         if stats.empty:
-            st.caption("No season stats yet.")
+            st.caption("No stats in this scope.")
             return
+        stats["points"] = stats["points"].astype(int)
+        stats["appearances"] = stats["appearances"].astype(int)
+        stats["player_name"] = stats.index.map(dl.load_player_names())
+        stats = stats.set_index("player_name")
 
         ranked = stats.sort_values("points", ascending=False).head(3)
         medals = ["🥇", "🥈", "🥉"]
@@ -292,12 +325,14 @@ def _render_team_shape():
 
 
 def _render_recent_form():
-    """Last 5 Serie A1 results as colored dots (same win-margin scale used
-    on the Matches page's standings) -- a quick "how's it going" snapshot
-    that the old static Quick access panel didn't give, and which the
-    fixed top nav already makes redundant as a navigation aid."""
-    season_matches = mc.matches_for_season(filters.season())
-    serie_a1 = sorted((m for m in season_matches if m["competition"] == "Serie A1"), key=lambda m: m["pdate"])
+    """Last 4 Serie A1 results in the active scope, as colored dots (same
+    win-margin scale used on the Matches page's standings) -- a quick
+    "how's it going" snapshot that the old static Quick access panel
+    didn't give, and which the fixed top nav already makes redundant as a
+    navigation aid. Reads filters.matches_in_scope() (period + competition)
+    rather than the whole season, like every other period-aware box here."""
+    in_scope = filters.matches_in_scope()
+    serie_a1 = sorted((m for m in in_scope if m["competition"] == "Serie A1"), key=lambda m: m["pdate"])
     if not serie_a1:
         return
 
@@ -560,7 +595,7 @@ def render():
 
     with col_a:
         _topic_label("Wellness")
-        _render_low_recovery(wellness)
+        _render_low_recovery(filters.filter_by_date_col(wellness))
         if "wellness_individual_tqr" in extra:
             _extra_wellness_individual_tqr()
         _topic_label("Loads")
