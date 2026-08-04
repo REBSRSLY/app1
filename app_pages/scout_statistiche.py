@@ -9,7 +9,22 @@ import filters
 import match_calendar as mc
 import player_colors as pc
 import players_grid as pg
-from ui_helpers import close_polygon, dark_polar_layout
+from ui_helpers import close_polygon, dark_polar_layout, rgba_from_hex
+
+# Result -> color for the "Trend over time" bars, dark-to-light-to-dark
+# across the 6 possible scorelines (dominant win -> tie-break win ->
+# tie-break loss -> dominant loss). Distinct from RESULT_COLORS/
+# result_points elsewhere in the app, which only need the coarser 4-level
+# points scale (3-0 and 3-1 are both "3 points" there) -- this chart's
+# whole point is to distinguish all 6 by color.
+SCORE_TREND_COLORS = {
+    "3-0": "#1B5E20",
+    "3-1": "#54A24B",
+    "3-2": "#F0C808",
+    "2-3": "#F58518",
+    "1-3": "#E45756",
+    "0-3": "#7A1B1B",
+}
 
 # Fixed colors for set type: same color everywhere in the app, order never cycled.
 # Keys are the raw (Italian) values from the source data; translated to English
@@ -236,10 +251,12 @@ def _render_team_serve_outcome(scoped: pd.DataFrame):
 
 
 def _render_team_trend(scout: pd.DataFrame):
-    """Team volume (bars) and efficiency (line) per match for one
-    fundamental, over the scoped matches -- whether the team is trending
-    up or down isn't visible from any of the other, single-snapshot charts
-    above."""
+    """Team volume (bars, colored by that match's result) and efficiency
+    (line) per match for one fundamental, over the scoped matches --
+    whether the team is trending up or down isn't visible from any of the
+    other, single-snapshot charts below, and coloring the bars by result
+    surfaces whether efficiency swings track winning/losing or move
+    independently of it."""
     fond_options = dl.FONDAMENTALE_ORDER
     fond_sel = st.selectbox(
         "Fundamental", fond_options, index=fond_options.index("Attacco"),
@@ -256,25 +273,55 @@ def _render_team_trend(scout: pd.DataFrame):
     d["pdate"] = pd.to_datetime(d["match"].apply(mc.parsed_date))
     d = d.sort_values("pdate")
 
+    matches = d["match"].map(mc.MATCH_BY_DATE)
+    scores = matches.apply(lambda m: m["score"] if m else None)
+    # Semi-transparent so the E% line stays readable crossing over the bars.
+    bar_colors = [rgba_from_hex(SCORE_TREND_COLORS.get(s, "#4C78A8"), 0.55) for s in scores]
+    customdata = list(zip(
+        d["pdate"].dt.strftime("%d/%m/%y"),
+        matches.apply(lambda m: m["competition"] if m else "—"),
+        matches.apply(lambda m: m["opponent"] if m else "—"),
+        matches.apply(lambda m: "Home" if m and m["home"] else "Away"),
+        scores.fillna("—"),
+    ))
+
     fig = go.Figure()
     fig.add_trace(go.Bar(
-        x=d["pdate"], y=d["Tot"], name="Actions", marker_color="rgba(22,85,165,0.35)", yaxis="y2",
+        x=d["pdate"], y=d["Tot"], name="Actions", marker_color=bar_colors, yaxis="y2",
+        customdata=customdata,
+        hovertemplate=(
+            "<b>%{customdata[0]}</b> · %{customdata[1]}<br>"
+            "vs %{customdata[2]} (%{customdata[3]}) · %{customdata[4]}<br>"
+            "Actions: %{y}<extra></extra>"
+        ),
     ))
     fig.add_trace(go.Scatter(
         x=d["pdate"], y=d["E_pct"], name="Efficiency E%", mode="lines+markers", line=dict(color="#f3343d", width=2),
     ))
+    # Legend-only swatches (no real data points) so the result color code
+    # shows up right next to "Efficiency E%" in the same top legend, rather
+    # than needing a separate legend element below/beside the chart.
+    for score, color in SCORE_TREND_COLORS.items():
+        fig.add_trace(go.Scatter(
+            x=[None], y=[None], mode="markers", marker=dict(size=9, color=color, symbol="square"),
+            name=score, hoverinfo="skip",
+        ))
     fig.update_layout(
-        height=340, margin=dict(l=0, r=10, t=30, b=10),
+        height=340, margin=dict(l=0, r=10, t=55, b=10),
         xaxis_title="Match date",
         yaxis=dict(title="Efficiency E%", tickformat=".0%"),
         yaxis2=dict(title="Actions", overlaying="y", side="right", showgrid=False),
-        legend=dict(orientation="h", y=1.15),
+        legend=dict(orientation="h", y=1.22, font=dict(size=11)),
     )
     st.plotly_chart(fig, width="stretch")
 
 
 def _render_team_profile_section(scoped: pd.DataFrame, scout: pd.DataFrame):
     st.caption("Team-wide performance across every fundamental, from the 'Squadra' rows of the scout sheet.")
+
+    with st.container(border=True):
+        st.markdown("**Trend over time** · team efficiency per match")
+        _render_team_trend(scout)
 
     with st.container(border=True):
         st.markdown("**Team profile** · pick a metric")
@@ -292,10 +339,6 @@ def _render_team_profile_section(scoped: pd.DataFrame, scout: pd.DataFrame):
         with st.container(border=True):
             st.markdown("**Serve outcome mix** · team")
             _render_team_serve_outcome(scoped)
-
-    with st.container(border=True):
-        st.markdown("**Trend over time** · team efficiency per match")
-        _render_team_trend(scout)
 
 
 def _render_how_to_expander(fond_sel: str, fond_label: str):
