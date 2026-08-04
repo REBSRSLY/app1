@@ -37,8 +37,15 @@ CUSTOM_CSS = """
            charts here already leave transparent) -- showing up as a
            visibly different-toned rectangle inside an otherwise solid
            black card. Overriding it to --surface makes the chart's plot
-           area disappear into its card instead of standing out from it. */
-        [data-testid="stPlotlyChart"] svg {
+           area disappear into its card instead of standing out from it.
+
+           Plotly actually stacks 2-3 <svg class="main-svg"> siblings per
+           chart (bg/axes/data layer, then a legend/title/annotation
+           layer on top, then a hover layer) -- targeting plain "svg"
+           painted EVERY layer, so the (opaque) top layer's background
+           covered the data layer underneath it and the chart looked
+           empty. :first-of-type scopes this to just the bottom layer. */
+        [data-testid="stPlotlyChart"] svg.main-svg:first-of-type {
             background-color: var(--surface) !important;
         }
 
