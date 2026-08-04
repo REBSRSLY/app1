@@ -75,19 +75,20 @@ NAV_CSS = """
        expanded -- when it's collapsed (including via the auto-collapse
        below), the bar naturally extends to fill that space, no JS needed.
        right leaves room for Streamlit's own Deploy/menu buttons, which
-       live in the same band on the far right. */
+       live in the same band on the far right; a fixed width + auto
+       margins centers the bar within whatever's left of that span. */
     div[data-testid="stHorizontalBlock"]:has(> div [class*="st-key-topnav_"]) {
         position: fixed;
         top: 0;
         left: 0;
         right: 112px;
-        max-width: 760px;
+        width: 900px;
+        margin: 0 auto;
         z-index: 999990;
         background: var(--ink);
-        height: 52px;
+        height: 58px;
         align-items: center;
-        padding: 0 0 0 24px;
-        margin-bottom: 0;
+        padding: 0 8px;
         border-bottom: 2px solid transparent;
         border-image: linear-gradient(90deg, var(--accent) 0%, var(--accent-2) 65%, var(--accent-3) 100%) 1;
     }
@@ -96,12 +97,12 @@ NAV_CSS = """
         border-radius: 7px !important;
         font-family: var(--display);
         font-weight: 700;
-        font-size: 12.5px !important;
+        font-size: 13.5px !important;
         text-transform: uppercase;
-        letter-spacing: 0.01em;
-        padding: 2px 10px !important;
-        min-height: 34px !important;
-        height: 34px !important;
+        letter-spacing: 0.015em;
+        padding: 6px 18px !important;
+        min-height: 42px !important;
+        height: 42px !important;
     }
     [class*="st-key-topnav_"] button[kind="primary"] {
         background: linear-gradient(90deg, var(--accent) 0%, var(--accent-2) 100%) !important;
@@ -113,7 +114,7 @@ NAV_CSS = """
        part of normal flow; now that the row is fixed/out of flow, this
        makes room for it instead of the first section rendering underneath. */
     div[data-testid="stMainBlockContainer"] {
-        padding-top: 4.2rem !important;
+        padding-top: 4.7rem !important;
     }
     /* The sidebar's filter tools (Season/Competition/Match/Period + preset
        buttons) can run taller than the viewport; rather than an internal
@@ -167,6 +168,7 @@ for col, (name, icon) in zip(nav_cols, PAGE_ICONS.items()):
             type="primary" if st.session_state.menu == name else "secondary",
             on_click=_set_menu,
             args=(name,),
+            width="stretch",
         )
 
 with st.sidebar:
