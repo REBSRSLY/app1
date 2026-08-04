@@ -662,9 +662,8 @@ def _render_zone_efficiency_court(attack_totale: pd.DataFrame, metric_col: str =
 
     fig.update_xaxes(visible=False, range=[-0.3, 9.3])
     fig.update_yaxes(visible=False, range=[-0.3, 9.3], scaleanchor="x")
-    fig.update_layout(height=620, margin=dict(l=10, r=10, t=10, b=70), plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
-    with st.container(border=True):
-        st.plotly_chart(fig, width="stretch")
+    fig.update_layout(height=680, margin=dict(l=10, r=10, t=10, b=70), plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+    st.plotly_chart(fig, width="stretch")
 
     return zone_stats
 
@@ -728,9 +727,8 @@ def _render_zone_settype_court(attack_by_type: pd.DataFrame) -> dict:
 
     fig.update_xaxes(visible=False, range=[-0.3, 9.3])
     fig.update_yaxes(visible=False, range=[-0.3, 9.3], scaleanchor="x")
-    fig.update_layout(height=620, margin=dict(l=10, r=10, t=10, b=10), plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
-    with st.container(border=True):
-        st.plotly_chart(fig, width="stretch")
+    fig.update_layout(height=680, margin=dict(l=10, r=10, t=10, b=10), plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+    st.plotly_chart(fig, width="stretch")
 
     legend_html = "&nbsp;&nbsp;".join(
         f'<span style="display:inline-block;width:10px;height:10px;background:{PALLA_COLORS[p]};'
@@ -779,24 +777,6 @@ def _render_zone_distribution(scoped: pd.DataFrame):
         (scoped["fondamentale"] == "Alzata") & (scoped["palla"] == "Totale")
         & (scoped["player_name"].isin(SETTER_SURNAMES)) & (scoped["Tot"] > 0)
     ]
-    setter_full_names = []
-    for surname in setters_alzata["player_name"]:
-        p = pg.PLAYERS_BY_SURNAME.get(surname)
-        setter_full_names.append(f"{p['first']} {p['last']}" if p else surname)
-    title_names = " & ".join(setter_full_names) if setter_full_names else "the setters"
-
-    st.markdown("#### Setting distribution")
-    mode = st.segmented_control(
-        "View", ["Efficiency by zone", "Set type by zone"], default="Efficiency by zone",
-        required=True, key="zone_mode",
-    )
-    metric_col = "E_pct"
-    if mode == "Efficiency by zone":
-        metric_label = st.segmented_control(
-            "Effectiveness metric", list(ZONE_METRIC_OPTIONS.keys()),
-            default="E%", required=True, key="zone_metrica",
-        )
-        metric_col = ZONE_METRIC_OPTIONS[metric_label]
 
     # Court column narrower than before (was [2, 1]) -- the court itself
     # renders taller to compensate, and the P4/P3/P2 tables move into the
@@ -805,10 +785,26 @@ def _render_zone_distribution(scoped: pd.DataFrame):
     # the court to find them.
     col_court, col_table = st.columns([1, 1])
     with col_court:
-        if mode == "Efficiency by zone":
-            zone_stats = _render_zone_efficiency_court(attack[attack["palla"] == "Totale"], metric_col)
-        else:
-            zone_mix = _render_zone_settype_court(attack[attack["palla"] != "Totale"])
+        with st.container(border=True):
+            st.markdown("**Setting distribution**")
+            mode = st.segmented_control(
+                "View", ["Efficiency by zone", "Set type by zone"], default="Efficiency by zone",
+                required=True, key="zone_mode",
+            )
+            metric_col = "E_pct"
+            # Only "Efficiency by zone" needs a metric to color the court by
+            # -- "Set type by zone" is always the set-type mix, shown via its
+            # own legend instead (see _render_zone_settype_court).
+            if mode == "Efficiency by zone":
+                metric_label = st.segmented_control(
+                    "Effectiveness metric", list(ZONE_METRIC_OPTIONS.keys()),
+                    default="E%", required=True, key="zone_metrica",
+                )
+                metric_col = ZONE_METRIC_OPTIONS[metric_label]
+            if mode == "Efficiency by zone":
+                zone_stats = _render_zone_efficiency_court(attack[attack["palla"] == "Totale"], metric_col)
+            else:
+                zone_mix = _render_zone_settype_court(attack[attack["palla"] != "Totale"])
     with col_table:
         if mode == "Efficiency by zone":
             _render_zone_efficiency_tables(zone_stats)
@@ -816,7 +812,7 @@ def _render_zone_distribution(scoped: pd.DataFrame):
             _render_zone_settype_tables(zone_mix)
 
         with st.container(border=True):
-            st.markdown(f"**{title_names}**")
+            st.markdown("**Setter**")
             if setters_alzata.empty:
                 st.caption("No setting data in this scope.")
             else:
