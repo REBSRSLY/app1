@@ -70,13 +70,16 @@ CUSTOM_CSS = """
            against it. Exact colors as specified, not the app's usual
            --accent tokens: mesh is #101418/#E0158C/#0B2F6B, diagonals
            are #E0158C (both bands, second one thinner/softer so they
-           still read as two distinct stripes rather than one solid slab). */
+           still read as two distinct stripes rather than one solid slab).
+           Mesh runs top-right (magenta) to bottom-left (blue); both
+           corners kept smaller/more transparent than the first pass so
+           #101418 -- the base -- is what actually dominates the page. */
         [data-testid="stMain"] {
             background:
                 linear-gradient(135deg, transparent 40%, #E0158C 40%, #E0158C 42.5%, transparent 42.5%),
                 linear-gradient(135deg, transparent 50%, rgba(224, 21, 140, 0.55) 50%, rgba(224, 21, 140, 0.55) 51.5%, transparent 51.5%),
-                radial-gradient(120% 90% at 15% 10%, #E0158C 0%, transparent 60%),
-                radial-gradient(120% 100% at 90% 100%, #0B2F6B 0%, transparent 85%),
+                radial-gradient(90% 70% at 100% 0%, #E0158C 0%, transparent 50%),
+                radial-gradient(90% 80% at 0% 100%, #0B2F6B 0%, transparent 55%),
                 #101418;
             background-attachment: fixed;
         }

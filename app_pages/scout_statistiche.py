@@ -863,8 +863,6 @@ def _render_distribution(scoped: pd.DataFrame, scout: pd.DataFrame, palla_tipi_e
     # the Game map / Cumulative actions pair below both.
     _render_zone_distribution(scoped)
 
-    st.write("---")
-
     with st.container(border=True):
         st.markdown("**Heatmap** · Volume and effectiveness per player and set type")
         metrica_label = st.segmented_control(
@@ -958,8 +956,6 @@ def _render_distribution(scoped: pd.DataFrame, scout: pd.DataFrame, palla_tipi_e
         )
         st.plotly_chart(fig_heat, width="stretch")
     st.caption(f"In each cell: total number of actions and {metrica_display.lower()}. Rows ordered by role.")
-
-    st.write("---")
 
     col_map, col_cum = st.columns(2)
     with col_map:
