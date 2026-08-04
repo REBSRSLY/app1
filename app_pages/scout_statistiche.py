@@ -288,7 +288,7 @@ def _render_team_trend(scout: pd.DataFrame):
     fig = go.Figure()
     fig.add_trace(go.Bar(
         x=d["pdate"], y=d["Tot"], name="Actions", marker_color=bar_colors, yaxis="y2",
-        customdata=customdata,
+        customdata=customdata, showlegend=False,
         hovertemplate=(
             "<b>%{customdata[0]}</b> · %{customdata[1]}<br>"
             "vs %{customdata[2]} (%{customdata[3]}) · %{customdata[4]}<br>"
@@ -296,11 +296,11 @@ def _render_team_trend(scout: pd.DataFrame):
         ),
     ))
     fig.add_trace(go.Scatter(
-        x=d["pdate"], y=d["E_pct"], name="Efficiency E%", mode="lines+markers", line=dict(color="#f3343d", width=2),
+        x=d["pdate"], y=d["E_pct"], name="Efficiency E%", mode="lines+markers",
+        line=dict(color="#29B6F6", width=2), showlegend=False,
     ))
     # Legend-only swatches (no real data points) so the result color code
-    # shows up right next to "Efficiency E%" in the same top legend, rather
-    # than needing a separate legend element below/beside the chart.
+    # is the only thing shown in the chart's top legend.
     for score, color in SCORE_TREND_COLORS.items():
         fig.add_trace(go.Scatter(
             x=[None], y=[None], mode="markers", marker=dict(size=9, color=color, symbol="square"),

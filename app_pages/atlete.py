@@ -90,10 +90,18 @@ BASE_CARD_CSS = """
         flex-grow: 0 !important;
         align-self: flex-start !important;
         border-width: 2px !important;
+        background: var(--surface) !important;
     }
     div[data-testid="stHorizontalBlock"]:has(> div .role-label) {
         height: auto !important;
         align-items: flex-start !important;
+    }
+    /* Overview panel and crest boxes don't open with a "**Title**"
+       markdown either (photo/stats layout, plain crest image), so they
+       need the same opaque-card treatment given by name/key instead of
+       the global title-based rule in styles.py. */
+    .st-key-player_overview_box, .st-key-player_crest_box {
+        background: var(--surface) !important;
     }
     .overview-name { font-family: var(--display); font-size: 1.3rem; font-weight: 700; letter-spacing: 0.01em; }
     .overview-role { font-family: var(--display); font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; }
@@ -454,7 +462,7 @@ def render():
         with col_libero:
             _render_role_group("Libero", groups["Libero"], stats, selected)
         with col_crest:
-            with st.container(border=True):
+            with st.container(border=True, key="player_crest_box"):
                 st.image(pg.CREST_PATH, width="stretch")
 
     with col_overview:

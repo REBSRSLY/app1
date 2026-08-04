@@ -51,6 +51,48 @@ CUSTOM_CSS = """
            now -- it has to match the fixed nav bar's own height exactly,
            so it's defined right next to it instead of split across files. */
 
+        /* Same diagonal-ribbon + corner-glow motif as the Home hero
+           (home.py's HERO_CSS), toned down and applied to the whole main
+           pane so every screen -- not just Home -- carries the identity,
+           and bordered boxes (opaque fill below) read as solid cards
+           floating on top of it instead of a flat single-tone page. */
+        [data-testid="stMain"] {
+            background:
+                linear-gradient(135deg, transparent 46%, var(--accent-3) 46%, var(--accent-3) 47.6%, transparent 47.6%),
+                radial-gradient(50% 34% at 100% 0%, rgba(224, 21, 140, 0.14), transparent 65%),
+                radial-gradient(60% 46% at 0% 100%, rgba(22, 85, 165, 0.20), transparent 65%),
+                var(--ink);
+            background-attachment: fixed;
+        }
+
+        /* Every card-style box in the app opens with a "**Title**"
+           markdown as its own first element (the same convention the
+           title-font rule above relies on) -- used here as a structural
+           hook to give bordered st.container(border=True) boxes an
+           opaque fill, since Streamlit's own generated class for them
+           is a per-instance hash with no stable name to target directly.
+           Scoped with a direct-child combinator on the first level so an
+           outer wrapper merely containing a titled box deeper inside
+           doesn't also get painted. */
+        div[data-testid="stVerticalBlock"]:has(
+            > div[data-testid="stElementContainer"]:first-child
+              div[data-testid="stMarkdownContainer"] > p > strong:first-child
+        ) {
+            background: var(--surface);
+            border-radius: 10px;
+        }
+        /* home.py's "Low recovery / Recovery on track" card swaps its own
+           header for a status icon+pill instead of the "**Title**"
+           convention above, so it needs its own key to catch the same
+           opaque-fill treatment. Same story for wellness.py's per-player
+           cards (custom name/TQR header, one key per player -- wildcard
+           match on the shared prefix). */
+        .st-key-home_low_recovery_box,
+        [class*="st-key-wellness_card_"] {
+            background: var(--surface) !important;
+            border-radius: 10px;
+        }
+
         /* Sidebar style */
         .brand-title {
             font-family: var(--display);

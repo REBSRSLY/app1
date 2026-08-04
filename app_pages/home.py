@@ -125,7 +125,7 @@ def _render_low_recovery(wellness: pd.DataFrame):
     `wellness` is already scoped to the sidebar's active period by the caller,
     so "last day" here means the last day *in range*, not the dataset's
     global last day."""
-    with st.container(border=True):
+    with st.container(border=True, key="home_low_recovery_box"):
         if wellness.empty:
             st.caption("No wellness data in this date range.")
             return
