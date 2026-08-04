@@ -25,6 +25,16 @@ CUSTOM_CSS = """
             font-weight: 700;
         }
 
+        /* Every Plotly chart's own text (axis ticks, legends, hover,
+           big numbers) renders in Streamlit's default Inter/Source Sans
+           via an inline SVG style attribute, not the page's own CSS
+           cascade -- overriding it here (needs !important to beat that
+           inline style) is the one global hook that reaches all of them
+           without touching every chart's Python layout individually. */
+        .js-plotly-plot text {
+            font-family: 'Roboto', sans-serif !important;
+        }
+
         /* General variables and styles. --accent/--accent-2 are the club
            logo's own blue/red (Identity/brand-guidelines.md's "Blu Vero" /
            "Rosso Volley"), used for the nav bar, buttons and other brand
@@ -58,9 +68,18 @@ CUSTOM_CSS = """
            floating on top of it instead of a flat single-tone page. */
         [data-testid="stMain"] {
             background:
-                linear-gradient(135deg, transparent 46%, var(--accent-3) 46%, var(--accent-3) 47.6%, transparent 47.6%),
-                radial-gradient(50% 34% at 100% 0%, rgba(224, 21, 140, 0.14), transparent 65%),
-                radial-gradient(60% 46% at 0% 100%, rgba(22, 85, 165, 0.20), transparent 65%),
+                /* Primary ribbon -- crisp, full color, the one from the
+                   Home hero everyone likes. */
+                linear-gradient(135deg, transparent 44%, var(--accent-3) 44%, var(--accent-3) 46.2%, transparent 46.2%),
+                /* Two thinner, softer companions in the other two brand
+                   colors, at different angles/positions/widths so the page
+                   doesn't read as one motif copy-pasted three times. */
+                linear-gradient(120deg, transparent 68%, rgba(243, 52, 61, 0.5) 68%, rgba(243, 52, 61, 0.5) 68.5%, transparent 68.5%),
+                linear-gradient(150deg, transparent 15%, rgba(22, 85, 165, 0.45) 15%, rgba(22, 85, 165, 0.45) 15.9%, transparent 15.9%),
+                /* Stronger corner glows -- magenta/pink top-right, blue
+                   bottom-left -- so the two brand extremes read clearly. */
+                radial-gradient(55% 42% at 100% 0%, rgba(224, 21, 140, 0.32), transparent 68%),
+                radial-gradient(65% 50% at 0% 100%, rgba(22, 85, 165, 0.34), transparent 68%),
                 var(--ink);
             background-attachment: fixed;
         }
@@ -80,6 +99,17 @@ CUSTOM_CSS = """
         ) {
             background: var(--surface);
             border-radius: 10px;
+        }
+        /* st.button() labels can also use **bold** markdown for their own
+           reasons (players_grid's player cards bold the first name) --
+           that trips the rule above too, since it can't see the strong
+           tag is inside a button rather than a real title. Nesting
+           :not(:has(button)) inside the :has() above isn't valid CSS
+           (:has() can't contain another :has()), so this resets it back
+           to transparent afterward instead, keyed off the player card's
+           own stable class. */
+        div[data-testid="stVerticalBlock"]:has(> div[data-testid="stElementContainer"][class*="st-key-playercard_"]) {
+            background: transparent !important;
         }
         /* home.py's "Low recovery / Recovery on track" card swaps its own
            header for a status icon+pill instead of the "**Title**"

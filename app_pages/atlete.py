@@ -90,17 +90,19 @@ BASE_CARD_CSS = """
         flex-grow: 0 !important;
         align-self: flex-start !important;
         border-width: 2px !important;
-        background: var(--surface) !important;
     }
     div[data-testid="stHorizontalBlock"]:has(> div .role-label) {
         height: auto !important;
         align-items: flex-start !important;
     }
-    /* Overview panel and crest boxes don't open with a "**Title**"
-       markdown either (photo/stats layout, plain crest image), so they
-       need the same opaque-card treatment given by name/key instead of
-       the global title-based rule in styles.py. */
-    .st-key-player_overview_box, .st-key-player_crest_box {
+    /* None of these open with a "**Title**" markdown (role boxes use a
+       side label, overview/crest use photos/stats), so they need the
+       opaque-card fill given explicitly by key instead of the global
+       title-based rule in styles.py. :has(> div .role-label) alone can't
+       carry a background -- it also matches every ANCESTOR of a role box
+       (column/row wrappers all the way up), since :has()'s inner clause
+       matches any descendant, not just the box itself. */
+    [class*="st-key-role_group_"], .st-key-player_overview_box, .st-key-player_crest_box {
         background: var(--surface) !important;
     }
     .overview-name { font-family: var(--display); font-size: 1.3rem; font-weight: 700; letter-spacing: 0.01em; }
@@ -182,7 +184,7 @@ def _render_player_card(player: dict, stats, selected: str):
 
 def _render_role_group(role: str, group_players: list[dict], stats, selected: str):
     slug = role.lower().replace(" ", "-")
-    with st.container(border=True):
+    with st.container(border=True, key=f"role_group_{slug}"):
         col_label, col_cards = st.columns([0.14, 4])
         with col_label:
             st.markdown(f'<div class="role-label role-label-{slug}">{role}</div>', unsafe_allow_html=True)

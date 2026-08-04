@@ -82,39 +82,52 @@ NAV_CSS = """
         top: 0;
         left: 0;
         right: 112px;
-        width: 900px;
+        width: 1080px;
         margin: 0 auto;
         z-index: 999990;
         background: var(--ink);
-        height: 58px;
+        height: 54px;
         align-items: center;
         padding: 0 8px;
         border-bottom: 2px solid transparent;
         border-image: linear-gradient(90deg, var(--accent) 0%, var(--accent-2) 65%, var(--accent-3) 100%) 1;
     }
+    /* Compact enough that even "Scout & Stats"/"Data Entry" -- the two
+       longest labels -- fit on one line: smaller icon, tight padding, no
+       letter-spacing, explicit nowrap as a hard backstop against wrapping
+       rather than relying on width alone. */
     [class*="st-key-topnav_"] button {
-        border: 1.5px solid var(--accent) !important;
-        border-radius: 7px !important;
+        border: 1px solid var(--accent) !important;
+        border-radius: 6px !important;
         font-family: var(--display);
         font-weight: 700;
-        font-size: 13.5px !important;
+        font-size: 11.5px !important;
         text-transform: uppercase;
-        letter-spacing: 0.015em;
-        padding: 6px 18px !important;
-        min-height: 42px !important;
-        height: 42px !important;
+        letter-spacing: 0;
+        padding: 4px 10px !important;
+        min-height: 38px !important;
+        height: 38px !important;
+        white-space: nowrap !important;
+        gap: 4px;
+    }
+    [class*="st-key-topnav_"] button p {
+        white-space: nowrap !important;
+    }
+    [class*="st-key-topnav_"] button [data-testid="stIconMaterial"] {
+        font-size: 15px !important;
     }
     [class*="st-key-topnav_"] button[kind="primary"] {
         background: linear-gradient(90deg, var(--accent) 0%, var(--accent-2) 100%) !important;
-        border: 1.5px solid transparent !important;
+        border: 1px solid transparent !important;
         color: #ffffff !important;
         box-shadow: 0 0 0 2px var(--accent-3);
     }
     /* Page content used to start right after the nav row when it was
        part of normal flow; now that the row is fixed/out of flow, this
-       makes room for it instead of the first section rendering underneath. */
+       makes room for it instead of the first section rendering underneath.
+       Matches the nav's own height (54px) plus a few px of breathing room. */
     div[data-testid="stMainBlockContainer"] {
-        padding-top: 4.7rem !important;
+        padding-top: 3.7rem !important;
     }
     /* The sidebar's filter tools (Season/Competition/Match/Period + preset
        buttons) can run taller than the viewport; rather than an internal
