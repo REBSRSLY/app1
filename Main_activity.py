@@ -125,9 +125,12 @@ NAV_CSS = """
     /* Page content used to start right after the nav row when it was
        part of normal flow; now that the row is fixed/out of flow, this
        makes room for it instead of the first section rendering underneath.
-       Matches the nav's own height (54px) plus a few px of breathing room. */
+       Matches the nav's own height (54px) plus 1px of clearance -- px,
+       not rem: the root font-size here is 15px, not the usual 16px, so
+       a rem value big enough to clear the nav overshot the gap by more
+       than intended (55.5px could be trimmed further, not padded more). */
     div[data-testid="stMainBlockContainer"] {
-        padding-top: 3.7rem !important;
+        padding-top: 55px !important;
     }
     /* The sidebar's filter tools (Season/Competition/Match/Period + preset
        buttons) can run taller than the viewport; rather than an internal
@@ -136,6 +139,21 @@ NAV_CSS = """
        components.html script below). */
     [data-testid="stSidebarContent"] {
         overflow-y: hidden !important;
+    }
+    /* Every st.markdown(<style>...) / components.html() call (this one,
+       styles.py's, home.py's HERO_CSS) renders as its own zero-height
+       stElementContainer -- but Streamlit's vertical gap is a flex `gap`
+       on their shared parent, which reserves a full gap-slot for EVERY
+       child regardless of height, including these invisible ones. With
+       5 such elements stacked above the page's real first block, that
+       was 5 stacked gaps (~75px) of dead space nobody could see the
+       cause of. display:none removes them from the flex layout entirely
+       instead of just collapsing their own (already-zero) height, which
+       is what actually closes those gaps -- the CSS/JS inside still
+       applies/runs either way, since neither depends on being visible. */
+    div[data-testid="stElementContainer"]:has(style),
+    div[data-testid="stElementContainer"]:has(iframe) {
+        display: none;
     }
 </style>
 """

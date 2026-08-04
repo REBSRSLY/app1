@@ -882,97 +882,97 @@ def _render_distribution(scoped: pd.DataFrame, scout: pd.DataFrame, palla_tipi_e
             st.markdown("**Cumulative actions** over time")
             _render_cumulative_actions(scout, fond_sel2, height=520)
 
-    st.markdown("#### Heatmap · Volume and effectiveness per player and set type")
-    metrica_label = st.segmented_control(
-        "Effectiveness metric", list(TEAM_PROFILE_METRICS.keys()),
-        default="E%", required=True, key="dist_metrica",
-    )
-    metrica_col, _, metrica_is_pct = TEAM_PROFILE_METRICS[metrica_label]
-    # "#"/"=" have a different name per fundamental (Point for attack, Block point for block).
-    if metrica_col == "Perfect_pct":
-        metrica_display = f"% {dl.perfetto_label(fond_sel2)} (#)"
-    elif metrica_col == "Err_pct":
-        metrica_display = f"% {dl.errore_label(fond_sel2)} (=)"
-    elif metrica_col == "Ind":
-        metrica_display = "Index"
-    else:
-        metrica_display = "Efficiency (E%)"
-
-    pivot_tot = dist.pivot_table(index="player_name", columns="palla_en", values="Tot", aggfunc="sum", observed=True)
-    pivot_metrica = dist.pivot_table(index="player_name", columns="palla_en", values=metrica_col, aggfunc="mean", observed=True)
-    colonne_ordinate = [p for p in palla_tipi_en if p in pivot_metrica.columns]
-    pivot_tot = pivot_tot.reindex(index=ordine_giocatrici, columns=colonne_ordinate)
-    pivot_metrica = pivot_metrica.reindex(index=ordine_giocatrici, columns=colonne_ordinate)
-
-    if metrica_col == "E_pct":
-        # Efficiency can be negative: diverging scale centered on 0.
-        heat_kwargs = dict(colorscale="RdBu", zmid=0, zmin=-0.5, zmax=0.5)
-    elif metrica_col == "Ind":
-        # Ind has no natural fixed ceiling (unlike the 0-1 rate metrics) --
-        # scale to whatever this scope's cells actually reach.
-        ind_max = pivot_metrica.max(numeric_only=True).max()
-        ind_max = float(ind_max) if pd.notna(ind_max) and ind_max > 0 else 1.0
-        heat_kwargs = dict(colorscale="Blues", zmin=0, zmax=ind_max)
-    elif metrica_col == "Err_pct":
-        # Higher error % is worse -- a "bad = more red" sequential scale,
-        # as opposed to Perfect_pct's "good = more green" below.
-        heat_kwargs = dict(colorscale="Reds", zmin=0, zmax=1)
-    else:
-        # % Point (#) is always >= 0: single-hue sequential scale.
-        heat_kwargs = dict(colorscale="Blues", zmin=0, zmax=1)
-
-    # Cell text: black on the paler part of whichever scale is active (E%
-    # near 0, or the other metrics near their low end) so it stays legible
-    # against a background color that can range from near-white to fully
-    # saturated; white everywhere else.
-    def _heat_text_color(value) -> str:
-        if pd.isna(value):
-            return "#ffffff"
-        if metrica_col == "E_pct":
-            return "#000000" if -0.2 <= value <= 0.2 else "#ffffff"
-        if metrica_col == "Ind":
-            return "#000000" if 0 <= value <= heat_kwargs["zmax"] / 2 else "#ffffff"
-        return "#000000" if 0 <= value <= 0.5 else "#ffffff"
-
-    # go.Heatmap's own texttemplate/textfont only take a single scalar
-    # color for the whole trace -- per-cell colors aren't supported there,
-    # so the cell text is drawn as individual annotations instead (same
-    # technique already used for the court charts below), one per cell,
-    # each with its own black/white color.
-    annotations = []
-    for r in pivot_tot.index:
-        for c in pivot_tot.columns:
-            tot_v = pivot_tot.loc[r, c]
-            eff_v = pivot_metrica.loc[r, c]
-            if pd.isna(tot_v):
-                continue
-            text = f"{int(tot_v)}<br>—" if pd.isna(eff_v) else (
-                f"{int(tot_v)}<br>{eff_v * 100:.0f}%" if metrica_is_pct else f"{int(tot_v)}<br>{eff_v:.0f}"
-            )
-            annotations.append(dict(
-                x=c, y=r, text=text, showarrow=False,
-                font=dict(color=_heat_text_color(eff_v), size=11),
-            ))
-
-    fig_heat = go.Figure(data=go.Heatmap(
-        z=pivot_metrica.values,
-        x=pivot_metrica.columns.tolist(),
-        y=pivot_metrica.index.tolist(),
-        colorbar=dict(title=metrica_display, tickformat=".0%" if metrica_is_pct else None),
-        hovertemplate="%{y} · %{x}<br>" + metrica_display + (": %{z:.0%}" if metrica_is_pct else ": %{z:.1f}") + "<extra></extra>",
-        **heat_kwargs,
-    ))
-    fig_heat.update_layout(
-        xaxis_title="Set type", yaxis_title="",
-        # Explicit array (not the old yaxis_autorange="reversed", which was
-        # tuned for the previous volume-sort order and silently flips the
-        # new fixed role order upside down): puts ordine_giocatrici[0]
-        # (Orro) at the top, reading top-to-bottom like the role list.
-        yaxis=dict(categoryorder="array", categoryarray=ordine_giocatrici[::-1]),
-        height=max(420, 50 * len(pivot_metrica.index)),
-        annotations=annotations,
-    )
     with st.container(border=True):
+        st.markdown("**Heatmap** · Volume and effectiveness per player and set type")
+        metrica_label = st.segmented_control(
+            "Effectiveness metric", list(TEAM_PROFILE_METRICS.keys()),
+            default="E%", required=True, key="dist_metrica",
+        )
+        metrica_col, _, metrica_is_pct = TEAM_PROFILE_METRICS[metrica_label]
+        # "#"/"=" have a different name per fundamental (Point for attack, Block point for block).
+        if metrica_col == "Perfect_pct":
+            metrica_display = f"% {dl.perfetto_label(fond_sel2)} (#)"
+        elif metrica_col == "Err_pct":
+            metrica_display = f"% {dl.errore_label(fond_sel2)} (=)"
+        elif metrica_col == "Ind":
+            metrica_display = "Index"
+        else:
+            metrica_display = "Efficiency (E%)"
+
+        pivot_tot = dist.pivot_table(index="player_name", columns="palla_en", values="Tot", aggfunc="sum", observed=True)
+        pivot_metrica = dist.pivot_table(index="player_name", columns="palla_en", values=metrica_col, aggfunc="mean", observed=True)
+        colonne_ordinate = [p for p in palla_tipi_en if p in pivot_metrica.columns]
+        pivot_tot = pivot_tot.reindex(index=ordine_giocatrici, columns=colonne_ordinate)
+        pivot_metrica = pivot_metrica.reindex(index=ordine_giocatrici, columns=colonne_ordinate)
+
+        if metrica_col == "E_pct":
+            # Efficiency can be negative: diverging scale centered on 0.
+            heat_kwargs = dict(colorscale="RdBu", zmid=0, zmin=-0.5, zmax=0.5)
+        elif metrica_col == "Ind":
+            # Ind has no natural fixed ceiling (unlike the 0-1 rate metrics) --
+            # scale to whatever this scope's cells actually reach.
+            ind_max = pivot_metrica.max(numeric_only=True).max()
+            ind_max = float(ind_max) if pd.notna(ind_max) and ind_max > 0 else 1.0
+            heat_kwargs = dict(colorscale="Blues", zmin=0, zmax=ind_max)
+        elif metrica_col == "Err_pct":
+            # Higher error % is worse -- a "bad = more red" sequential scale,
+            # as opposed to Perfect_pct's "good = more green" below.
+            heat_kwargs = dict(colorscale="Reds", zmin=0, zmax=1)
+        else:
+            # % Point (#) is always >= 0: single-hue sequential scale.
+            heat_kwargs = dict(colorscale="Blues", zmin=0, zmax=1)
+
+        # Cell text: black on the paler part of whichever scale is active (E%
+        # near 0, or the other metrics near their low end) so it stays legible
+        # against a background color that can range from near-white to fully
+        # saturated; white everywhere else.
+        def _heat_text_color(value) -> str:
+            if pd.isna(value):
+                return "#ffffff"
+            if metrica_col == "E_pct":
+                return "#000000" if -0.2 <= value <= 0.2 else "#ffffff"
+            if metrica_col == "Ind":
+                return "#000000" if 0 <= value <= heat_kwargs["zmax"] / 2 else "#ffffff"
+            return "#000000" if 0 <= value <= 0.5 else "#ffffff"
+
+        # go.Heatmap's own texttemplate/textfont only take a single scalar
+        # color for the whole trace -- per-cell colors aren't supported there,
+        # so the cell text is drawn as individual annotations instead (same
+        # technique already used for the court charts below), one per cell,
+        # each with its own black/white color.
+        annotations = []
+        for r in pivot_tot.index:
+            for c in pivot_tot.columns:
+                tot_v = pivot_tot.loc[r, c]
+                eff_v = pivot_metrica.loc[r, c]
+                if pd.isna(tot_v):
+                    continue
+                text = f"{int(tot_v)}<br>—" if pd.isna(eff_v) else (
+                    f"{int(tot_v)}<br>{eff_v * 100:.0f}%" if metrica_is_pct else f"{int(tot_v)}<br>{eff_v:.0f}"
+                )
+                annotations.append(dict(
+                    x=c, y=r, text=text, showarrow=False,
+                    font=dict(color=_heat_text_color(eff_v), size=11),
+                ))
+
+        fig_heat = go.Figure(data=go.Heatmap(
+            z=pivot_metrica.values,
+            x=pivot_metrica.columns.tolist(),
+            y=pivot_metrica.index.tolist(),
+            colorbar=dict(title=metrica_display, tickformat=".0%" if metrica_is_pct else None),
+            hovertemplate="%{y} · %{x}<br>" + metrica_display + (": %{z:.0%}" if metrica_is_pct else ": %{z:.1f}") + "<extra></extra>",
+            **heat_kwargs,
+        ))
+        fig_heat.update_layout(
+            xaxis_title="Set type", yaxis_title="",
+            # Explicit array (not the old yaxis_autorange="reversed", which was
+            # tuned for the previous volume-sort order and silently flips the
+            # new fixed role order upside down): puts ordine_giocatrici[0]
+            # (Orro) at the top, reading top-to-bottom like the role list.
+            yaxis=dict(categoryorder="array", categoryarray=ordine_giocatrici[::-1]),
+            height=max(420, 50 * len(pivot_metrica.index)),
+            annotations=annotations,
+        )
         st.plotly_chart(fig_heat, width="stretch")
     st.caption(f"In each cell: total number of actions and {metrica_display.lower()}. Rows ordered by role.")
 
