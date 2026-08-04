@@ -31,6 +31,17 @@ CUSTOM_CSS = """
             font-family: 'Roboto', sans-serif !important;
         }
 
+        /* Streamlit's own theming gives every plotly chart's outer <svg> a
+           CSS background-color of its own (the app theme's backgroundColor,
+           #0d0d0f -- separate from Plotly's paper_bgcolor, which most
+           charts here already leave transparent) -- showing up as a
+           visibly different-toned rectangle inside an otherwise solid
+           black card. Overriding it to --surface makes the chart's plot
+           area disappear into its card instead of standing out from it. */
+        [data-testid="stPlotlyChart"] svg {
+            background-color: var(--surface) !important;
+        }
+
         /* General variables and styles. --accent/--accent-2 are the club
            logo's own blue/red (Identity/brand-guidelines.md's "Blu Vero" /
            "Rosso Volley"), used for the nav bar, buttons and other brand
