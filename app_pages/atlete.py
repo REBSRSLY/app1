@@ -134,16 +134,19 @@ def _role_border_css() -> str:
 
 
 def _player_card_css() -> str:
-    """Per-player background gradient (surface -> her color, left to right)
+    """Per-player background gradient (dark -> her color, left to right)
     and a large jersey number pinned to the right edge, both keyed off the
-    button's auto-generated st-key class."""
+    button's auto-generated st-key class. Hardcoded #181818, not
+    var(--surface): these player cards are explicitly exempt from the
+    "every box is solid black" rule (styles.py), so they can't just track
+    whatever --surface happens to be."""
     rules = []
     for p in pg.ALL_PLAYERS:
         color = pc.color_for(p["surname"])
         number_content = str(p["number"]) if p["number"] is not None else ""
         rules.append(
             f'[class*="st-key-playercard_{p["surname"]}"] button {{ '
-            f'background: linear-gradient(90deg, var(--surface) 0%, {rgba_from_hex(color, 0.55)} 100%) !important; '
+            f'background: linear-gradient(90deg, #181818 0%, {rgba_from_hex(color, 0.55)} 100%) !important; '
             f'}} '
             f'[class*="st-key-playercard_{p["surname"]}"] button::after {{ '
             f'content: "{number_content}"; position: absolute; right: 6px; top: 50%; '

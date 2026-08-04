@@ -57,18 +57,15 @@ TILE_LABELS = {key: label for key, label, _page, _default in TILE_CATALOG}
 
 HERO_CSS = """
 <style>
-    /* A real hero moment instead of a plain header row: a diagonal
-       magenta ribbon (echoing the 2025/26 campaign poster) crossing a
-       navy base, with soft blue/magenta glows in opposite corners --
-       Identity/brand-guidelines.md's "motivi grafici" §5, applied for
-       real rather than staying a reference board. Kept to this one box
-       (not repeated per-section) so it reads as a moment, not wallpaper. */
+    /* A real hero moment instead of a plain header row -- a single-color
+       mesh glow (Magenta Numia only, no blue) anchored at the top-left
+       corner, simpler than the page-wide background's own mesh+diagonal
+       combo so the hero still reads as its own distinct moment rather
+       than repeating what's already behind every other box on the page. */
     .st-key-home_hero_box {
         background:
-            linear-gradient(135deg, transparent 43%, var(--accent-3) 43%, var(--accent-3) 46.5%, transparent 46.5%),
-            radial-gradient(60% 160% at 92% 0%, rgba(224,21,140,0.30), transparent 62%),
-            radial-gradient(75% 180% at 0% 100%, rgba(22,85,165,0.40), transparent 68%),
-            var(--ink);
+            radial-gradient(90% 140% at 0% 0%, #E0158C 0%, transparent 65%),
+            #101418;
         border: 1px solid var(--line);
         border-radius: 14px;
         padding: 6px 18px;
@@ -91,7 +88,8 @@ def _render_hero(season: str) -> list[str]:
     run's actual selection immediately, not whatever was true before this
     rerun. Every tile on the page -- not just a handful of "extras" -- is
     listed here now, so the whole dashboard is user-configurable."""
-    st.markdown(HERO_CSS, unsafe_allow_html=True)
+    with st.container(key="css_hero"):
+        st.markdown(HERO_CSS, unsafe_allow_html=True)
     selected: list[str] = []
     with st.container(key="home_hero_box"):
         spacer_l, col_crest, col_title, col_customize, spacer_r = st.columns(

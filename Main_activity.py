@@ -145,19 +145,38 @@ NAV_CSS = """
        stElementContainer -- but Streamlit's vertical gap is a flex `gap`
        on their shared parent, which reserves a full gap-slot for EVERY
        child regardless of height, including these invisible ones. With
-       5 such elements stacked above the page's real first block, that
-       was 5 stacked gaps (~75px) of dead space nobody could see the
-       cause of. display:none removes them from the flex layout entirely
-       instead of just collapsing their own (already-zero) height, which
-       is what actually closes those gaps -- the CSS/JS inside still
-       applies/runs either way, since neither depends on being visible. */
-    div[data-testid="stElementContainer"]:has(style),
-    div[data-testid="stElementContainer"]:has(iframe) {
+       4+ such elements stacked above the page's real first block, that
+       was several stacked gaps (~15px each) of dead space nobody could
+       see the cause of. display:none removes them from the flex layout
+       entirely instead of just collapsing their own (already-zero)
+       height, which is what actually closes those gaps -- the CSS/JS
+       inside still applies/runs either way, since neither depends on
+       being visible.
+
+       Scoped to explicit keys, NOT ":has(style)"/"​:has(iframe)" generally
+       -- calendar_view.py's standings/competition boxes are real visible
+       HTML markdown'd alongside their own inline <style> tag in the same
+       call, so a blanket "hide any container with a <style> in it" rule
+       silently deleted those too. Keys mark a container as "nothing but
+       CSS/JS in here" on purpose, so only genuinely empty ones vanish. */
+    .st-key-css_nav, .st-key-css_sidebar_autocollapse,
+    .st-key-css_custom, .st-key-css_hero, .st-key-css_comp_box,
+    /* st.container(key=...) wraps its stVerticalBlock in one more level
+       (stLayoutWrapper) that the key class itself doesn't land on -- that
+       wrapper is still a normal flex child even once its only content is
+       display:none, so it kept its own gap-slot too. Hiding it directly
+       (via the child it contains) closes that one as well. */
+    div[data-testid="stLayoutWrapper"]:has(> .st-key-css_nav),
+    div[data-testid="stLayoutWrapper"]:has(> .st-key-css_sidebar_autocollapse),
+    div[data-testid="stLayoutWrapper"]:has(> .st-key-css_custom),
+    div[data-testid="stLayoutWrapper"]:has(> .st-key-css_hero),
+    div[data-testid="stLayoutWrapper"]:has(> .st-key-css_comp_box) {
         display: none;
     }
 </style>
 """
-st.markdown(NAV_CSS, unsafe_allow_html=True)
+with st.container(key="css_nav"):
+    st.markdown(NAV_CSS, unsafe_allow_html=True)
 
 # Auto-collapses the sidebar the moment a topnav page button is clicked.
 # st.set_page_config(initial_sidebar_state=...) can't do this -- it only
@@ -166,28 +185,29 @@ st.markdown(NAV_CSS, unsafe_allow_html=True)
 # but same-origin means window.parent.document is the real app DOM) and
 # clicks Streamlit's own collapse button directly. Guarded by a flag on
 # window.parent so the listener is attached once, not once per rerun.
-components.html(
-    """
-    <script>
-    (function () {
-        const doc = window.parent.document;
-        if (doc.__vvmSidebarAutocloseAttached) return;
-        doc.__vvmSidebarAutocloseAttached = true;
-        doc.addEventListener("click", function (e) {
-            if (!e.target.closest('[class*="st-key-topnav_"] button')) return;
-            setTimeout(function () {
-                const sidebar = doc.querySelector('[data-testid="stSidebar"]');
-                if (sidebar && sidebar.getAttribute("aria-expanded") === "true") {
-                    const collapseBtn = doc.querySelector('[data-testid="stSidebarCollapseButton"] button');
-                    if (collapseBtn) collapseBtn.click();
-                }
-            }, 150);
-        });
-    })();
-    </script>
-    """,
-    height=0,
-)
+with st.container(key="css_sidebar_autocollapse"):
+    components.html(
+        """
+        <script>
+        (function () {
+            const doc = window.parent.document;
+            if (doc.__vvmSidebarAutocloseAttached) return;
+            doc.__vvmSidebarAutocloseAttached = true;
+            doc.addEventListener("click", function (e) {
+                if (!e.target.closest('[class*="st-key-topnav_"] button')) return;
+                setTimeout(function () {
+                    const sidebar = doc.querySelector('[data-testid="stSidebar"]');
+                    if (sidebar && sidebar.getAttribute("aria-expanded") === "true") {
+                        const collapseBtn = doc.querySelector('[data-testid="stSidebarCollapseButton"] button');
+                        if (collapseBtn) collapseBtn.click();
+                    }
+                }, 150);
+            });
+        })();
+        </script>
+        """,
+        height=0,
+    )
 
 nav_cols = st.columns(len(PAGES), gap="small")
 for col, (name, icon) in zip(nav_cols, PAGE_ICONS.items()):

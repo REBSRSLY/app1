@@ -49,9 +49,9 @@ def dark_polar_layout(radial_range):
         template="plotly_dark",
         polar=dict(
             # Matches --surface (styles.py), same as the card the chart
-            # sits in -- was #0d0d0f (--ink), a visibly darker shade that
-            # left every radar with a mismatched inner circle.
-            bgcolor="#181818",
+            # sits in -- keeps the radar's inner circle from mismatching
+            # its own card's fill.
+            bgcolor="#000000",
             radialaxis=dict(range=radial_range, gridcolor="#333", linecolor="#333"),
             angularaxis=dict(gridcolor="#333", linecolor="#333"),
         ),

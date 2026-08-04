@@ -639,7 +639,7 @@ def _render_zone_efficiency_court(attack_totale: pd.DataFrame, metric_col: str =
         else:
             val_txt = f"{stats['value']:.0f}"
         fig.add_annotation(
-            x=(x0 + x1) / 2, y=7.5, showarrow=False, font=dict(color=_zone_text_color(stats["value"], cfg), size=13),
+            x=(x0 + x1) / 2, y=7.5, showarrow=False, font=dict(color=_zone_text_color(stats["value"], cfg), size=17),
             text=f"<b>{zone}</b><br>{cfg['label']} {val_txt}<br>{stats['tot']} attacks",
         )
 
@@ -721,7 +721,7 @@ def _render_zone_settype_court(attack_by_type: pd.DataFrame) -> dict:
                 cursor += seg_w
             fig.add_shape(type="rect", x0=x0, y0=6, x1=x1, y1=9, fillcolor="rgba(0,0,0,0)", line=dict(color="rgba(255,255,255,0.5)", width=1))
         fig.add_annotation(
-            x=(x0 + x1) / 2, y=7.5, showarrow=False, font=dict(color="#ffffff", size=12),
+            x=(x0 + x1) / 2, y=7.5, showarrow=False, font=dict(color="#ffffff", size=16),
             text=f"<b>{zone}</b><br>{zone_mix[zone]['tot']} attacks",
         )
 
@@ -859,24 +859,11 @@ def _render_distribution(scoped: pd.DataFrame, scout: pd.DataFrame, palla_tipi_e
     present = set(dist["player_name"])
     ordine_giocatrici = [s for s in role_order if s in present]
 
-    col_map, col_cum = st.columns(2)
-    with col_map:
-        with st.container(border=True):
-            st.markdown("**Game map** — volume of actions per set type")
-            fig1 = px.bar(
-                dist, x="player_name", y="Tot", color="palla_en",
-                category_orders={"player_name": ordine_giocatrici, "palla_en": palla_tipi_en},
-                color_discrete_map=PALLA_COLORS_EN,
-                labels={"player_name": "", "Tot": "Number of actions", "palla_en": "Set type"},
-                barmode="stack",
-            )
-            fig1.update_layout(legend_title_text="Set type", height=520)
-            st.plotly_chart(fig1, width="stretch")
+    # Order requested: Setting distribution first, then the Heatmap, then
+    # the Game map / Cumulative actions pair below both.
+    _render_zone_distribution(scoped)
 
-    with col_cum:
-        with st.container(border=True):
-            st.markdown("**Cumulative actions** over time")
-            _render_cumulative_actions(scout, fond_sel2, height=520)
+    st.write("---")
 
     with st.container(border=True):
         st.markdown("**Heatmap** · Volume and effectiveness per player and set type")
@@ -973,7 +960,25 @@ def _render_distribution(scoped: pd.DataFrame, scout: pd.DataFrame, palla_tipi_e
     st.caption(f"In each cell: total number of actions and {metrica_display.lower()}. Rows ordered by role.")
 
     st.write("---")
-    _render_zone_distribution(scoped)
+
+    col_map, col_cum = st.columns(2)
+    with col_map:
+        with st.container(border=True):
+            st.markdown("**Game map** — volume of actions per set type")
+            fig1 = px.bar(
+                dist, x="player_name", y="Tot", color="palla_en",
+                category_orders={"player_name": ordine_giocatrici, "palla_en": palla_tipi_en},
+                color_discrete_map=PALLA_COLORS_EN,
+                labels={"player_name": "", "Tot": "Number of actions", "palla_en": "Set type"},
+                barmode="stack",
+            )
+            fig1.update_layout(legend_title_text="Set type", height=520)
+            st.plotly_chart(fig1, width="stretch")
+
+    with col_cum:
+        with st.container(border=True):
+            st.markdown("**Cumulative actions** over time")
+            _render_cumulative_actions(scout, fond_sel2, height=520)
 
 
 def _resolve_raw_match() -> str:

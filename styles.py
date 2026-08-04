@@ -13,15 +13,11 @@ CUSTOM_CSS = """
            makes titles pop consistently everywhere without having to
            touch every individual st.markdown() call. Scoped to
            <strong>, not <b>, since raw-HTML stat displays (TQR pills,
-           scores, etc.) use <b> and are deliberately left alone.
-
-           Stays Roboto, not Oswald: this text sits next to dense data on
-           every page (Wellness, Loads, Scout & Stats...), so it keeps the
-           app's own "interface/data" role from Identity/brand-guidelines.md
-           -- Oswald is reserved for brand chrome (nav, hero, player
-           identity) where it can't compete with anything for scanability. */
+           scores, etc.) use <b> and are deliberately left alone. Oswald
+           Bold everywhere now, chart titles included -- explicit request
+           to make every title read as brand chrome, not just nav/hero. */
         [data-testid="stMarkdownContainer"] > p > strong:first-child {
-            font-family: 'Roboto', sans-serif;
+            font-family: var(--display);
             font-weight: 700;
         }
 
@@ -51,7 +47,12 @@ CUSTOM_CSS = """
             --accent-3: #e0158c;
             --accent-bg: rgba(22, 85, 165, 0.12);
             --ink: #0d0d0f;
-            --surface: #181818;
+            /* Every card's fill -- solid black, deliberately flatter than
+               the page's own mesh+diagonal background so content stays
+               readable against it. Doesn't touch the roster grid's own
+               per-role player card buttons (players_grid.ROLE_COLORS
+               gradients), which never used this token. */
+            --surface: #000000;
             --muted: #9a9a9a;
             --line: #2a2a2a;
             --display: 'Oswald', 'Arial Narrow', sans-serif;
@@ -61,26 +62,22 @@ CUSTOM_CSS = """
            now -- it has to match the fixed nav bar's own height exactly,
            so it's defined right next to it instead of split across files. */
 
-        /* Same diagonal-ribbon + corner-glow motif as the Home hero
-           (home.py's HERO_CSS), toned down and applied to the whole main
-           pane so every screen -- not just Home -- carries the identity,
-           and bordered boxes (opaque fill below) read as solid cards
-           floating on top of it instead of a flat single-tone page. */
+        /* The two real motifs from Identity/logo-presentation.html's
+           "motivi grafici" board (§5) -- Diagonale doppia and Mesh
+           gradient -- applied for real to the whole main pane instead of
+           staying small reference tiles, so every screen carries the
+           identity and bordered boxes (solid black below) read clearly
+           against it. Exact colors as specified, not the app's usual
+           --accent tokens: mesh is #101418/#E0158C/#0B2F6B, diagonals
+           are #E0158C (both bands, second one thinner/softer so they
+           still read as two distinct stripes rather than one solid slab). */
         [data-testid="stMain"] {
             background:
-                /* Primary ribbon -- crisp, full color, the one from the
-                   Home hero everyone likes. */
-                linear-gradient(135deg, transparent 44%, var(--accent-3) 44%, var(--accent-3) 46.2%, transparent 46.2%),
-                /* Two thinner, softer companions in the other two brand
-                   colors, at different angles/positions/widths so the page
-                   doesn't read as one motif copy-pasted three times. */
-                linear-gradient(120deg, transparent 68%, rgba(243, 52, 61, 0.5) 68%, rgba(243, 52, 61, 0.5) 68.5%, transparent 68.5%),
-                linear-gradient(150deg, transparent 15%, rgba(22, 85, 165, 0.45) 15%, rgba(22, 85, 165, 0.45) 15.9%, transparent 15.9%),
-                /* Stronger corner glows -- magenta/pink top-right, blue
-                   bottom-left -- so the two brand extremes read clearly. */
-                radial-gradient(55% 42% at 100% 0%, rgba(224, 21, 140, 0.32), transparent 68%),
-                radial-gradient(65% 50% at 0% 100%, rgba(22, 85, 165, 0.34), transparent 68%),
-                var(--ink);
+                linear-gradient(135deg, transparent 40%, #E0158C 40%, #E0158C 42.5%, transparent 42.5%),
+                linear-gradient(135deg, transparent 50%, rgba(224, 21, 140, 0.55) 50%, rgba(224, 21, 140, 0.55) 51.5%, transparent 51.5%),
+                radial-gradient(120% 90% at 15% 10%, #E0158C 0%, transparent 60%),
+                radial-gradient(120% 100% at 90% 100%, #0B2F6B 0%, transparent 85%),
+                #101418;
             background-attachment: fixed;
         }
 
@@ -190,4 +187,8 @@ CUSTOM_CSS = """
 
 
 def inject():
-    st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+    # Keyed (see Main_activity.py's own .st-key-css_nav for why) so this
+    # pure-CSS container can be display:none'd without also hiding markdown
+    # calls elsewhere that mix a <style> tag with real visible content.
+    with st.container(key="css_custom"):
+        st.markdown(CUSTOM_CSS, unsafe_allow_html=True)

@@ -44,7 +44,8 @@ def _render_form_chart(matches: list[dict]):
 
 
 def _render_by_competition(season: str, matches: list[dict]):
-    st.markdown(cv.BOX_CSS, unsafe_allow_html=True)
+    with st.container(key="css_comp_box"):
+        st.markdown(cv.BOX_CSS, unsafe_allow_html=True)
 
     present = [c for c in mc.COMPETITION_ORDER if any(m["competition"] == c for m in matches)]
     if not present:
