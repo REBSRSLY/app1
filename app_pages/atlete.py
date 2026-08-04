@@ -430,11 +430,10 @@ def render():
     for p in pg.ALL_PLAYERS:
         groups.setdefault(p["role"], []).append(p)
 
-    # Narrower than the overview panel now (was the other way round) --
-    # the detail charts need the room more than the roster cards do, and
-    # BASE_CARD_CSS's min-width:92px keeps cards from getting unreadably
-    # squeezed even in the tighter 2-card Setter/Opposite rows.
-    col_grid, col_overview = st.columns([2, 3])
+    # Wider than the overview panel -- the roster grid reads better with
+    # room to breathe (esp. the 2-card Setter/Opposite rows), and the
+    # detail panel's own charts stay perfectly readable narrower too.
+    col_grid, col_overview = st.columns([3, 2])
 
     with col_grid:
         # Row 1: Setter + Opposite side by side, in separate boxes (2 cards

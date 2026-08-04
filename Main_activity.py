@@ -67,29 +67,53 @@ def _set_menu(name):
 
 NAV_CSS = """
 <style>
-    /* Pin the nav row to the top of the scrollable area, just below
-       Streamlit's own deploy/menu header. */
+    /* Fixed to the very top of the viewport, in Streamlit's own header
+       band (same row as the sidebar's "<<" collapse control) instead of
+       sitting in normal page flow below it. left:0 (rather than a
+       hardcoded sidebar width) plus the sidebar's own higher z-index
+       means the sidebar simply covers our left edge whenever it's
+       expanded -- when it's collapsed (including via the auto-collapse
+       below), the bar naturally extends to fill that space, no JS needed.
+       right leaves room for Streamlit's own Deploy/menu buttons, which
+       live in the same band on the far right. */
     div[data-testid="stHorizontalBlock"]:has(> div [class*="st-key-topnav_"]) {
-        position: sticky;
+        position: fixed;
         top: 0;
-        z-index: 999;
-        background: var(--background, #0e1117);
-        padding: 6px 0 10px;
-        margin-bottom: 4px;
+        left: 0;
+        right: 112px;
+        max-width: 760px;
+        z-index: 999990;
+        background: var(--ink);
+        height: 52px;
+        align-items: center;
+        padding: 0 0 0 24px;
+        margin-bottom: 0;
+        border-bottom: 2px solid transparent;
+        border-image: linear-gradient(90deg, var(--accent) 0%, var(--accent-2) 65%, var(--accent-3) 100%) 1;
     }
     [class*="st-key-topnav_"] button {
-        border: 2px solid var(--accent) !important;
-        border-radius: 8px !important;
+        border: 1.5px solid var(--accent) !important;
+        border-radius: 7px !important;
         font-family: var(--display);
         font-weight: 700;
-        font-size: 13.5px !important;
+        font-size: 12.5px !important;
         text-transform: uppercase;
         letter-spacing: 0.01em;
+        padding: 2px 10px !important;
+        min-height: 34px !important;
+        height: 34px !important;
     }
     [class*="st-key-topnav_"] button[kind="primary"] {
         background: linear-gradient(90deg, var(--accent) 0%, var(--accent-2) 100%) !important;
-        border: 2px solid transparent !important;
+        border: 1.5px solid transparent !important;
         color: #ffffff !important;
+        box-shadow: 0 0 0 2px var(--accent-3);
+    }
+    /* Page content used to start right after the nav row when it was
+       part of normal flow; now that the row is fixed/out of flow, this
+       makes room for it instead of the first section rendering underneath. */
+    div[data-testid="stMainBlockContainer"] {
+        padding-top: 4.2rem !important;
     }
     /* The sidebar's filter tools (Season/Competition/Match/Period + preset
        buttons) can run taller than the viewport; rather than an internal
@@ -133,7 +157,7 @@ components.html(
     height=0,
 )
 
-nav_cols = st.columns(len(PAGES))
+nav_cols = st.columns(len(PAGES), gap="small")
 for col, (name, icon) in zip(nav_cols, PAGE_ICONS.items()):
     with col:
         st.button(
@@ -143,7 +167,6 @@ for col, (name, icon) in zip(nav_cols, PAGE_ICONS.items()):
             type="primary" if st.session_state.menu == name else "secondary",
             on_click=_set_menu,
             args=(name,),
-            width="stretch",
         )
 
 with st.sidebar:

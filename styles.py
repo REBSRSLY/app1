@@ -40,17 +40,16 @@ CUSTOM_CSS = """
             --accent-2: #f3343d;
             --accent-3: #e0158c;
             --accent-bg: rgba(22, 85, 165, 0.12);
+            --ink: #0d0d0f;
             --surface: #181818;
             --muted: #9a9a9a;
             --line: #2a2a2a;
             --display: 'Oswald', 'Arial Narrow', sans-serif;
         }
 
-        /* Pull page content up closer to the nav bar instead of leaving
-           Streamlit's default large top gap. */
-        div[data-testid="stMainBlockContainer"] {
-            padding-top: 1.5rem;
-        }
+        /* Page content's top padding lives in Main_activity.py's NAV_CSS
+           now -- it has to match the fixed nav bar's own height exactly,
+           so it's defined right next to it instead of split across files. */
 
         /* Sidebar style */
         .brand-title {
@@ -71,9 +70,10 @@ CUSTOM_CSS = """
            app's own accent trio in one line (Identity/brand-guidelines.md
            §3.3's 80/15/5: the magenta only ever gets a sliver like this). */
         .brand-stripe {
-            height: 3px;
+            height: 4px;
             border-radius: 2px;
-            background: linear-gradient(90deg, var(--accent) 0%, var(--accent) 60%, var(--accent-2) 85%, var(--accent-3) 100%);
+            background: linear-gradient(90deg, var(--accent) 0%, var(--accent) 55%, var(--accent-2) 82%, var(--accent-3) 100%);
+            box-shadow: 0 0 10px 0 rgba(224, 21, 140, 0.35);
             margin-bottom: 1.5rem;
         }
 

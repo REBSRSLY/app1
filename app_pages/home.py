@@ -42,32 +42,53 @@ EXTRA_WIDGETS = {
 }
 
 
+HERO_CSS = """
+<style>
+    /* A real hero moment instead of a plain header row: a diagonal
+       magenta ribbon (echoing the 2025/26 campaign poster) crossing a
+       navy base, with soft blue/magenta glows in opposite corners --
+       Identity/brand-guidelines.md's "motivi grafici" §5, applied for
+       real rather than staying a reference board. Kept to this one box
+       (not repeated per-section) so it reads as a moment, not wallpaper. */
+    .st-key-home_hero_box {
+        background:
+            linear-gradient(135deg, transparent 43%, var(--accent-3) 43%, var(--accent-3) 46.5%, transparent 46.5%),
+            radial-gradient(60% 160% at 92% 0%, rgba(224,21,140,0.30), transparent 62%),
+            radial-gradient(75% 180% at 0% 100%, rgba(22,85,165,0.40), transparent 68%),
+            var(--ink);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 18px 22px;
+        margin-bottom: 4px;
+    }
+    .st-key-home_customize_box button { white-space: nowrap; }
+</style>
+"""
+
+
 def _render_hero(season: str) -> list[str]:
     """Returns the list of extra widget keys currently checked in the
     Customize popover -- built straight from this run's checkboxes (rather
     than read back from st.session_state under a different key) so the
     rest of render() always sees this run's actual selection immediately,
     not whatever was true before this rerun."""
-    spacer_l, col_crest, col_title, col_customize, spacer_r = st.columns(
-        [0.03, 0.09, 0.58, 0.24, 0.03], vertical_alignment="center"
-    )
-    with col_crest:
-        st.image(pg.CREST_PATH, width=52)
-    with col_title:
-        st.markdown(
-            '<div style="font-family:var(--display);font-size:1.5rem;font-weight:700;'
-            'line-height:1.15;text-transform:uppercase;letter-spacing:0.01em;">Vero Volley Milano</div>'
-            f'<div style="color:var(--muted);font-size:0.8rem;">Technical Staff · A1 Women\'s · Season {season}</div>',
-            unsafe_allow_html=True,
-        )
-
+    st.markdown(HERO_CSS, unsafe_allow_html=True)
     selected: list[str] = []
-    with col_customize:
-        st.markdown(
-            "<style>.st-key-home_customize_box button{white-space:nowrap;}</style>",
-            unsafe_allow_html=True,
+    with st.container(key="home_hero_box"):
+        spacer_l, col_crest, col_title, col_customize, spacer_r = st.columns(
+            [0.02, 0.12, 0.55, 0.24, 0.02], vertical_alignment="center"
         )
-        with st.container(key="home_customize_box"), st.popover("Customize", icon=":material/tune:", width="stretch"):
+        with col_crest:
+            st.image(pg.CREST_PATH, width=72)
+        with col_title:
+            st.markdown(
+                '<div style="font-family:var(--display);font-size:2rem;font-weight:700;'
+                'line-height:1.1;text-transform:uppercase;letter-spacing:0.01em;">Vero Volley Milano</div>'
+                f'<div style="color:var(--muted);font-size:0.85rem;margin-top:2px;">Technical Staff · A1 Women\'s · Season {season}</div>',
+                unsafe_allow_html=True,
+            )
+
+        with col_customize, st.container(key="home_customize_box"), st.popover("Customize", icon=":material/tune:", width="stretch"):
             st.markdown("**Add charts from other pages**")
             st.caption("Pick any chart from any screen to show below, grouped by where it comes from.")
             by_page: dict[str, list[tuple[str, str]]] = {}
