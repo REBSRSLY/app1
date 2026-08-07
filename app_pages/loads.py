@@ -65,6 +65,41 @@ def _reference_date(rpe: pd.DataFrame):
     return available.max() if not available.empty else None
 
 
+def _render_how_to_expander():
+    """Same "How to read" affordance the Scout & Stats sections carry --
+    these are standard sports-science figures (Foster sRPE, Gabbett ACWR)
+    whose names don't explain themselves, and their formulas otherwise
+    live only in training_load.py where nobody using the app can see them."""
+    with st.expander("How to read \"RPE / Load\"", icon=":material/menu_book:"):
+        st.markdown("**RPE** — the athlete's own 1–10 rating of how hard a session felt.")
+        st.markdown("**TL** (training load) — `RPE × session minutes`, Foster's sRPE method.")
+        st.markdown(
+            "**Avg TL** / **Avg RPE** — the team's figures for the reference day (the latest "
+            "training day in the selected period). Team values average the athletes who "
+            "trained that day rather than summing them, so they stay on the same scale as "
+            "a single athlete's."
+        )
+        st.markdown("---")
+        st.markdown(
+            f"**Acute load** = `rolling {training_load.ACUTE_DAYS}-day sum of daily TL` — "
+            "this week's accumulated work."
+        )
+        st.markdown(
+            f"**Chronic load** = `rolling {training_load.CHRONIC_DAYS}-day sum / 4` — the average "
+            "week across the trailing 4 weeks, divided so it stays on the same weekly scale "
+            "as the acute load."
+        )
+        st.markdown(
+            "**Team ACWR** = `acute / chronic` — 0.8–1.3 is the sweet spot (green band on the "
+            "chart), above 1.5 flags a sudden spike (red band), below 0.8 a de-trained "
+            f"drop-off. Needs {training_load.CHRONIC_DAYS}+ days of prior history before it can be computed at all."
+        )
+        st.markdown(
+            f"**Weekly monotony** = `{training_load.ACUTE_DAYS}-day mean / {training_load.ACUTE_DAYS}-day "
+            "std of daily TL` — above ~2.0 means the week held no real rest days, just sameness."
+        )
+
+
 def _render_kpis(rpe: pd.DataFrame, team_metrics: pd.DataFrame, ref_date):
     cols = st.columns(4)
     if ref_date is None or ref_date not in team_metrics.index:
@@ -198,6 +233,7 @@ def _render_load(rpe: pd.DataFrame):
     ref_date = _reference_date(rpe)
     team_metrics = training_load.metrics_frame(rpe)
 
+    _render_how_to_expander()
     _render_kpis(rpe, team_metrics, ref_date)
     if ref_date is not None:
         st.caption(f"As of {ref_date.strftime('%d %b %Y')}, the latest training day in the selected period.")

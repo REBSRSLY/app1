@@ -135,6 +135,16 @@ CUSTOM_CSS = """
            opaque-fill treatment. Same story for wellness.py's per-player
            cards (custom name/TQR header, one key per player -- wildcard
            match on the shared prefix). */
+        /* st.metric(border=True) KPI tiles (Loads' Avg TL/Avg RPE/Team
+           ACWR/Weekly monotony, Scout & Stats' General stats row) and the
+           "How to read" expanders draw their own border but leave the fill
+           transparent, so the page's mesh/diagonal background showed
+           straight through them while every other box around them is
+           solid. Same black fill as the rest. */
+        [data-testid="stMetric"],
+        [data-testid="stExpander"] details {
+            background: var(--surface);
+        }
         .st-key-home_low_recovery_box,
         [class*="st-key-wellness_card_"] {
             background: var(--surface) !important;
