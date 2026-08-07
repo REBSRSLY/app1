@@ -8,7 +8,7 @@ import filters
 import player_colors as pc
 import players_grid as pg
 import training_load
-from ui_helpers import GOOD_COLOR, LOW_COLOR, RECOVERY_THRESHOLD, WARN_COLOR, WELLNESS_ICONS, close_polygon, dark_polar_layout, rgba_from_hex
+from ui_helpers import GOOD_COLOR, LOW_COLOR, WARN_COLOR, WELLNESS_ICONS, close_polygon, dark_polar_layout, rgba_from_hex
 
 # English labels for the 5 wellness items, paired with WELLNESS_ICONS so
 # every radar trace can name its own points on hover (duplicated from
@@ -99,7 +99,45 @@ BASE_CARD_CSS = """
         background: var(--surface) !important;
     }
     .overview-name { font-family: var(--display); font-size: 1.3rem; font-weight: 700; letter-spacing: 0.01em; }
-    .overview-role { font-family: var(--display); font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; }
+    /* Crest card sits in the Libero row's spare 4th slot. The rule above
+       pins that row to flex-start (so role boxes never stretch to the
+       overview panel), which also stopped this card from filling the
+       row -- overridden here just for the row that holds the crest, so
+       it ends up exactly as tall as the Libero box beside it. */
+    div[data-testid="stHorizontalBlock"]:has(> div .crest-wordmark) {
+        align-items: stretch !important;
+    }
+    /* st.container(key=...) wraps the block in a stLayoutWrapper that
+       only takes its content's height -- it has to grow too, or the card
+       inside it stops short of the row regardless of its own height. */
+    div[data-testid="stLayoutWrapper"]:has(> .st-key-player_crest_box) {
+        height: 100% !important;
+        flex-grow: 1 !important;
+    }
+    .st-key-player_crest_box {
+        height: 100% !important;
+        align-self: stretch !important;
+    }
+    .st-key-player_crest_box > div {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+    }
+    .crest-wordmark {
+        writing-mode: vertical-rl;
+        transform: rotate(180deg);
+        font-family: var(--display);
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--muted);
+        white-space: nowrap;
+        margin: 0 auto;
+    }
     /* Breathing room between the overview panel's stacked charts (Efficiency
        + Index in Performance view) -- they were butted directly against
        each other with no gap. */
@@ -373,7 +411,7 @@ def _render_player_readiness(surname: str, color: str):
         number=dict(font=dict(size=30, color="#f2f2f2"), valueformat=".2f"),
         gauge=dict(
             axis=dict(range=[0, 2], tickfont=dict(size=9, color="#9a9a9a")),
-            bar=dict(color=color, thickness=0.3),
+            bar=dict(color=color, thickness=0.3, line=dict(color="#000000", width=1.5)),
             bgcolor="rgba(0,0,0,0)",
             steps=[
                 {"range": [0, 0.8], "color": WARN_COLOR},
@@ -417,11 +455,9 @@ def _render_player_acwr(surname: str, color: str):
     fig.add_trace(go.Scatter(
         x=d.index, y=d["acwr"], name="ACWR", yaxis="y2", line=dict(color=color, width=2),
     ))
-    # All three ACWR bands, matching the gauge's own steps: amber below
-    # 0.8 and between 1.3-1.5, green in the sweet spot, red above 1.5.
-    fig.add_hrect(y0=0, y1=0.8, yref="y2", fillcolor="rgba(240,166,0,0.12)", line_width=0)
+    # Just the two bands that matter at a glance: the 0.8-1.3 sweet spot
+    # and the >1.5 spike zone.
     fig.add_hrect(y0=0.8, y1=1.3, yref="y2", fillcolor="rgba(84,162,75,0.18)", line_width=0)
-    fig.add_hrect(y0=1.3, y1=1.5, yref="y2", fillcolor="rgba(240,166,0,0.12)", line_width=0)
     fig.add_hrect(y0=1.5, y1=top, yref="y2", fillcolor="rgba(228,87,86,0.14)", line_width=0)
     fig.update_layout(
         yaxis=dict(title="Daily load (TL)"),
@@ -481,12 +517,36 @@ def _render_wellness_radar(surname: str, color: str):
     last_day = recent[recent["Data"] == last_date]
     last_values = [6 - last_day[param].mean() for param in WELLNESS_ICONS]
 
-    tqr_avg = recent["Tqr"].mean()
-    tqr_color = LOW_COLOR if tqr_avg < RECOVERY_THRESHOLD else GOOD_COLOR
-    st.markdown(
-        f'<div style="text-align:center; font-size:1.15rem; font-weight:700; color:{tqr_color};">TQR {tqr_avg:.1f}</div>',
-        unsafe_allow_html=True,
-    )
+    # TQR as a 6-20 bullet gauge instead of a bare number: the colored
+    # track puts her value in context (red below the 15 threshold, amber
+    # straddling it, green above) at a glance. Last day's value, not the
+    # period mean, matching the solid line on the radar below.
+    tqr_last = last_day["Tqr"].mean()
+    if pd.notna(tqr_last):
+        fig_tqr = go.Figure(go.Indicator(
+            mode="gauge+number",
+            value=float(tqr_last),
+            number=dict(font=dict(size=20, color="#f2f2f2"), valueformat=".1f"),
+            gauge=dict(
+                shape="bullet",
+                axis=dict(range=[6, 20], tickfont=dict(size=9, color="#9a9a9a")),
+                bar=dict(color=color, thickness=0.55, line=dict(color="#000000", width=1.5)),
+                bgcolor="rgba(0,0,0,0)",
+                borderwidth=0,
+                steps=[
+                    {"range": [6, 14], "color": LOW_COLOR},
+                    {"range": [14, 16], "color": WARN_COLOR},
+                    {"range": [16, 20], "color": GOOD_COLOR},
+                ],
+            ),
+        ))
+        fig_tqr.update_layout(height=64, margin=dict(l=8, r=12, t=8, b=4), paper_bgcolor="rgba(0,0,0,0)")
+        st.plotly_chart(fig_tqr, width="stretch")
+        st.markdown(
+            f'<div style="text-align:center;color:var(--muted);font-size:11px;margin-top:-8px;">'
+            f'TQR · {last_date.strftime("%d %b %Y")}</div>',
+            unsafe_allow_html=True,
+        )
 
     fig = go.Figure()
     # ±1 std dev band: filled only between the lower and upper polygons
@@ -526,10 +586,10 @@ def _render_wellness_radar(surname: str, color: str):
     ))
     fig.update_layout(**dark_polar_layout([1, 5]))
     fig.update_layout(
-        height=245, margin=dict(l=40, r=40, t=30, b=30),
+        height=185, margin=dict(l=45, r=45, t=18, b=18),
         polar=dict(
             radialaxis=dict(showticklabels=False, showline=False),
-            angularaxis=dict(tickfont=dict(size=26)),
+            angularaxis=dict(tickfont=dict(size=20)),
         ),
     )
     st.plotly_chart(fig, width="stretch", theme=None)
@@ -543,16 +603,15 @@ def _render_overview(surname: str):
     with st.container(border=True, key="player_overview_box"):
         # Photo at a quarter of its old size -- it identifies who's
         # selected, the charts below are what the panel is actually for.
-        col_photo, col_info = st.columns([0.32, 3.68])
+        col_photo, col_info = st.columns([0.37, 3.63])
         with col_photo:
-            st.image(pg.photo_path(player), width=56)
+            st.image(pg.photo_path(player), width=64)
         with col_info:
             cap = "👑 " if player.get("captain") else ""
             st.markdown(f'<div class="overview-name">{cap}{player["first"]} {player["last"]}</div>', unsafe_allow_html=True)
-            st.markdown(f'<div class="overview-role">{player["role"]}</div>', unsafe_allow_html=True)
             if surname in stats.index:
                 row = stats.loc[surname]
-                st.markdown(f"🏐 **{row['points']}** pts · **{row['appearances']}** matches")
+                st.markdown(f"**{row['points']}** pts · **{row['appearances']}** matches")
 
         # Row 1: scouting (E% and Index side by side inside it).
         st.markdown("**Performance**")
@@ -618,6 +677,7 @@ def render():
         with col_crest:
             with st.container(border=True, key="player_crest_box"):
                 st.image(pg.CREST_PATH, width="stretch")
+                st.markdown('<div class="crest-wordmark">Vero Volley Milano</div>', unsafe_allow_html=True)
 
     with col_overview:
         _render_overview(selected)
