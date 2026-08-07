@@ -146,6 +146,8 @@ def _render_team_profile(scoped: pd.DataFrame, metric_label: str):
     present = [f for f in dl.FONDAMENTALE_ORDER if f in set(team["fondamentale"])]
     order_labels = [dl.FONDAMENTALE_ABBR[f] for f in present]
     team["Fundamental"] = team["fondamentale"].map(dl.FONDAMENTALE_ABBR)
+    # Full name on hover, so the axis acronym never needs its own legend.
+    team["FullName"] = team["fondamentale"].map(dl.FONDAMENTALE_LABELS)
 
     if metric_col == "E_pct":
         # Only E% is a diverging (can-go-negative) measure -- the others
@@ -156,6 +158,7 @@ def _render_team_profile(scoped: pd.DataFrame, metric_label: str):
             category_orders={"Fundamental": order_labels},
             color=metric_col, color_continuous_scale="RdBu", color_continuous_midpoint=0,
             labels={metric_col: axis_label, "Fundamental": ""},
+            custom_data=["FullName"],
         )
         fig.update_layout(coloraxis_showscale=False)
     else:
@@ -164,7 +167,10 @@ def _render_team_profile(scoped: pd.DataFrame, metric_label: str):
             category_orders={"Fundamental": order_labels},
             labels={metric_col: axis_label, "Fundamental": ""},
             color_discrete_sequence=["#1655a5"],
+            custom_data=["FullName"],
         )
+    value_fmt = ":.0%" if is_pct else ":.1f"
+    fig.update_traces(hovertemplate="<b>%{customdata[0]}</b><br>" + axis_label + ": %{x" + value_fmt + "}<extra></extra>")
     # E_pct etc. are mathematically bounded to [-1, 1] and never actually
     # exceed 100% -- but Plotly's autorange only fits the tallest bar, so a
     # high-but-valid value (season Alzata E% = 91%) can visually run past
@@ -197,15 +203,24 @@ def _render_team_radar(scoped: pd.DataFrame):
         return
 
     labels = [dl.FONDAMENTALE_ABBR[f] for f in present]
+    # Carried through close_polygon alongside the values so hovering any
+    # vertex spells out the acronym sitting on that axis.
+    full_names, _ = close_polygon([dl.FONDAMENTALE_LABELS[f] for f in present], labels)
     perfect_vals = [team.loc[team["fondamentale"] == f, "Perfect_pct"].iloc[0] for f in present]
     err_vals = [team.loc[team["fondamentale"] == f, "Err_pct"].iloc[0] for f in present]
     top = max(max(perfect_vals, default=0), max(err_vals, default=0)) * 1.2 or 1.0
 
     fig = go.Figure()
     r, theta = close_polygon(perfect_vals, labels)
-    fig.add_trace(go.Scatterpolar(r=r, theta=theta, name="#%", fill="toself", line_color="#2E7D32", fillcolor="rgba(46,125,50,0.3)"))
+    fig.add_trace(go.Scatterpolar(
+        r=r, theta=theta, name="#%", fill="toself", line_color="#2E7D32", fillcolor="rgba(46,125,50,0.3)",
+        customdata=full_names, hovertemplate="<b>%{customdata}</b><br>#%: %{r:.0%}<extra></extra>",
+    ))
     r, theta = close_polygon(err_vals, labels)
-    fig.add_trace(go.Scatterpolar(r=r, theta=theta, name="=%", fill="toself", line_color="#E45756", fillcolor="rgba(228,87,86,0.3)"))
+    fig.add_trace(go.Scatterpolar(
+        r=r, theta=theta, name="=%", fill="toself", line_color="#E45756", fillcolor="rgba(228,87,86,0.3)",
+        customdata=full_names, hovertemplate="<b>%{customdata}</b><br>=%: %{r:.0%}<extra></extra>",
+    ))
     fig.update_layout(**dark_polar_layout([0, top]))
     fig.update_layout(
         polar=dict(radialaxis=dict(tickformat=".0%")),

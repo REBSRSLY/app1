@@ -4,58 +4,51 @@ import plotly.graph_objects as go
 import streamlit as st
 
 import data_loader as dl
+import filters
 import player_colors as pc
 import players_grid as pg
-from ui_helpers import GOOD_COLOR, LOW_COLOR, RECOVERY_THRESHOLD, WELLNESS_ICONS, close_polygon, dark_polar_layout, rgba_from_hex
+import training_load
+from ui_helpers import GOOD_COLOR, LOW_COLOR, RECOVERY_THRESHOLD, WARN_COLOR, WELLNESS_ICONS, close_polygon, dark_polar_layout, rgba_from_hex
 
-RECENT_MATCHES_N = 5
-
-# English labels for the 5 wellness items, paired with WELLNESS_ICONS for
-# the emoji legend under the wellness radar (duplicated from wellness.py's
-# PARAM_LABELS rather than cross-imported, per this app's convention for
-# small stable per-page constants).
+# English labels for the 5 wellness items, paired with WELLNESS_ICONS so
+# every radar trace can name its own points on hover (duplicated from
+# wellness.py's PARAM_LABELS rather than cross-imported, per this app's
+# convention for small stable per-page constants).
 WELLNESS_PARAM_LABELS = {"Fatica": "Fatigue", "Sonno": "Sleep", "Doms": "Muscle soreness", "Stress": "Stress", "Mood": "Mood"}
 
 BASE_CARD_CSS = """
 <style>
-    /* Wide/short (not square) so First name, SURNAME, Score and Conv. each
-       sit on their own line without wrapping mid-word or clipping. */
+    /* Narrow vertical strips: the name reads bottom-to-top so each card
+       needs only its own text height in width, which is what lets the
+       whole grid sit in a much narrower column than the old wide cards
+       (score/appearances moved to the detail panel, which has room). */
     [class*="st-key-playercard_"] button {
         width: 100%;
-        min-width: 92px;
-        height: 118px !important;
+        min-width: 0;
+        height: 150px !important;
         margin: 0 auto;
-        font-weight: 600;
-        font-size: 10px;
+        font-weight: 700;
         color: #ffffff !important;
         text-shadow: 0 1px 3px rgba(0,0,0,0.8);
         border: 1px solid rgba(255,255,255,0.15) !important;
         display: flex !important;
-        flex-direction: column;
+        align-items: flex-end !important;
         justify-content: center !important;
-        align-items: flex-start !important;
-        text-align: left !important;
         position: relative;
         overflow: hidden;
-        padding: 5px 40px 5px 8px !important;
-        line-height: 1.18;
-        white-space: normal;
-        word-break: normal;
-        overflow-wrap: normal;
+        padding: 6px 2px 8px !important;
     }
     [class*="st-key-playercard_"] button p {
+        writing-mode: vertical-rl;
+        transform: rotate(180deg);
         text-align: left !important;
-        font-size: 10px;
-        /* st.button doesn't turn "\\n" into <br> -- it's literal text inside
-           one <p>, so plain "normal"/"nowrap" whitespace handling collapses
-           our First/SURNAME/Score/Conv lines onto a single overflowing line.
-           pre-line is what actually makes each "\\n" a real line break. */
-        white-space: pre-line;
+        white-space: nowrap;
+        font-size: 13px;
+        letter-spacing: 0.02em;
+        line-height: 1;
     }
-    /* Name (First / SURNAME, wrapped in **bold** markdown) gets a bigger
-       font than the Score/Conv lines. */
     [class*="st-key-playercard_"] button p strong {
-        font-size: 14px;
+        font-size: 13px;
     }
     [class*="st-key-playercard_"] button div[data-testid="stMarkdownContainer"] {
         position: relative;
@@ -134,23 +127,23 @@ def _role_border_css() -> str:
 
 
 def _player_card_css() -> str:
-    """Per-player background gradient (dark -> her color, left to right)
-    and a large jersey number pinned to the right edge, both keyed off the
-    button's auto-generated st-key class. Hardcoded #181818, not
-    var(--surface): these player cards are explicitly exempt from the
-    "every box is solid black" rule (styles.py), so they can't just track
-    whatever --surface happens to be."""
+    """Per-player background gradient (dark -> her color, bottom to top,
+    matching the now-vertical name) and the jersey number pinned to the
+    card's top edge, both keyed off the button's auto-generated st-key
+    class. Hardcoded #181818, not var(--surface): these player cards are
+    explicitly exempt from the "every box is solid black" rule
+    (styles.py), so they can't just track whatever --surface happens to be."""
     rules = []
     for p in pg.ALL_PLAYERS:
         color = pc.color_for(p["surname"])
         number_content = str(p["number"]) if p["number"] is not None else ""
         rules.append(
             f'[class*="st-key-playercard_{p["surname"]}"] button {{ '
-            f'background: linear-gradient(90deg, #181818 0%, {rgba_from_hex(color, 0.55)} 100%) !important; '
+            f'background: linear-gradient(0deg, #181818 0%, {rgba_from_hex(color, 0.55)} 100%) !important; '
             f'}} '
             f'[class*="st-key-playercard_{p["surname"]}"] button::after {{ '
-            f'content: "{number_content}"; position: absolute; right: 6px; top: 50%; '
-            f'transform: translateY(-50%); font-size: 1.9rem; font-weight: 800; '
+            f'content: "{number_content}"; position: absolute; top: 6px; left: 0; right: 0; '
+            f'text-align: center; font-size: 1.15rem; font-weight: 800; '
             f'color: rgba(255,255,255,0.92); text-shadow: 0 1px 4px rgba(0,0,0,0.6); '
             f'z-index: 0; line-height: 1; pointer-events: none; }}'
         )
@@ -161,22 +154,15 @@ def _select_player(surname: str):
     st.session_state["selected_player"] = surname
 
 
-def _render_player_card(player: dict, stats, selected: str):
-    if player["surname"] in stats.index:
-        row = stats.loc[player["surname"]]
-        score, caps = row["points"], row["appearances"]
-    else:
-        score, caps = "—", "—"
+def _render_player_card(player: dict, selected: str):
+    """The button *is* the card (no separate image/container), so the whole
+    visible surface is clickable. Surname only, set vertically by the CSS
+    above -- score and appearances now live in the detail panel, which has
+    the room to show them properly. The jersey number is drawn separately
+    (pinned to the top edge) via the ::after in _player_card_css."""
     cap_badge = "👑 " if player.get("captain") else ""
-    # The button *is* the card (no separate image/container), so the whole
-    # visible surface is clickable, not just a caption underneath a photo.
-    # Each field on its own short line (rather than combined) so long names
-    # and the score/appearances numbers never wrap mid-word inside the card.
-    # Name/surname are bold so the "button p strong" CSS rule can give them
-    # a bigger font than the Score/Conv lines; the jersey number itself is
-    # drawn separately (pinned right) via the ::after in _player_card_css.
     st.button(
-        f"{cap_badge}**{player['first']}**\n**{player['last'].upper()}**\nScore: {score}\nConv: {caps}",
+        f"{cap_badge}**{player['last'].upper()}**",
         key=f"playercard_{player['surname']}",
         on_click=_select_player,
         args=(player["surname"],),
@@ -185,29 +171,29 @@ def _render_player_card(player: dict, stats, selected: str):
     )
 
 
-def _render_role_group(role: str, group_players: list[dict], stats, selected: str):
+def _render_role_group(role: str, group_players: list[dict], selected: str):
     slug = role.lower().replace(" ", "-")
     with st.container(border=True, key=f"role_group_{slug}"):
-        col_label, col_cards = st.columns([0.14, 4])
+        col_label, col_cards = st.columns([0.22, 4])
         with col_label:
             st.markdown(f'<div class="role-label role-label-{slug}">{role}</div>', unsafe_allow_html=True)
         with col_cards:
             cols = st.columns(len(group_players))
             for col, player in zip(cols, group_players):
                 with col:
-                    _render_player_card(player, stats, selected)
+                    _render_player_card(player, selected)
 
 
-def _recent_matches(surname: str, n: int = RECENT_MATCHES_N) -> pd.DataFrame:
-    """This player's scout rows (any fundamental, palla=Totale) from her
-    last `n` matches by date -- not the season aggregate."""
+def _scoped_matches(surname: str) -> pd.DataFrame:
+    """This player's scout rows (any fundamental, palla=Totale) for the
+    matches inside the sidebar's active period -- not a fixed "last N
+    matches" window, so this panel moves with every other page's scope."""
     scout = dl.load_scout_data()
-    rows = scout[
-        (scout["match"] != dl.SEASON_LABEL) & (scout["palla"] == "Totale")
+    in_scope = {m["date"] for m in filters.matches_in_scope()}
+    return scout[
+        scout["match"].isin(in_scope) & (scout["palla"] == "Totale")
         & (~scout["is_team"]) & (scout["player_name"] == surname)
     ]
-    recent_matches = sorted(rows["match"].unique(), reverse=True)[:n]
-    return rows[rows["match"].isin(recent_matches)]
 
 
 def _ordered_fundamentals(present: set) -> list[str]:
@@ -238,10 +224,13 @@ def _performance_bar(recent: pd.DataFrame, value_col: str, title: str, color: st
     agg = agg[agg["tot"] > 0]
 
     if agg.empty:
-        st.info(f"No {title.lower()} data in the last {RECENT_MATCHES_N} matches.")
+        st.info(f"No {title.lower()} data in this period.")
         return
 
     agg["Fundamental"] = agg["fondamentale"].map(dl.FONDAMENTALE_ABBR)
+    # Full name carried alongside the acronym so hovering a row spells out
+    # what "AAR"/"CTR"/... actually mean, without a separate legend.
+    agg["FullName"] = agg["fondamentale"].map(dl.FONDAMENTALE_LABELS)
     order = _ordered_fundamentals(set(agg["fondamentale"]))
     order_labels = [dl.FONDAMENTALE_ABBR[f] for f in order]
 
@@ -250,7 +239,9 @@ def _performance_bar(recent: pd.DataFrame, value_col: str, title: str, color: st
         category_orders={"Fundamental": order_labels},
         labels={"mean": "", "Fundamental": ""},
         color_discrete_sequence=[color],
+        custom_data=["FullName"],
     )
+    fig.update_traces(hovertemplate="<b>%{customdata[0]}</b><br>%{x:.0f}<extra></extra>")
     fig.update_layout(
         height=170, margin=dict(l=0, r=10, t=25, b=10),
         title=dict(text=title, font=dict(size=12)),
@@ -270,10 +261,11 @@ def _performance_range(recent: pd.DataFrame, value_col: str, title: str, color: 
     chart."""
     d = recent[recent["Tot"] > 0].copy()
     if d.empty:
-        st.info(f"No {title.lower()} data in the last {RECENT_MATCHES_N} matches.")
+        st.info(f"No {title.lower()} data in this period.")
         return
 
     d["Fundamental"] = d["fondamentale"].map(dl.FONDAMENTALE_ABBR)
+    d["FullName"] = d["fondamentale"].map(dl.FONDAMENTALE_LABELS)
     d["opacity"] = d.groupby("fondamentale", group_keys=False).apply(_recency_opacity)
     order = _ordered_fundamentals(set(d["fondamentale"]))
     order_labels = [dl.FONDAMENTALE_ABBR[f] for f in order]
@@ -283,8 +275,10 @@ def _performance_range(recent: pd.DataFrame, value_col: str, title: str, color: 
         x=d[value_col], y=d["Fundamental"], mode="markers",
         marker=dict(color=color, opacity=d["opacity"], size=8, line=dict(width=0)),
         showlegend=False,
-        customdata=d["match"],
-        hovertemplate="%{y} · %{customdata}: %{x" + (":.0%" if is_percent else "") + "}<extra></extra>",
+        # Full fundamental name first, so the acronym on the axis never
+        # needs a legend of its own to be understood.
+        customdata=d[["FullName", "match"]],
+        hovertemplate="<b>%{customdata[0]}</b><br>%{customdata[1]}: %{x" + (":.0%" if is_percent else "") + "}<extra></extra>",
     ))
     dtick = (x_range[1] - x_range[0]) / 4
     # A tick exactly at the range's own edge (e.g. 100%) can get clipped by
@@ -308,14 +302,109 @@ def _performance_range(recent: pd.DataFrame, value_col: str, title: str, color: 
 
 
 def _render_performance(surname: str, color: str):
-    recent = _recent_matches(surname)
+    recent = _scoped_matches(surname)
     if recent.empty:
-        st.info("No scouting data for this player.")
+        st.info("No scouting data for this player in this period.")
         return
 
     _performance_range(recent, "E_pct", "Efficiency E%", color, is_percent=True, x_range=[-1, 1])
     _performance_bar(recent, "Ind", "Index", color, x_range=[0, 100])
-    st.caption(f"Last {RECENT_MATCHES_N} matches, by fundamental.")
+    st.caption("By fundamental, over the selected period. Hover a row for the fundamental's full name.")
+
+
+def _player_metrics(surname: str) -> pd.DataFrame:
+    """This player's own Foster/Gabbett series. Computed over her entire
+    history (training_load's own default) so the first days inside the
+    selected period still get a valid trailing 7/28-day context, then
+    sliced to the period for display."""
+    rpe = dl.load_wellness_data()["rpe"]
+    return training_load.metrics_frame(rpe, player_name=surname)
+
+
+def _render_player_readiness(surname: str, color: str):
+    """Same ACWR gauge the Home/Loads pages show for the team, for one
+    athlete -- the needle stays her own color, the risk bands keep the
+    shared green/amber/red meaning so they read the same everywhere."""
+    metrics = _player_metrics(surname).dropna(subset=["acwr"])
+    if metrics.empty:
+        st.info("Not enough training history for this player yet.")
+        return
+    _, end = filters.period()
+    in_range = metrics.index[metrics.index <= pd.Timestamp(end)]
+    if in_range.empty:
+        st.info("No training data at or before the end of this period.")
+        return
+
+    acwr = float(metrics.loc[in_range.max(), "acwr"])
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=acwr,
+        number=dict(font=dict(size=30, color="#f2f2f2"), valueformat=".2f"),
+        gauge=dict(
+            axis=dict(range=[0, 2], tickfont=dict(size=9, color="#9a9a9a")),
+            bar=dict(color=color, thickness=0.3),
+            bgcolor="rgba(0,0,0,0)",
+            steps=[
+                {"range": [0, 0.8], "color": WARN_COLOR},
+                {"range": [0.8, 1.3], "color": GOOD_COLOR},
+                {"range": [1.3, 1.5], "color": WARN_COLOR},
+                {"range": [1.5, 2], "color": LOW_COLOR},
+            ],
+        ),
+    ))
+    fig.update_layout(height=150, margin=dict(l=20, r=20, t=10, b=0), paper_bgcolor="rgba(0,0,0,0)")
+    st.plotly_chart(fig, width="stretch")
+
+
+def _render_player_acwr(surname: str, color: str):
+    metrics = _player_metrics(surname)
+    start, end = filters.period()
+    d = metrics.loc[
+        (metrics.index >= pd.Timestamp(start)) & (metrics.index <= pd.Timestamp(end))
+    ].dropna(subset=["acwr"])
+    if d.empty:
+        st.info("Not enough training history in this period (ACWR needs 28+ prior days).")
+        return
+
+    top = max(2.5, float(d["acwr"].max()) + 0.2)
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=d.index, y=d["acute"], name="Weekly load (7d)",
+        marker_color=rgba_from_hex(color, 0.45),
+    ))
+    fig.add_trace(go.Scatter(
+        x=d.index, y=d["acwr"], name="ACWR", yaxis="y2", line=dict(color=color, width=2),
+    ))
+    fig.add_hrect(y0=0.8, y1=1.3, yref="y2", fillcolor="rgba(84,162,75,0.18)", line_width=0)
+    fig.add_hrect(y0=1.5, y1=top, yref="y2", fillcolor="rgba(228,87,86,0.14)", line_width=0)
+    fig.update_layout(
+        yaxis=dict(title="Weekly load (TL)"),
+        yaxis2=dict(title="ACWR", overlaying="y", side="right", range=[0, top]),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0, font=dict(size=10)),
+        height=230, margin=dict(l=10, r=10, t=30, b=10),
+    )
+    st.plotly_chart(fig, width="stretch")
+    st.caption("Green band 0.8–1.3 = sweet spot · red band >1.5 = injury-risk spike.")
+
+
+def _render_player_jumps(surname: str, color: str):
+    salti = dl.load_wellness_data()["salti"]
+    p = filters.filter_by_date_col(salti)
+    p = p[(p["player_name"] == surname)].dropna(subset=["SALTI"])
+    if p.empty:
+        st.info("No jump data for this player in this period.")
+        return
+
+    daily = p.groupby("Data", as_index=False)["SALTI"].sum().sort_values("Data")
+    fig = go.Figure(go.Bar(
+        x=daily["Data"], y=daily["SALTI"], marker_color=color,
+        hovertemplate="%{x|%d %b %Y}<br>%{y:.0f} jumps<extra></extra>",
+    ))
+    fig.update_layout(
+        height=200, margin=dict(l=10, r=10, t=10, b=10),
+        yaxis=dict(title="Jumps"), xaxis=dict(title=None),
+    )
+    st.plotly_chart(fig, width="stretch")
 
 
 def _render_wellness_radar(surname: str, color: str):
@@ -325,8 +414,14 @@ def _render_wellness_radar(surname: str, color: str):
         st.info("No wellness data for this player.")
         return
 
-    recent = p[p["Data"] >= p["Data"].max() - pd.Timedelta(days=6)]
+    recent = filters.filter_by_date_col(p)
+    if recent.empty:
+        st.info("No wellness data for this player in this period.")
+        return
     icons = list(WELLNESS_ICONS.values())
+    # Paired with the icons so every trace can name the item on hover --
+    # the emoji axis labels carry no text of their own by design.
+    names = [WELLNESS_PARAM_LABELS[param] for param in WELLNESS_ICONS]
 
     means = [recent[param].mean() for param in WELLNESS_ICONS]
     stds = [recent[param].std() for param in WELLNESS_ICONS]
@@ -369,9 +464,11 @@ def _render_wellness_radar(surname: str, color: str):
     # defaults an unset mode to "lines+markers" for this few a points,
     # which was silently adding unstyled default-colored dots.
     r, theta = close_polygon(values, icons)
+    names_closed, _ = close_polygon(names, icons)
     fig.add_trace(go.Scatterpolar(
         r=r, theta=theta, mode="lines", line=dict(color=rgba_from_hex(color, 0.7), width=1.2),
-        showlegend=False,
+        showlegend=False, customdata=names_closed,
+        hovertemplate="<b>%{customdata}</b><br>Period average: %{r:.1f}/5<extra></extra>",
     ))
     # Most recent day: a solid outline with filled dots, drawn last so it
     # stands out over the std band.
@@ -379,7 +476,8 @@ def _render_wellness_radar(surname: str, color: str):
     fig.add_trace(go.Scatterpolar(
         r=r_last, theta=theta_last, mode="lines+markers",
         line=dict(color=color, width=2), marker=dict(color=color, size=7),
-        showlegend=False,
+        showlegend=False, customdata=names_closed,
+        hovertemplate="<b>%{customdata}</b><br>Latest day: %{r:.1f}/5<extra></extra>",
     ))
     fig.update_layout(**dark_polar_layout([1, 5]))
     fig.update_layout(
@@ -390,8 +488,7 @@ def _render_wellness_radar(surname: str, color: str):
         ),
     )
     st.plotly_chart(fig, width="stretch", theme=None)
-    st.caption("Last 7 days, bigger = feeling better. Faint band = ±1 std dev · solid line = most recent day.")
-    st.caption(" · ".join(f"{WELLNESS_ICONS[p]} {WELLNESS_PARAM_LABELS[p]}" for p in WELLNESS_ICONS))
+    st.caption("Bigger = feeling better. Faint band = ±1 std dev · solid line = most recent day. Hover any point for the item's name.")
 
 
 def _render_overview(surname: str):
@@ -411,19 +508,27 @@ def _render_overview(surname: str):
                 row = stats.loc[surname]
                 st.markdown(f"🏐 **{row['points']}** pts · **{row['appearances']}** matches")
 
-            # Performance and Wellness share one toggle-switched section
-            # (rather than both stacked) so the whole overview box stays
-            # short enough to fit without scrolling the page.
-            view = st.segmented_control(
-                "Detail view", ["Performance", "Wellness"],
-                default="Performance", key="players_detail_view",
-                label_visibility="collapsed",
-            )
-
-        if view == "Wellness":
-            _render_wellness_radar(surname, color)
-        else:
+        # Everything on one screen now (no Performance/Wellness toggle):
+        # scouting on the left, wellness + readiness on the right, load and
+        # jumps across the bottom.
+        col_perf, col_well = st.columns(2)
+        with col_perf:
+            st.markdown("**Performance**")
             _render_performance(surname, color)
+        with col_well:
+            st.markdown("**Wellness**")
+            _render_wellness_radar(surname, color)
+
+        col_gauge, col_acwr = st.columns([1, 2])
+        with col_gauge:
+            st.markdown("**Readiness** · ACWR")
+            _render_player_readiness(surname, color)
+        with col_acwr:
+            st.markdown("**ACWR** & weekly load")
+            _render_player_acwr(surname, color)
+
+        st.markdown("**Jumps** over time")
+        _render_player_jumps(surname, color)
 
 
 def render():
@@ -433,7 +538,6 @@ def render():
 
     st.session_state.setdefault("selected_player", "Orro")
     selected = st.session_state["selected_player"]
-    stats = dl.load_player_stats()
     # A plain dict-append instead of itertools.groupby -- ALL_PLAYERS is no
     # longer sorted by role (players_grid.GRID_ROWS interleaves a Libero at
     # the end of each row for the Wellness page's 3x5 grid), and groupby
@@ -443,32 +547,24 @@ def render():
     for p in pg.ALL_PLAYERS:
         groups.setdefault(p["role"], []).append(p)
 
-    # Wider than the overview panel -- the roster grid reads better with
-    # room to breathe (esp. the 2-card Setter/Opposite rows), and the
-    # detail panel's own charts stay perfectly readable narrower too.
-    col_grid, col_overview = st.columns([3, 2])
+    # Narrow now that the cards are vertical name strips -- the detail
+    # panel gets the rest, since it carries every chart on this page.
+    col_grid, col_overview = st.columns([1, 3])
 
     with col_grid:
         # Row 1: Setter + Opposite side by side, in separate boxes (2 cards
         # each, so equal-width columns keep every card the same size).
         col_setter, col_opposite = st.columns(2)
         with col_setter:
-            _render_role_group("Setter", groups["Setter"], stats, selected)
+            _render_role_group("Setter", groups["Setter"], selected)
         with col_opposite:
-            _render_role_group("Opposite", groups["Opposite"], stats, selected)
+            _render_role_group("Opposite", groups["Opposite"], selected)
 
         # Rows 2-3: Outside Hitter and Middle Blocker, 4 cards each, full width.
-        _render_role_group("Outside Hitter", groups["Outside Hitter"], stats, selected)
-        _render_role_group("Middle Blocker", groups["Middle Blocker"], stats, selected)
+        _render_role_group("Outside Hitter", groups["Outside Hitter"], selected)
+        _render_role_group("Middle Blocker", groups["Middle Blocker"], selected)
 
-        # Row 4: Libero (3 cards) + crest, kept at a 3:1 width ratio so the
-        # Libero cards stay exactly as wide as every other card above.
-        col_libero, col_crest = st.columns([3, 1])
-        with col_libero:
-            _render_role_group("Libero", groups["Libero"], stats, selected)
-        with col_crest:
-            with st.container(border=True, key="player_crest_box"):
-                st.image(pg.CREST_PATH, width="stretch")
+        _render_role_group("Libero", groups["Libero"], selected)
 
     with col_overview:
         _render_overview(selected)

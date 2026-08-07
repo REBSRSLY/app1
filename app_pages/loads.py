@@ -55,16 +55,6 @@ def _render_jumps(salti):
         _render_jumps_cumulative(period)
 
 
-def _reference_date(rpe: pd.DataFrame):
-    """Latest training day at or before the active period's end -- the
-    anchor the KPI row and heatmap read "as of". None if the period ends
-    before any training data exists."""
-    _, end = filters.period()
-    available = rpe["Data"].dropna()
-    available = available[available <= pd.Timestamp(end)]
-    return available.max() if not available.empty else None
-
-
 def _render_how_to_expander():
     """Same "How to read" affordance the Scout & Stats sections carry --
     these are standard sports-science figures (Foster sRPE, Gabbett ACWR)
@@ -100,26 +90,31 @@ def _render_how_to_expander():
         )
 
 
-def _render_kpis(rpe: pd.DataFrame, team_metrics: pd.DataFrame, ref_date):
+def _render_kpis(rpe: pd.DataFrame, team_metrics: pd.DataFrame):
+    """All four figures averaged across the sidebar's selected period,
+    rather than read off a single "as of" reference day. ACWR and monotony
+    are rolling-window metrics, so each day's value already carries its own
+    trailing 7/28-day context -- averaging those daily values gives the
+    period's typical ratio, which is what the surrounding charts show too."""
+    start, end = filters.period()
+    in_period = team_metrics.loc[
+        (team_metrics.index >= pd.Timestamp(start)) & (team_metrics.index <= pd.Timestamp(end))
+    ]
+    period_rpe = filters.filter_by_date_col(rpe)
+
+    def _fmt(series: pd.Series, spec: str) -> str:
+        clean = series.dropna()
+        return format(clean.mean(), spec) if not clean.empty else "—"
+
     cols = st.columns(4)
-    if ref_date is None or ref_date not in team_metrics.index:
-        for col, label in zip(cols, ["Avg TL", "Avg RPE", "Team ACWR", "Weekly monotony"]):
-            with col:
-                st.metric(label, "—", border=True)
-        return
-
-    row = team_metrics.loc[ref_date]
-    today_sessions = rpe[rpe["Data"] == ref_date]
-    rpe_today = today_sessions["Rpe"].mean() if not today_sessions.empty else None
-
     with cols[0]:
-        st.metric("Avg TL", f"{row['daily_tl']:.0f}", border=True)
+        st.metric("Avg TL", _fmt(in_period["daily_tl"], ".0f") if not in_period.empty else "—", border=True)
     with cols[1]:
-        st.metric("Avg RPE", f"{rpe_today:.1f}" if pd.notna(rpe_today) else "—", border=True)
+        st.metric("Avg RPE", _fmt(period_rpe["Rpe"], ".1f") if not period_rpe.empty else "—", border=True)
     with cols[2]:
-        st.metric("Team ACWR", f"{row['acwr']:.2f}" if pd.notna(row["acwr"]) else "—", border=True)
+        st.metric("Team ACWR", _fmt(in_period["acwr"], ".2f") if not in_period.empty else "—", border=True)
     with cols[3]:
-        st.metric("Weekly monotony", f"{row['monotony']:.2f}" if pd.notna(row["monotony"]) else "—", border=True)
+        st.metric("Weekly monotony", _fmt(in_period["monotony"], ".2f") if not in_period.empty else "—", border=True)
 
 
 def _render_acwr_chart(team_metrics: pd.DataFrame, start, end):
@@ -145,19 +140,16 @@ def _render_acwr_chart(team_metrics: pd.DataFrame, start, end):
     st.caption("Green band 0.8–1.3 = sweet spot · red band >1.5 = injury-risk spike.")
 
 
-def _render_heatmap(rpe: pd.DataFrame, ref_date):
-    if ref_date is None:
-        st.info("No sessions in the last 7 days.")
-        return
-
-    start = ref_date - pd.Timedelta(days=6)
-    window = rpe[(rpe["Data"] >= start) & (rpe["Data"] <= ref_date)]
+def _render_heatmap(rpe: pd.DataFrame):
+    """Spans the sidebar's selected period rather than a fixed trailing
+    week, so it lines up with every other chart on the page."""
+    window = filters.filter_by_date_col(rpe).dropna(subset=["Data"])
     if window.empty:
-        st.info("No sessions in the last 7 days.")
+        st.info("No sessions in this period.")
         return
 
     pivot = window.groupby(["player_name", "Data"])["Rpe"].mean().unstack("Data")
-    dates = pd.date_range(start, ref_date, freq="D")
+    dates = pd.date_range(window["Data"].min(), window["Data"].max(), freq="D")
     pivot = pivot.reindex(columns=dates).sort_index()
 
     fig = go.Figure(go.Heatmap(
@@ -230,19 +222,16 @@ def _render_individual_trend(rpe: pd.DataFrame, team_metrics: pd.DataFrame, star
 
 def _render_load(rpe: pd.DataFrame):
     start, end = filters.period()
-    ref_date = _reference_date(rpe)
     team_metrics = training_load.metrics_frame(rpe)
 
     _render_how_to_expander()
-    _render_kpis(rpe, team_metrics, ref_date)
-    if ref_date is not None:
-        st.caption(f"As of {ref_date.strftime('%d %b %Y')}, the latest training day in the selected period.")
+    _render_kpis(rpe, team_metrics)
 
     col_heat, col_acwr = st.columns([1, 1.3])
     with col_heat:
         with st.container(border=True):
-            st.markdown("**Team heatmap** · last 7 days")
-            _render_heatmap(rpe, ref_date)
+            st.markdown("**Team heatmap** · RPE per player")
+            _render_heatmap(rpe)
     with col_acwr:
         with st.container(border=True):
             st.markdown("**Team ACWR & weekly load**")
