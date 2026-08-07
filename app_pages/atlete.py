@@ -203,15 +203,24 @@ def _ordered_fundamentals(present: set) -> list[str]:
     return [f for f in dl.FONDAMENTALE_ORDER if f in present]
 
 
-def _recency_opacity(group: pd.DataFrame) -> pd.Series:
+def _recency_opacity(d: pd.DataFrame) -> pd.Series:
     """0.25 (oldest match in this fundamental) ramping up to 1.0 (most
     recent) -- "match" sorts correctly as a plain string since it's a
-    fixed-width YY-MM-DD sheet name."""
-    rank = group["match"].rank(method="dense")
-    n = rank.max()
-    if n <= 1:
-        return pd.Series(1.0, index=group.index)
-    return 0.25 + 0.75 * (rank - 1) / (n - 1)
+    fixed-width YY-MM-DD sheet name.
+
+    Fully vectorised (rank + transform), deliberately not
+    groupby().apply(): that form is deprecated in current pandas, and on
+    a newer pandas than this repo pins it returned a shape that assigned
+    back as NaN, which Plotly then rejected outright ("invalid element"
+    for marker.opacity) rather than just drawing something odd. The
+    fillna/clip at the end keeps that class of failure impossible --
+    marker.opacity only ever sees a real float in [0.25, 1]."""
+    rank = d.groupby("fondamentale", observed=True)["match"].rank(method="dense")
+    n = rank.groupby(d["fondamentale"], observed=True).transform("max")
+    # Single-match fundamentals have no range to ramp across: full opacity.
+    denom = (n - 1).where(n > 1, 1.0)
+    ramp = 0.25 + 0.75 * (rank - 1) / denom
+    return ramp.where(n > 1, 1.0).fillna(1.0).clip(0.25, 1.0).astype(float)
 
 
 def _performance_bar(recent: pd.DataFrame, value_col: str, title: str, color: str, x_range: list):
@@ -266,7 +275,7 @@ def _performance_range(recent: pd.DataFrame, value_col: str, title: str, color: 
 
     d["Fundamental"] = d["fondamentale"].map(dl.FONDAMENTALE_ABBR)
     d["FullName"] = d["fondamentale"].map(dl.FONDAMENTALE_LABELS)
-    d["opacity"] = d.groupby("fondamentale", group_keys=False).apply(_recency_opacity)
+    d["opacity"] = _recency_opacity(d)
     order = _ordered_fundamentals(set(d["fondamentale"]))
     order_labels = [dl.FONDAMENTALE_ABBR[f] for f in order]
 
