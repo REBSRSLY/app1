@@ -8,11 +8,19 @@ everything into "long" DataFrames that are easy to filter and plot.
 
 from __future__ import annotations
 
+import hashlib
+
 import pandas as pd
 import streamlit as st
 
-MATCHES_FILE = "anonymized_matches_F.xlsx"
-WELLNESS_FILE = "anonymized_wellness_file.xlsx"
+import file_store as fs
+
+# Everything is read from the files/ repository (one file per match sheet,
+# one per wellness day+kind) rather than the two monolithic workbooks, so
+# uploading or archiving a single file on the Data Entry page changes what
+# the app shows. See file_store.py for the layout and tools/seed_files.py
+# for how the original workbooks were split into it.
+CACHE_DIR = fs.FILES_DIR / "_cache"
 
 SEASON_LABEL = "Season (Total)"
 
@@ -334,10 +342,62 @@ def parse_scout_sheet(df: pd.DataFrame, match_label: str) -> list[dict]:
     return _parse_scout_sheet(df, match_label)
 
 
+def source_signature() -> str:
+    """Fingerprint of every source file (path + mtime + size).
+
+    Used as the cache key for all loaders below, so adding or archiving a
+    single file on the Data Entry page invalidates exactly what it should
+    -- without it, st.cache_data would happily keep serving data from
+    files that are no longer there.
+    """
+    parts: list[str] = []
+    if fs.FILES_DIR.exists():
+        for path in sorted(fs.FILES_DIR.rglob("*.xlsx")):
+            if fs.ARCHIVE_DIR in path.parents or CACHE_DIR in path.parents:
+                continue
+            stat = path.stat()
+            parts.append(f"{path.as_posix()}:{stat.st_mtime_ns}:{stat.st_size}")
+    return hashlib.sha1("\n".join(parts).encode()).hexdigest()
+
+
+def _disk_cached(name: str, signature: str, build) -> pd.DataFrame:
+    """Reading ~600 small .xlsx files takes ~40s; a parquet round-trip of
+    the combined result takes well under a second. st.cache_data alone
+    only helps within a running process, so the same work would be repaid
+    on every cold start -- this keeps the combined frame on disk too,
+    rebuilt only when the signature says the files actually changed.
+
+    Cache problems are never fatal: on any failure it just rebuilds.
+    """
+    frame_path = CACHE_DIR / f"{name}.parquet"
+    sig_path = CACHE_DIR / f"{name}.sig"
+    try:
+        if frame_path.exists() and sig_path.exists() and sig_path.read_text() == signature:
+            return pd.read_parquet(frame_path)
+    except Exception:
+        pass
+
+    df = build()
+    try:
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        df.to_parquet(frame_path, index=False)
+        sig_path.write_text(signature)
+    except Exception:
+        pass
+    return df
+
+
+@st.cache_data(show_spinner="Loading roster...")
+def _load_anagrafica(signature: str) -> pd.DataFrame:
+    if not fs.ANAGRAFICA_FILE.exists():
+        return pd.DataFrame(columns=["Atleta", "Ruolo", "Squadra", "Unnamed: 3"])
+    return pd.read_excel(fs.ANAGRAFICA_FILE)
+
+
 @st.cache_data(show_spinner="Loading scouting data...")
 def load_player_names() -> dict[str, str]:
     """Map player code -> real name, women's A1 team only."""
-    an = pd.read_excel(WELLNESS_FILE, sheet_name="Anagrafica")
+    an = _load_anagrafica(source_signature())
     f = an[an["Squadra"] == "A1F"].copy()
     f["code"] = f["Atleta"].str.replace("player ", "", regex=False).str.strip()
     names = dict(zip(f["code"], f["Unnamed: 3"]))
@@ -363,7 +423,7 @@ def load_player_roles() -> dict[str, str]:
     entries for 13 — Heyrman and Daalderop appear there only as another
     player's "alt", with no role of their own).
     """
-    an = pd.read_excel(WELLNESS_FILE, sheet_name="Anagrafica")
+    an = _load_anagrafica(source_signature())
     f = an[an["Squadra"] == "A1F"].copy()
     f["code"] = f["Atleta"].str.replace("player ", "", regex=False).str.strip()
     return dict(zip(f["code"], f["Ruolo"]))
@@ -403,47 +463,92 @@ def load_player_stats() -> pd.DataFrame:
     return df.set_index("player_name")
 
 
-@st.cache_data(show_spinner="Loading scouting data...")
-def load_scout_data() -> pd.DataFrame:
-    """Load and normalize all scout sheets (season total + every match)."""
-    xl = pd.ExcelFile(MATCHES_FILE)
-    all_rows: list[dict] = []
+def _build_scout_frame() -> pd.DataFrame:
+    """Parse every scout file across every season into one long frame.
 
-    for sheet in xl.sheet_names:
-        label = SEASON_LABEL if sheet == "TOTALE 23-24" else sheet
-        raw = xl.parse(sheet, header=None)
-        all_rows.extend(_parse_scout_sheet(raw, label))
+    A match file's label is derived from its filename rather than stored
+    inside it, so it stays the "23-10-08" key the calendar and every
+    filter already match on.
+    """
+    all_rows: list[dict] = []
+    for season in fs.seasons_on_disk():
+        for entry in fs.list_scout(season):
+            label = SEASON_LABEL if entry["kind"] == "season_total" else fs.date_to_sheet_label(entry["date"])
+            raw = pd.read_excel(entry["path"], header=None)
+            all_rows.extend(_parse_scout_sheet(raw, label))
+
+    if not all_rows:
+        return pd.DataFrame(columns=["fondamentale", "palla", "player_code", "is_team", "match", *NUMERIC_COLS])
 
     data = pd.DataFrame(all_rows)
     data[NUMERIC_COLS] = data[NUMERIC_COLS].apply(pd.to_numeric, errors="coerce")
+    return data
+
+
+@st.cache_data(show_spinner="Loading scouting data...")
+def _load_scout_cached(signature: str) -> pd.DataFrame:
+    return _disk_cached("scout", signature, _build_scout_frame)
+
+
+def load_scout_data() -> pd.DataFrame:
+    """Load and normalize all scout files (season totals + every match)."""
+    data = _load_scout_cached(source_signature()).copy()
+    if data.empty:
+        return data
 
     names = load_player_names()
     data["player_name"] = data["player_code"].map(names)
     data.loc[data["is_team"], "player_name"] = "Team"
 
+    # Applied here rather than before the parquet round-trip: the category
+    # order is display metadata, not data worth persisting.
     data["palla"] = pd.Categorical(data["palla"], categories=PALLA_ORDER, ordered=True)
     return data
 
 
 @st.cache_data(show_spinner="Loading match calendar...")
 def load_match_list() -> list[str]:
-    """List of match dates (season total excluded), reverse chronological order."""
-    xl = pd.ExcelFile(MATCHES_FILE)
-    dates = [s for s in xl.sheet_names if s != "TOTALE 23-24"]
+    """Match dates across every season, most recent first."""
+    dates = [
+        fs.date_to_sheet_label(entry["date"])
+        for season in fs.seasons_on_disk()
+        for entry in fs.list_scout(season)
+        if entry["kind"] == "match"
+    ]
     return sorted(dates, reverse=True)
 
 
+def _build_wellness_frame(kind: str) -> pd.DataFrame:
+    """One day-file per row-set: concatenated back into the single frame
+    the rest of the app expects."""
+    frames = [
+        pd.read_excel(entry["path"])
+        for season in fs.seasons_on_disk()
+        for entry in fs.list_wellness(season)
+        if entry["kind"] == kind
+    ]
+    if not frames:
+        return pd.DataFrame(columns=["Atleta", "Data"])
+    out = pd.concat(frames, ignore_index=True)
+    out["Data"] = pd.to_datetime(out["Data"], errors="coerce")
+    return out.sort_values("Data").reset_index(drop=True)
+
+
 @st.cache_data(show_spinner="Loading wellness data...")
+def _load_wellness_cached(signature: str, kind: str) -> pd.DataFrame:
+    return _disk_cached(f"wellness_{kind}", signature, lambda: _build_wellness_frame(kind))
+
+
 def load_wellness_data() -> dict[str, pd.DataFrame]:
-    """Load the women's team wellness/RPE/jump sheets with real names."""
+    """The women's team wellness/RPE/jump data, with real player names."""
     names = load_player_names()
+    signature = source_signature()
 
-    rpe = pd.read_excel(WELLNESS_FILE, sheet_name="Rpe TL F")
-    wellness = pd.read_excel(WELLNESS_FILE, sheet_name="Wellness F")
-    salti = pd.read_excel(WELLNESS_FILE, sheet_name="SALTI_F")
-
-    for d in (rpe, wellness, salti):
-        d["player_code"] = d["Atleta"].str.replace("player ", "", regex=False).str.strip()
-        d["player_name"] = d["player_code"].map(names)
-
-    return {"rpe": rpe, "wellness": wellness, "salti": salti}
+    out = {}
+    for key, kind in (("rpe", "rpe"), ("wellness", "tqr"), ("salti", "jumps")):
+        d = _load_wellness_cached(signature, kind).copy()
+        if "Atleta" in d.columns:
+            d["player_code"] = d["Atleta"].astype(str).str.replace("player ", "", regex=False).str.strip()
+            d["player_name"] = d["player_code"].map(names)
+        out[key] = d
+    return out

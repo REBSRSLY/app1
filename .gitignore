@@ -1,3 +1,8 @@
 __pycache__/
 *.pyc
 .claude/
+
+# Derived from files/ on load (rebuilt automatically when the file set changes)
+files/_cache/
+# Files removed via the Data Entry page -- local history, not source data
+files/_archive/
