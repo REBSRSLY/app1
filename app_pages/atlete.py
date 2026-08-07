@@ -142,8 +142,8 @@ def _player_card_css() -> str:
             f'background: linear-gradient(0deg, #181818 0%, {rgba_from_hex(color, 0.55)} 100%) !important; '
             f'}} '
             f'[class*="st-key-playercard_{p["surname"]}"] button::after {{ '
-            f'content: "{number_content}"; position: absolute; top: 6px; left: 0; right: 0; '
-            f'text-align: center; font-size: 1.15rem; font-weight: 800; '
+            f'content: "{number_content}"; position: absolute; top: 4px; left: 0; right: 0; '
+            f'text-align: center; font-size: 1.75rem; font-weight: 800; '
             f'color: rgba(255,255,255,0.92); text-shadow: 0 1px 4px rgba(0,0,0,0.6); '
             f'z-index: 0; line-height: 1; pointer-events: none; }}'
         )
@@ -307,9 +307,11 @@ def _render_performance(surname: str, color: str):
         st.info("No scouting data for this player in this period.")
         return
 
-    _performance_range(recent, "E_pct", "Efficiency E%", color, is_percent=True, x_range=[-1, 1])
-    _performance_bar(recent, "Ind", "Index", color, x_range=[0, 100])
-    st.caption("By fundamental, over the selected period. Hover a row for the fundamental's full name.")
+    col_eff, col_ind = st.columns(2)
+    with col_eff:
+        _performance_range(recent, "E_pct", "Efficiency E%", color, is_percent=True, x_range=[-1, 1])
+    with col_ind:
+        _performance_bar(recent, "Ind", "Index", color, x_range=[0, 100])
 
 
 def _player_metrics(surname: str) -> pd.DataFrame:
@@ -321,10 +323,29 @@ def _player_metrics(surname: str) -> pd.DataFrame:
     return training_load.metrics_frame(rpe, player_name=surname)
 
 
+# Which band the athlete's current ACWR falls in, and what that band
+# means in the two words the gauge has room for. Ordered low-to-high so
+# the first matching upper bound wins.
+ACWR_ZONES = [
+    (0.8, WARN_COLOR, "Undertrained"),
+    (1.3, GOOD_COLOR, "Optimal recovery"),
+    (1.5, WARN_COLOR, "Load creeping up"),
+    (float("inf"), LOW_COLOR, "Injury-risk spike"),
+]
+
+
+def _acwr_zone(acwr: float) -> tuple[str, str]:
+    for upper, color, label in ACWR_ZONES:
+        if acwr < upper:
+            return color, label
+    return ACWR_ZONES[-1][1], ACWR_ZONES[-1][2]
+
+
 def _render_player_readiness(surname: str, color: str):
     """Same ACWR gauge the Home/Loads pages show for the team, for one
     athlete -- the needle stays her own color, the risk bands keep the
-    shared green/amber/red meaning so they read the same everywhere."""
+    shared green/amber/red meaning so they read the same everywhere, and
+    the caption underneath spells out which band she's actually in."""
     metrics = _player_metrics(surname).dropna(subset=["acwr"])
     if metrics.empty:
         st.info("Not enough training history for this player yet.")
@@ -335,7 +356,8 @@ def _render_player_readiness(surname: str, color: str):
         st.info("No training data at or before the end of this period.")
         return
 
-    acwr = float(metrics.loc[in_range.max(), "acwr"])
+    ref_date = in_range.max()
+    acwr = float(metrics.loc[ref_date, "acwr"])
     fig = go.Figure(go.Indicator(
         mode="gauge+number",
         value=acwr,
@@ -355,6 +377,14 @@ def _render_player_readiness(surname: str, color: str):
     fig.update_layout(height=150, margin=dict(l=20, r=20, t=10, b=0), paper_bgcolor="rgba(0,0,0,0)")
     st.plotly_chart(fig, width="stretch")
 
+    zone_color, zone_label = _acwr_zone(acwr)
+    st.markdown(
+        f'<div style="text-align:center;margin-top:-10px;">'
+        f'<span style="color:{zone_color};font-weight:700;font-size:0.95rem;">{zone_label}</span>'
+        f'<div style="color:var(--muted);font-size:11px;">{ref_date.strftime("%d %b %Y")}</div></div>',
+        unsafe_allow_html=True,
+    )
+
 
 def _render_player_acwr(surname: str, color: str):
     metrics = _player_metrics(surname)
@@ -368,23 +398,29 @@ def _render_player_acwr(surname: str, color: str):
 
     top = max(2.5, float(d["acwr"].max()) + 0.2)
     fig = go.Figure()
+    # Bars are that day's own training load, not the 7-day rolling sum --
+    # the ACWR line above already carries the weekly picture, so repeating
+    # it in the bars just hid the day-to-day pattern.
     fig.add_trace(go.Bar(
-        x=d.index, y=d["acute"], name="Weekly load (7d)",
+        x=d.index, y=d["daily_tl"], name="Daily load (TL)",
         marker_color=rgba_from_hex(color, 0.45),
     ))
     fig.add_trace(go.Scatter(
         x=d.index, y=d["acwr"], name="ACWR", yaxis="y2", line=dict(color=color, width=2),
     ))
+    # All three ACWR bands, matching the gauge's own steps: amber below
+    # 0.8 and between 1.3-1.5, green in the sweet spot, red above 1.5.
+    fig.add_hrect(y0=0, y1=0.8, yref="y2", fillcolor="rgba(240,166,0,0.12)", line_width=0)
     fig.add_hrect(y0=0.8, y1=1.3, yref="y2", fillcolor="rgba(84,162,75,0.18)", line_width=0)
+    fig.add_hrect(y0=1.3, y1=1.5, yref="y2", fillcolor="rgba(240,166,0,0.12)", line_width=0)
     fig.add_hrect(y0=1.5, y1=top, yref="y2", fillcolor="rgba(228,87,86,0.14)", line_width=0)
     fig.update_layout(
-        yaxis=dict(title="Weekly load (TL)"),
+        yaxis=dict(title="Daily load (TL)"),
         yaxis2=dict(title="ACWR", overlaying="y", side="right", range=[0, top]),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0, font=dict(size=10)),
         height=230, margin=dict(l=10, r=10, t=30, b=10),
     )
     st.plotly_chart(fig, width="stretch")
-    st.caption("Green band 0.8–1.3 = sweet spot · red band >1.5 = injury-risk spike.")
 
 
 def _render_player_jumps(surname: str, color: str):
@@ -488,7 +524,6 @@ def _render_wellness_radar(surname: str, color: str):
         ),
     )
     st.plotly_chart(fig, width="stretch", theme=None)
-    st.caption("Bigger = feeling better. Faint band = ±1 std dev · solid line = most recent day. Hover any point for the item's name.")
 
 
 def _render_overview(surname: str):
@@ -497,9 +532,11 @@ def _render_overview(surname: str):
     stats = dl.load_player_stats()
 
     with st.container(border=True, key="player_overview_box"):
-        col_photo, col_info = st.columns([0.8, 2.2])
+        # Photo at a quarter of its old size -- it identifies who's
+        # selected, the charts below are what the panel is actually for.
+        col_photo, col_info = st.columns([0.32, 3.68])
         with col_photo:
-            st.image(pg.photo_path(player), width="stretch")
+            st.image(pg.photo_path(player), width=56)
         with col_info:
             cap = "👑 " if player.get("captain") else ""
             st.markdown(f'<div class="overview-name">{cap}{player["first"]} {player["last"]}</div>', unsafe_allow_html=True)
@@ -508,27 +545,27 @@ def _render_overview(surname: str):
                 row = stats.loc[surname]
                 st.markdown(f"🏐 **{row['points']}** pts · **{row['appearances']}** matches")
 
-        # Everything on one screen now (no Performance/Wellness toggle):
-        # scouting on the left, wellness + readiness on the right, load and
-        # jumps across the bottom.
-        col_perf, col_well = st.columns(2)
-        with col_perf:
-            st.markdown("**Performance**")
-            _render_performance(surname, color)
+        # Row 1: scouting (E% and Index side by side inside it).
+        st.markdown("**Performance**")
+        _render_performance(surname, color)
+
+        # Row 2: jumps and wellness.
+        col_jumps, col_well = st.columns(2)
+        with col_jumps:
+            st.markdown("**Jumps** over time")
+            _render_player_jumps(surname, color)
         with col_well:
             st.markdown("**Wellness**")
             _render_wellness_radar(surname, color)
 
-        col_gauge, col_acwr = st.columns([1, 2])
+        # Row 3: readiness gauge (narrow) beside the load chart.
+        col_gauge, col_acwr = st.columns([1, 3])
         with col_gauge:
-            st.markdown("**Readiness** · ACWR")
+            st.markdown("**Readiness** · ACWR, last day")
             _render_player_readiness(surname, color)
         with col_acwr:
-            st.markdown("**ACWR** & weekly load")
+            st.markdown("**ACWR** & daily load")
             _render_player_acwr(surname, color)
-
-        st.markdown("**Jumps** over time")
-        _render_player_jumps(surname, color)
 
 
 def render():
@@ -564,7 +601,14 @@ def render():
         _render_role_group("Outside Hitter", groups["Outside Hitter"], selected)
         _render_role_group("Middle Blocker", groups["Middle Blocker"], selected)
 
-        _render_role_group("Libero", groups["Libero"], selected)
+        # Liberos are 3 cards where the rows above are 4, so the crest sits
+        # in that spare slot -- outside the role box, as its own small card.
+        col_libero, col_crest = st.columns([3, 1])
+        with col_libero:
+            _render_role_group("Libero", groups["Libero"], selected)
+        with col_crest:
+            with st.container(border=True, key="player_crest_box"):
+                st.image(pg.CREST_PATH, width="stretch")
 
     with col_overview:
         _render_overview(selected)
