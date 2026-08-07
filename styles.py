@@ -94,8 +94,16 @@ CUSTOM_CSS = """
            #101418 -- the base -- is what actually dominates the page. */
         [data-testid="stMain"] {
             background:
+                /* Diagonale doppia, extended into a fuller set of parallel
+                   magenta stripes at varying widths/opacities so the motif
+                   runs across the whole page rather than one corner. */
                 linear-gradient(135deg, transparent 40%, #E0158C 40%, #E0158C 42.5%, transparent 42.5%),
                 linear-gradient(135deg, transparent 50%, rgba(224, 21, 140, 0.55) 50%, rgba(224, 21, 140, 0.55) 51.5%, transparent 51.5%),
+                linear-gradient(135deg, transparent 22%, rgba(224, 21, 140, 0.75) 22%, rgba(224, 21, 140, 0.75) 23.4%, transparent 23.4%),
+                linear-gradient(135deg, transparent 31%, rgba(224, 21, 140, 0.4) 31%, rgba(224, 21, 140, 0.4) 31.8%, transparent 31.8%),
+                linear-gradient(135deg, transparent 60%, rgba(224, 21, 140, 0.45) 60%, rgba(224, 21, 140, 0.45) 61.6%, transparent 61.6%),
+                linear-gradient(135deg, transparent 71%, rgba(224, 21, 140, 0.3) 71%, rgba(224, 21, 140, 0.3) 71.7%, transparent 71.7%),
+                linear-gradient(135deg, transparent 84%, rgba(224, 21, 140, 0.5) 84%, rgba(224, 21, 140, 0.5) 85.3%, transparent 85.3%),
                 radial-gradient(90% 70% at 100% 0%, #E0158C 0%, transparent 50%),
                 radial-gradient(90% 80% at 0% 100%, #0B2F6B 0%, transparent 55%),
                 #101418;

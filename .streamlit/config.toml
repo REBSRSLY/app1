@@ -24,8 +24,9 @@ showWidgetBorder = true
 showSidebarBorder = true
 
 [theme.sidebar]
-backgroundColor = "#050505"
-secondaryBackgroundColor = "#141414"
+# The deep blue from the page background's own mesh gradient.
+backgroundColor = "#0B2F6B"
+secondaryBackgroundColor = "#0d2450"
 textColor = "#f2f2f2"
 borderColor = "#2a2a2a"
 primaryColor = "#e0158c"

@@ -85,19 +85,23 @@ NAV_CSS = """
         width: 1080px;
         margin: 0 auto;
         z-index: 999990;
-        background: var(--ink);
+        /* Same magenta as the page background's own mesh/diagonals, so the
+           nav reads as part of that identity rather than a separate dark
+           band sitting on top of it. */
+        background: var(--accent-3);
         height: 54px;
         align-items: center;
         padding: 0 8px;
-        border-bottom: 2px solid transparent;
-        border-image: linear-gradient(90deg, var(--accent) 0%, var(--accent-2) 65%, var(--accent-3) 100%) 1;
+        border-bottom: 2px solid #000000;
     }
     /* Compact enough that even "Scout & Stats"/"Data Entry" -- the two
        longest labels -- fit on one line: smaller icon, tight padding, no
        letter-spacing, explicit nowrap as a hard backstop against wrapping
        rather than relying on width alone. */
     [class*="st-key-topnav_"] button {
-        border: 1px solid var(--accent) !important;
+        border: 1.5px solid #000000 !important;
+        background: rgba(0, 0, 0, 0.18) !important;
+        color: #ffffff !important;
         border-radius: 6px !important;
         font-family: var(--display);
         font-weight: 700;
@@ -116,11 +120,13 @@ NAV_CSS = """
     [class*="st-key-topnav_"] button [data-testid="stIconMaterial"] {
         font-size: 15px !important;
     }
+    /* Selected page: solid near-black against the magenta bar -- reads as
+       "this one", without reintroducing the old blue. */
     [class*="st-key-topnav_"] button[kind="primary"] {
-        background: linear-gradient(90deg, var(--accent) 0%, var(--accent-2) 100%) !important;
-        border: 1px solid transparent !important;
+        background: var(--ink) !important;
+        border: 1.5px solid #000000 !important;
         color: #ffffff !important;
-        box-shadow: 0 0 0 2px var(--accent-3);
+        box-shadow: none;
     }
     /* Page content used to start right after the nav row when it was
        part of normal flow; now that the row is fixed/out of flow, this

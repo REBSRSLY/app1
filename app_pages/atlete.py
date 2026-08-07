@@ -261,7 +261,15 @@ def _recency_opacity(d: pd.DataFrame) -> pd.Series:
     return ramp.where(n > 1, 1.0).fillna(1.0).clip(0.25, 1.0).astype(float)
 
 
-def _performance_bar(recent: pd.DataFrame, value_col: str, title: str, color: str, x_range: list):
+# Both performance charts share these, so their rows land on exactly the
+# same pixels: same height, same margins, and (passed in) the same
+# category array. Anything differing here shifts one chart's rows
+# relative to the other's, which is what made them look misaligned.
+PERF_CHART_HEIGHT = 170
+PERF_CHART_MARGIN = dict(l=0, r=10, t=25, b=10)
+
+
+def _performance_bar(recent: pd.DataFrame, value_col: str, title: str, color: str, x_range: list, order_labels: list[str]):
     """Mean +/- std bars: used for Ind, which is a plain non-negative count
     per fundamental so a single mean+spread bar reads cleanly."""
     agg = recent.groupby("fondamentale", observed=True).agg(
@@ -278,8 +286,6 @@ def _performance_bar(recent: pd.DataFrame, value_col: str, title: str, color: st
     # Full name carried alongside the acronym so hovering a row spells out
     # what "AAR"/"CTR"/... actually mean, without a separate legend.
     agg["FullName"] = agg["fondamentale"].map(dl.FONDAMENTALE_LABELS)
-    order = _ordered_fundamentals(set(agg["fondamentale"]))
-    order_labels = [dl.FONDAMENTALE_ABBR[f] for f in order]
 
     fig = px.bar(
         agg, x="mean", y="Fundamental", orientation="h", error_x="std",
@@ -290,16 +296,29 @@ def _performance_bar(recent: pd.DataFrame, value_col: str, title: str, color: st
     )
     fig.update_traces(hovertemplate="<b>%{customdata[0]}</b><br>%{x:.0f}<extra></extra>")
     fig.update_layout(
-        height=170, margin=dict(l=0, r=10, t=25, b=10),
+        height=PERF_CHART_HEIGHT, margin=PERF_CHART_MARGIN,
         title=dict(text=title, font=dict(size=12)),
+        # None, not px.bar's labels={...: ""}: an empty-string axis title
+        # still reserves its row, which shrank this chart's plot area by
+        # ~28px against the scatter beside it and pushed every row out of
+        # line with it.
+        xaxis_title=None, yaxis_title=None,
         xaxis=dict(range=x_range),
-        yaxis=dict(categoryorder="array", categoryarray=order_labels[::-1]),
+        # Explicit range, not just categoryarray: the array fixes the row
+        # ORDER, but a categorical axis still auto-ranges to only the
+        # categories its own traces actually use -- so a fundamental with
+        # E% data but no Index data left the two charts spanning a
+        # different number of slots, i.e. rows at different pixels.
+        yaxis=dict(
+            categoryorder="array", categoryarray=order_labels[::-1],
+            range=[-0.5, len(order_labels) - 0.5],
+        ),
     )
     fig.update_traces(error_x=dict(thickness=1, width=3))
     st.plotly_chart(fig, width="stretch")
 
 
-def _performance_range(recent: pd.DataFrame, value_col: str, title: str, color: str, is_percent: bool, x_range: list):
+def _performance_range(recent: pd.DataFrame, value_col: str, title: str, color: str, is_percent: bool, x_range: list, order_labels: list[str]):
     """One scatter dot per match, per fundamental -- more recent matches
     more opaque. Thin gridlines across the fixed axis range (rather than
     an outline bar) are what makes each row readable now. Rows use the
@@ -314,8 +333,6 @@ def _performance_range(recent: pd.DataFrame, value_col: str, title: str, color: 
     d["Fundamental"] = d["fondamentale"].map(dl.FONDAMENTALE_ABBR)
     d["FullName"] = d["fondamentale"].map(dl.FONDAMENTALE_LABELS)
     d["opacity"] = _recency_opacity(d)
-    order = _ordered_fundamentals(set(d["fondamentale"]))
-    order_labels = [dl.FONDAMENTALE_ABBR[f] for f in order]
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(
@@ -334,7 +351,7 @@ def _performance_range(recent: pd.DataFrame, value_col: str, title: str, color: 
     # fully visible without shifting the gridlines/zeroline themselves.
     pad = dtick * 0.12
     fig.update_layout(
-        height=170, margin=dict(l=0, r=10, t=25, b=10),
+        height=PERF_CHART_HEIGHT, margin=PERF_CHART_MARGIN,
         title=dict(text=title, font=dict(size=12)),
         xaxis=dict(
             range=[x_range[0] - pad, x_range[1] + pad],
@@ -343,7 +360,15 @@ def _performance_range(recent: pd.DataFrame, value_col: str, title: str, color: 
             showgrid=True, gridcolor="rgba(255,255,255,0.14)", gridwidth=1,
             zeroline=True, zerolinecolor="rgba(255,255,255,0.3)", zerolinewidth=1,
         ),
-        yaxis=dict(categoryorder="array", categoryarray=order_labels[::-1]),
+        # Explicit range, not just categoryarray: the array fixes the row
+        # ORDER, but a categorical axis still auto-ranges to only the
+        # categories its own traces actually use -- so a fundamental with
+        # E% data but no Index data left the two charts spanning a
+        # different number of slots, i.e. rows at different pixels.
+        yaxis=dict(
+            categoryorder="array", categoryarray=order_labels[::-1],
+            range=[-0.5, len(order_labels) - 0.5],
+        ),
     )
     st.plotly_chart(fig, width="stretch")
 
@@ -354,11 +379,18 @@ def _render_performance(surname: str, color: str):
         st.info("No scouting data for this player in this period.")
         return
 
+    # One shared row list for both charts: each used to derive its own from
+    # whatever it happened to have data for, so a fundamental present in one
+    # and not the other shifted every row below it out of alignment with
+    # its neighbour.
+    order = _ordered_fundamentals(set(recent.loc[recent["Tot"] > 0, "fondamentale"]))
+    order_labels = [dl.FONDAMENTALE_ABBR[f] for f in order]
+
     col_eff, col_ind = st.columns(2)
     with col_eff:
-        _performance_range(recent, "E_pct", "Efficiency E%", color, is_percent=True, x_range=[-1, 1])
+        _performance_range(recent, "E_pct", "Efficiency E%", color, is_percent=True, x_range=[-1, 1], order_labels=order_labels)
     with col_ind:
-        _performance_bar(recent, "Ind", "Index", color, x_range=[0, 100])
+        _performance_bar(recent, "Ind", "Index", color, x_range=[0, 100], order_labels=order_labels)
 
 
 def _player_metrics(surname: str) -> pd.DataFrame:
