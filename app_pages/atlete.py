@@ -98,6 +98,52 @@ BASE_CARD_CSS = """
     [class*="st-key-role_group_"], .st-key-player_overview_box, .st-key-player_crest_box {
         background: var(--surface) !important;
     }
+    /* TQR track beside the wellness radar. Height matches the radar's own
+       185px so the two line up; the athlete's bar is absolutely centred
+       on the track rather than sharing its flex flow, so it overlays the
+       zones instead of pushing them around. */
+    .tqr-wrap {
+        display: flex;
+        justify-content: center;
+        gap: 5px;
+        height: 155px;
+        margin-top: 14px;
+    }
+    .tqr-scale {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        font-size: 9px;
+        color: var(--muted);
+        line-height: 1;
+    }
+    .tqr-track {
+        position: relative;
+        width: 14px;
+        height: 100%;
+        border-radius: 3px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+    .tqr-value {
+        position: absolute;
+        bottom: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 9px;
+        border: 1.5px solid #000000;
+        border-radius: 2px;
+        box-sizing: border-box;
+    }
+    .tqr-cap {
+        text-align: center;
+        color: var(--muted);
+        font-size: 10px;
+        line-height: 1.3;
+        margin-top: 5px;
+    }
+    .tqr-cap b { color: #f2f2f2; font-size: 0.85rem; }
     /* Player photo: rendered from the full-resolution source and scaled
        here, so the browser downsamples a 254px image instead of blowing
        up a 64px one (see _render_overview). */
@@ -409,40 +455,39 @@ def _render_performance(surname: str, color: str):
         _performance_bar(recent, "Ind", "Index", color, x_range=[0, 100], order_labels=order_labels)
 
 
-def _render_tqr_column(tqr: float, day, color: str):
-    """TQR as a vertical 6-20 track standing beside the radar.
+TQR_MIN, TQR_MAX = 6.0, 20.0
 
-    Drawn from shapes rather than go.Indicator: its bullet gauge is
-    horizontal-only, and this needs to run vertically to sit alongside
-    the radar without stealing height from it. Red below the 15 recovery
+
+def _render_tqr_column(tqr: float, day, color: str):
+    """TQR as a slim vertical 6-20 track standing beside the radar.
+
+    Plain HTML, not a Plotly figure: Plotly clamps a chart to ~150px
+    wide, which overflowed a column this narrow whatever the shape
+    coordinates said. CSS gives the track an exact width and keeps the
+    athlete's own bar centred inside it. Red below the 15 recovery
     threshold, amber straddling it, green above -- the same reading as
     every other TQR colour in the app.
     """
-    fig = go.Figure()
-    for lo, hi, band in ((6, 14, LOW_COLOR), (14, 16, WARN_COLOR), (16, 20, GOOD_COLOR)):
-        fig.add_shape(type="rect", x0=0, x1=1, y0=lo, y1=hi, fillcolor=band, line_width=0, layer="below")
-    fig.add_shape(
-        type="rect", x0=0.22, x1=0.78, y0=6, y1=tqr,
-        fillcolor=color, line=dict(color="#000000", width=1.5),
-    )
-    fig.add_annotation(
-        x=0.5, y=tqr, text=f"<b>{tqr:.1f}</b>", showarrow=False, yshift=11,
-        font=dict(size=13, color="#f2f2f2"),
-    )
-    fig.update_xaxes(visible=False, range=[0, 1], fixedrange=True)
-    fig.update_yaxes(
-        range=[6, 20], side="right", fixedrange=True,
-        tickvals=[6, 10, 15, 20], tickfont=dict(size=9, color="#9a9a9a"),
-        showgrid=False, zeroline=False,
-    )
-    fig.update_layout(
-        height=185, margin=dict(l=2, r=2, t=18, b=6), showlegend=False,
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-    )
-    st.plotly_chart(fig, width="stretch")
+    span = TQR_MAX - TQR_MIN
+    filled = max(0.0, min(1.0, (tqr - TQR_MIN) / span)) * 100
+    # Drawn top-down, so the zones read green (20) -> amber (15) -> red (6).
+    green = (TQR_MAX - 16) / span * 100
+    amber = (16 - 14) / span * 100
+    red = (14 - TQR_MIN) / span * 100
+
     st.markdown(
-        f'<div style="text-align:center;color:var(--muted);font-size:10px;margin-top:-10px;">'
-        f'TQR<br>{day.strftime("%d %b")}</div>',
+        f"""
+        <div class="tqr-wrap">
+          <div class="tqr-scale"><span>{TQR_MAX:.0f}</span><span>15</span><span>{TQR_MIN:.0f}</span></div>
+          <div class="tqr-track">
+            <div style="height:{green:.1f}%;background:{GOOD_COLOR};"></div>
+            <div style="height:{amber:.1f}%;background:{WARN_COLOR};"></div>
+            <div style="height:{red:.1f}%;background:{LOW_COLOR};"></div>
+            <div class="tqr-value" style="height:{filled:.1f}%;background:{color};"></div>
+          </div>
+        </div>
+        <div class="tqr-cap"><b>{tqr:.1f}</b><br>TQR · {day.strftime("%d %b")}</div>
+        """,
         unsafe_allow_html=True,
     )
 
@@ -652,6 +697,9 @@ def _render_wellness_radar(surname: str, color: str):
 
     # Radar and the TQR track side by side, same height, so the wellness
     # box reads as one picture rather than a chart with a bar on top of it.
+    # The track's own thinness comes from the shape coordinates (0.3-0.7 of
+    # the plot area), not from starving the column: Plotly won't render
+    # below a minimum width, and a narrower column just clips the figure.
     col_radar, col_tqr = st.columns([4, 1])
     with col_radar:
         st.plotly_chart(fig, width="stretch", theme=None)
