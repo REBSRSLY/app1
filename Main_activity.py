@@ -101,10 +101,25 @@ NAV_CSS = """
         min-width: 0;
     }
     /* Streamlit's own header shares this band; lift it above the bar so
-       Deploy and the hamburger stay visible and clickable on top of it. */
-    header[data-testid="stHeader"] {
+       Deploy and the hamburger stay visible and clickable on top of it.
+       It and its toolbar are both full-width (1280x56) invisible layers,
+       though, so on their own they'd swallow every click meant for the
+       nav buttons underneath -- transparent to the eye but not to the
+       pointer. pointer-events:none lets clicks fall through the empty
+       parts, and the rule below hands it back to the two leaf groups
+       that actually hold controls (status widget on the left, Deploy +
+       hamburger on the right), which are only as wide as their content. */
+    header[data-testid="stHeader"],
+    header[data-testid="stHeader"] [data-testid="stToolbar"],
+    header[data-testid="stHeader"] [data-testid="stToolbar"] > div {
         z-index: 999992 !important;
         background: transparent !important;
+        pointer-events: none;
+    }
+    header[data-testid="stHeader"] [data-testid="stToolbar"] > div > div,
+    header[data-testid="stHeader"] button,
+    header[data-testid="stHeader"] a {
+        pointer-events: auto;
     }
     /* Compact enough that even "Scout & Stats"/"Data Entry" -- the two
        longest labels -- fit on one line: smaller icon, tight padding, no
