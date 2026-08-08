@@ -98,6 +98,14 @@ BASE_CARD_CSS = """
     [class*="st-key-role_group_"], .st-key-player_overview_box, .st-key-player_crest_box {
         background: var(--surface) !important;
     }
+    /* Player photo: rendered from the full-resolution source and scaled
+       here, so the browser downsamples a 254px image instead of blowing
+       up a 64px one (see _render_overview). */
+    .st-key-player_overview_box [data-testid="stImage"] img {
+        width: 64px !important;
+        height: 64px !important;
+        object-fit: contain;
+    }
     .overview-name { font-family: var(--display); font-size: 1.3rem; font-weight: 700; letter-spacing: 0.01em; }
     /* Crest card sits in the Libero row's spare 4th slot. The rule above
        pins that row to flex-start (so role boxes never stretch to the
@@ -265,7 +273,7 @@ def _recency_opacity(d: pd.DataFrame) -> pd.Series:
 # same pixels: same height, same margins, and (passed in) the same
 # category array. Anything differing here shifts one chart's rows
 # relative to the other's, which is what made them look misaligned.
-PERF_CHART_HEIGHT = 170
+PERF_CHART_HEIGHT = 210
 PERF_CHART_MARGIN = dict(l=0, r=10, t=25, b=10)
 
 
@@ -312,6 +320,10 @@ def _performance_bar(recent: pd.DataFrame, value_col: str, title: str, color: st
         yaxis=dict(
             categoryorder="array", categoryarray=order_labels[::-1],
             range=[-0.5, len(order_labels) - 0.5],
+            # Every row labelled: at this height Plotly's automatic tick
+            # selection dropped every other acronym, so the chart listed
+            # SRV/ATT/CTR/DIG/SET and silently hid REC/AAR/BLK/FB.
+            tickmode="linear", tick0=0, dtick=1, tickfont=dict(size=9),
         ),
     )
     fig.update_traces(error_x=dict(thickness=1, width=3))
@@ -368,6 +380,10 @@ def _performance_range(recent: pd.DataFrame, value_col: str, title: str, color: 
         yaxis=dict(
             categoryorder="array", categoryarray=order_labels[::-1],
             range=[-0.5, len(order_labels) - 0.5],
+            # Every row labelled: at this height Plotly's automatic tick
+            # selection dropped every other acronym, so the chart listed
+            # SRV/ATT/CTR/DIG/SET and silently hid REC/AAR/BLK/FB.
+            tickmode="linear", tick0=0, dtick=1, tickfont=dict(size=9),
         ),
     )
     st.plotly_chart(fig, width="stretch")
@@ -391,6 +407,44 @@ def _render_performance(surname: str, color: str):
         _performance_range(recent, "E_pct", "Efficiency E%", color, is_percent=True, x_range=[-1, 1], order_labels=order_labels)
     with col_ind:
         _performance_bar(recent, "Ind", "Index", color, x_range=[0, 100], order_labels=order_labels)
+
+
+def _render_tqr_column(tqr: float, day, color: str):
+    """TQR as a vertical 6-20 track standing beside the radar.
+
+    Drawn from shapes rather than go.Indicator: its bullet gauge is
+    horizontal-only, and this needs to run vertically to sit alongside
+    the radar without stealing height from it. Red below the 15 recovery
+    threshold, amber straddling it, green above -- the same reading as
+    every other TQR colour in the app.
+    """
+    fig = go.Figure()
+    for lo, hi, band in ((6, 14, LOW_COLOR), (14, 16, WARN_COLOR), (16, 20, GOOD_COLOR)):
+        fig.add_shape(type="rect", x0=0, x1=1, y0=lo, y1=hi, fillcolor=band, line_width=0, layer="below")
+    fig.add_shape(
+        type="rect", x0=0.22, x1=0.78, y0=6, y1=tqr,
+        fillcolor=color, line=dict(color="#000000", width=1.5),
+    )
+    fig.add_annotation(
+        x=0.5, y=tqr, text=f"<b>{tqr:.1f}</b>", showarrow=False, yshift=11,
+        font=dict(size=13, color="#f2f2f2"),
+    )
+    fig.update_xaxes(visible=False, range=[0, 1], fixedrange=True)
+    fig.update_yaxes(
+        range=[6, 20], side="right", fixedrange=True,
+        tickvals=[6, 10, 15, 20], tickfont=dict(size=9, color="#9a9a9a"),
+        showgrid=False, zeroline=False,
+    )
+    fig.update_layout(
+        height=185, margin=dict(l=2, r=2, t=18, b=6), showlegend=False,
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+    )
+    st.plotly_chart(fig, width="stretch")
+    st.markdown(
+        f'<div style="text-align:center;color:var(--muted);font-size:10px;margin-top:-10px;">'
+        f'TQR<br>{day.strftime("%d %b")}</div>',
+        unsafe_allow_html=True,
+    )
 
 
 def _player_metrics(surname: str) -> pd.DataFrame:
@@ -549,36 +603,7 @@ def _render_wellness_radar(surname: str, color: str):
     last_day = recent[recent["Data"] == last_date]
     last_values = [6 - last_day[param].mean() for param in WELLNESS_ICONS]
 
-    # TQR as a 6-20 bullet gauge instead of a bare number: the colored
-    # track puts her value in context (red below the 15 threshold, amber
-    # straddling it, green above) at a glance. Last day's value, not the
-    # period mean, matching the solid line on the radar below.
     tqr_last = last_day["Tqr"].mean()
-    if pd.notna(tqr_last):
-        fig_tqr = go.Figure(go.Indicator(
-            mode="gauge+number",
-            value=float(tqr_last),
-            number=dict(font=dict(size=20, color="#f2f2f2"), valueformat=".1f"),
-            gauge=dict(
-                shape="bullet",
-                axis=dict(range=[6, 20], tickfont=dict(size=9, color="#9a9a9a")),
-                bar=dict(color=color, thickness=0.55, line=dict(color="#000000", width=1.5)),
-                bgcolor="rgba(0,0,0,0)",
-                borderwidth=0,
-                steps=[
-                    {"range": [6, 14], "color": LOW_COLOR},
-                    {"range": [14, 16], "color": WARN_COLOR},
-                    {"range": [16, 20], "color": GOOD_COLOR},
-                ],
-            ),
-        ))
-        fig_tqr.update_layout(height=64, margin=dict(l=8, r=12, t=8, b=4), paper_bgcolor="rgba(0,0,0,0)")
-        st.plotly_chart(fig_tqr, width="stretch")
-        st.markdown(
-            f'<div style="text-align:center;color:var(--muted);font-size:11px;margin-top:-8px;">'
-            f'TQR · {last_date.strftime("%d %b %Y")}</div>',
-            unsafe_allow_html=True,
-        )
 
     fig = go.Figure()
     # ±1 std dev band: filled only between the lower and upper polygons
@@ -624,7 +649,15 @@ def _render_wellness_radar(surname: str, color: str):
             angularaxis=dict(tickfont=dict(size=20)),
         ),
     )
-    st.plotly_chart(fig, width="stretch", theme=None)
+
+    # Radar and the TQR track side by side, same height, so the wellness
+    # box reads as one picture rather than a chart with a bar on top of it.
+    col_radar, col_tqr = st.columns([4, 1])
+    with col_radar:
+        st.plotly_chart(fig, width="stretch", theme=None)
+    with col_tqr:
+        if pd.notna(tqr_last):
+            _render_tqr_column(float(tqr_last), last_date, color)
 
 
 def _render_overview(surname: str):
@@ -637,7 +670,12 @@ def _render_overview(surname: str):
         # selected, the charts below are what the panel is actually for.
         col_photo, col_info = st.columns([0.37, 3.63])
         with col_photo:
-            st.image(pg.photo_path(player), width=64)
+            # Full 254px source, sized down to 64 by the CSS below rather
+            # than by Streamlit: asking for width=64 hands the browser a
+            # 64px-wide image, which is then upscaled again on any
+            # higher-density display and looks soft. Letting the browser
+            # downsample the original keeps it sharp at any DPI.
+            st.image(pg.photo_path(player))
         with col_info:
             cap = "👑 " if player.get("captain") else ""
             st.markdown(f'<div class="overview-name">{cap}{player["first"]} {player["last"]}</div>', unsafe_allow_html=True)
