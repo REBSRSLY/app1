@@ -191,60 +191,24 @@ def _render_team_profile(scoped: pd.DataFrame, metric_label: str):
     st.caption(f"Team {axis_label.lower()} for every fundamental in the selected scope.")
 
 
-def _render_team_radar(scoped: pd.DataFrame):
-    """Team #% (green) and =% (red) overlaid across every fundamental --
-    where the team scores/points vs. where it makes errors, at a glance.
-    Both are plain 0-and-up rates, so no zero-crossing shift is needed
-    (unlike the old E%-based version)."""
-    team = scoped[scoped["is_team"] & (scoped["palla"] == "Totale") & (scoped["Tot"] > 0)].copy()
-    present = [f for f in dl.FONDAMENTALE_ORDER if f in set(team["fondamentale"])]
-    if len(present) < 3:
-        st.info("Not enough fundamentals in this scope for a radar.")
-        return
-
-    labels = [dl.FONDAMENTALE_ABBR[f] for f in present]
-    # Carried through close_polygon alongside the values so hovering any
-    # vertex spells out the acronym sitting on that axis.
-    full_names, _ = close_polygon([dl.FONDAMENTALE_LABELS[f] for f in present], labels)
-    perfect_vals = [team.loc[team["fondamentale"] == f, "Perfect_pct"].iloc[0] for f in present]
-    err_vals = [team.loc[team["fondamentale"] == f, "Err_pct"].iloc[0] for f in present]
-    top = max(max(perfect_vals, default=0), max(err_vals, default=0)) * 1.2 or 1.0
-
-    fig = go.Figure()
-    r, theta = close_polygon(perfect_vals, labels)
-    fig.add_trace(go.Scatterpolar(
-        r=r, theta=theta, name="#%", fill="toself", line_color="#2E7D32", fillcolor="rgba(46,125,50,0.3)",
-        customdata=full_names, hovertemplate="<b>%{customdata}</b><br>#%: %{r:.0%}<extra></extra>",
-    ))
-    r, theta = close_polygon(err_vals, labels)
-    fig.add_trace(go.Scatterpolar(
-        r=r, theta=theta, name="=%", fill="toself", line_color="#E45756", fillcolor="rgba(228,87,86,0.3)",
-        customdata=full_names, hovertemplate="<b>%{customdata}</b><br>=%: %{r:.0%}<extra></extra>",
-    ))
-    fig.update_layout(**dark_polar_layout([0, top]))
-    fig.update_layout(
-        polar=dict(radialaxis=dict(tickformat=".0%")),
-        legend=dict(orientation="h", yanchor="bottom", y=1.05, x=0.35),
-        height=320, margin=dict(l=30, r=30, t=30, b=20),
-    )
-    st.plotly_chart(fig, width="stretch", theme=None)
-    st.caption("Team % Point/Perfect (#, green) vs % Error (=, red) per fundamental.")
-
-
-def _render_team_serve_outcome(scoped: pd.DataFrame):
-    """Team-wide Serve outcome mix -- share of every serve landing in each
-    outcome bucket (=/-/!/+/#, plus the slash), not just the headline E%
-    that collapses all of that into one number."""
+def _render_team_outcome_mix(scoped: pd.DataFrame, fond_sel: str):
+    """Team-wide outcome mix for the selected fundamental -- the share of
+    every action landing in each outcome bucket (=/-/!/+/#, plus the
+    slash), not just the headline E% that collapses all of that into one
+    number. Follows the Trend chart's own fundamental picker rather than
+    being pinned to the serve, so both boxes always describe the same
+    fundamental."""
+    label = dl.FONDAMENTALE_LABELS.get(fond_sel, fond_sel)
     team = scoped[
-        scoped["is_team"] & (scoped["fondamentale"] == "Battuta")
+        scoped["is_team"] & (scoped["fondamentale"] == fond_sel)
         & (scoped["palla"] == "Totale") & (scoped["Tot"] > 0)
     ]
     if team.empty:
-        st.info("No serve data in this scope.")
+        st.info(f"No {label.lower()} data in this scope.")
         return
 
     row = team.iloc[0]
-    legenda = dl.legenda_fondamentale("Battuta")
+    legenda = dl.legenda_fondamentale(fond_sel)
     rows = []
     for simbolo, nome, _ in legenda:
         col = SYMBOL_TO_COL.get(simbolo)
@@ -254,7 +218,7 @@ def _render_team_serve_outcome(scoped: pd.DataFrame):
         rows.append({"Outcome": f"{nome} ({simbolo})", "count": 0 if pd.isna(count) else count, "symbol": simbolo})
     d = pd.DataFrame(rows)
     if d.empty or d["count"].sum() == 0:
-        st.info("No serve outcome data in this scope.")
+        st.info(f"No {label.lower()} outcome data in this scope.")
         return
 
     color_map = {f"{nome} ({simbolo})": OUTCOME_COLORS.get(simbolo, "#888888") for simbolo, nome, _ in legenda}
@@ -262,16 +226,21 @@ def _render_team_serve_outcome(scoped: pd.DataFrame):
     fig.update_traces(textinfo="percent+label")
     fig.update_layout(height=320, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
     st.plotly_chart(fig, width="stretch")
-    st.caption("Team serve outcome mix -- share of total serves landing in each outcome.")
+    st.caption(f"Share of the team's total {label.lower()} actions landing in each outcome.")
 
 
-def _render_team_trend(scout: pd.DataFrame):
+def _render_team_trend(scout: pd.DataFrame) -> str:
     """Team volume (bars, colored by that match's result) and efficiency
     (line) per match for one fundamental, over the scoped matches --
     whether the team is trending up or down isn't visible from any of the
     other, single-snapshot charts below, and coloring the bars by result
     surfaces whether efficiency swings track winning/losing or move
-    independently of it."""
+    independently of it.
+
+    Returns the selected fundamental: this picker drives the outcome mix
+    box below as well, so the section describes one fundamental at a time
+    rather than two unrelated ones.
+    """
     fond_options = dl.FONDAMENTALE_ORDER
     fond_sel = st.selectbox(
         "Fundamental", fond_options, index=fond_options.index("Attacco"),
@@ -283,7 +252,7 @@ def _render_team_trend(scout: pd.DataFrame):
     ].copy()
     if d.empty:
         st.info("No data available for this fundamental in the selected scope.")
-        return
+        return fond_sel
 
     d["pdate"] = pd.to_datetime(d["match"].apply(mc.parsed_date))
     d = d.sort_values("pdate")
@@ -329,6 +298,7 @@ def _render_team_trend(scout: pd.DataFrame):
         legend=dict(orientation="h", y=1.22, font=dict(size=11)),
     )
     st.plotly_chart(fig, width="stretch")
+    return fond_sel
 
 
 def _render_team_profile_section(scoped: pd.DataFrame, scout: pd.DataFrame):
@@ -336,24 +306,21 @@ def _render_team_profile_section(scoped: pd.DataFrame, scout: pd.DataFrame):
 
     with st.container(border=True):
         st.markdown("**Trend over time** · team efficiency per match")
-        _render_team_trend(scout)
+        fond_sel = _render_team_trend(scout)
 
-    with st.container(border=True):
-        st.markdown("**Team profile** · pick a metric")
-        metric_label = st.segmented_control(
-            "Metric", list(TEAM_PROFILE_METRICS.keys()), default="E%", required=True, key="team_profile_metric",
-        )
-        _render_team_profile(scoped, metric_label)
-
-    col_radar, col_pie = st.columns(2)
-    with col_radar:
+    fond_label = dl.FONDAMENTALE_LABELS.get(fond_sel, fond_sel)
+    col_profile, col_mix = st.columns(2)
+    with col_profile:
         with st.container(border=True):
-            st.markdown("**Team shape** · # % vs = % across fundamentals")
-            _render_team_radar(scoped)
-    with col_pie:
+            st.markdown("**Team profile** · pick a metric")
+            metric_label = st.segmented_control(
+                "Metric", list(TEAM_PROFILE_METRICS.keys()), default="E%", required=True, key="team_profile_metric",
+            )
+            _render_team_profile(scoped, metric_label)
+    with col_mix:
         with st.container(border=True):
-            st.markdown("**Serve outcome mix** · team")
-            _render_team_serve_outcome(scoped)
+            st.markdown(f"**Outcome mix** · {fond_label.lower()}, team")
+            _render_team_outcome_mix(scoped, fond_sel)
 
 
 def _render_how_to_expander(fond_sel: str, fond_label: str):

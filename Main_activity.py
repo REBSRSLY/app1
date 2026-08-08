@@ -69,21 +69,18 @@ NAV_CSS = """
 <style>
     /* Fixed to the very top of the viewport, in Streamlit's own header
        band (same row as the sidebar's "<<" collapse control) instead of
-       sitting in normal page flow below it. left:0 (rather than a
-       hardcoded sidebar width) plus the sidebar's own higher z-index
-       means the sidebar simply covers our left edge whenever it's
-       expanded -- when it's collapsed (including via the auto-collapse
-       below), the bar naturally extends to fill that space, no JS needed.
-       right leaves room for Streamlit's own Deploy/menu buttons, which
-       live in the same band on the far right; a fixed width + auto
-       margins centers the bar within whatever's left of that span. */
+       sitting in normal page flow below it. Spans the full width so the
+       magenta reads as one continuous bar rather than a floating block:
+       the sidebar's own higher z-index still covers the left edge when
+       it's expanded, and the right padding keeps the buttons clear of
+       Streamlit's Deploy/menu controls, which live in the same band. */
     div[data-testid="stHorizontalBlock"]:has(> div [class*="st-key-topnav_"]) {
         position: fixed;
         top: 0;
         left: 0;
-        right: 112px;
-        width: 1080px;
-        margin: 0 auto;
+        right: 0;
+        width: 100%;
+        margin: 0;
         z-index: 999990;
         /* Same magenta as the page background's own mesh/diagonals, so the
            nav reads as part of that identity rather than a separate dark
@@ -91,8 +88,23 @@ NAV_CSS = """
         background: var(--accent-3);
         height: 54px;
         align-items: center;
-        padding: 0 8px;
+        justify-content: center;
+        gap: 6px;
+        padding: 0 112px 0 8px;
         border-bottom: 2px solid #000000;
+    }
+    /* Columns size to their button instead of splitting the (now
+       full-width) row evenly, so the group stays compact and centered. */
+    div[data-testid="stHorizontalBlock"]:has(> div [class*="st-key-topnav_"]) > div[data-testid="stColumn"] {
+        flex: 0 0 auto;
+        width: auto;
+        min-width: 0;
+    }
+    /* Streamlit's own header shares this band; lift it above the bar so
+       Deploy and the hamburger stay visible and clickable on top of it. */
+    header[data-testid="stHeader"] {
+        z-index: 999992 !important;
+        background: transparent !important;
     }
     /* Compact enough that even "Scout & Stats"/"Data Entry" -- the two
        longest labels -- fit on one line: smaller icon, tight padding, no
