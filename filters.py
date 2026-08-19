@@ -45,6 +45,27 @@ def _season_bounds(season: str) -> tuple[dt.date, dt.date]:
     return min(dates), max(dates)
 
 
+def _picker_bounds(season: str) -> tuple[dt.date, dt.date]:
+    """Full calendar years spanning the season (e.g. 1 Jan 2023 - 31 Dec
+    2024 for a season running Sep 2023 - May 2024) -- used only as the
+    Start/End date_input widgets' own min/max, wider than _season_bounds()
+    on purpose.
+
+    Without this, min/max = the season's real (narrow) date range, and its
+    own popup's year dropdown breaks in a specific way: picking "2024"
+    while the calendar is showing September keeps showing September, just
+    in 2024 -- but every day of September 2024 is past max_value, so none
+    of them are selectable, and from the outside that reads as "the year
+    dropdown doesn't work" even though it does; there's just nothing valid
+    for it to land on in whichever month happened to be showing. Widening
+    the *popup's* own bounds to the full calendar year doesn't loosen what
+    counts as "in scope" anywhere else -- matches_in_scope()/period() etc.
+    still key off the real season bounds, a date picked outside them just
+    yields the same "no matches/no data" empty states those already show."""
+    start_bound, end_bound = _season_bounds(season)
+    return dt.date(start_bound.year, 1, 1), dt.date(end_bound.year, 12, 31)
+
+
 def init():
     """Set up default filter state once per session. Defaults to the whole
     season / all competitions, so nothing is hidden until the user actually
@@ -210,11 +231,15 @@ def render_sidebar_tools():
 
     st.markdown("**Period**")
     with st.container(border=True):
-        start_bound, end_bound = _season_bounds(season())
-        st.date_input("Start", key="flt_start", min_value=start_bound, max_value=end_bound)
+        # The widgets' own min/max are the wider full-calendar-year bounds
+        # (see _picker_bounds), not the season's real (narrower) range --
+        # otherwise the popup's year dropdown can point at a year where the
+        # currently-shown month has no valid day left in it at all.
+        picker_min, picker_max = _picker_bounds(season())
+        st.date_input("Start", key="flt_start", min_value=picker_min, max_value=picker_max)
         st.checkbox("Different end date", key="flt_has_end")
         st.date_input(
-            "End", key="flt_end", min_value=start_bound, max_value=end_bound,
+            "End", key="flt_end", min_value=picker_min, max_value=picker_max,
             disabled=not st.session_state["flt_has_end"],
         )
 
