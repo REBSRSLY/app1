@@ -163,7 +163,7 @@ def _render_team_profile(scoped: pd.DataFrame, metric_label: str):
             category_orders={"Fundamental": order_labels},
             color=metric_col, color_continuous_scale="RdBu", color_continuous_midpoint=0,
             labels={metric_col: axis_label, "Fundamental": ""},
-            custom_data=["FullName", "Tot"],
+            custom_data=["FullName", "Tot"], text="Tot",
         )
         fig.update_layout(coloraxis_showscale=False)
     else:
@@ -172,7 +172,7 @@ def _render_team_profile(scoped: pd.DataFrame, metric_label: str):
             category_orders={"Fundamental": order_labels},
             labels={metric_col: axis_label, "Fundamental": ""},
             color_discrete_sequence=["#1655a5"],
-            custom_data=["FullName", "Tot"],
+            custom_data=["FullName", "Tot"], text="Tot",
         )
     # Opacity list must align with `team`'s own row order (what the trace's
     # x/y arrays are built from), NOT order_labels -- category_orders only
@@ -181,18 +181,26 @@ def _render_team_profile(scoped: pd.DataFrame, metric_label: str):
     value_fmt = ":.0%" if is_pct else ":.1f"
     fig.update_traces(
         hovertemplate="<b>%{customdata[0]}</b><br>" + axis_label + ": %{x" + value_fmt
-        + "}<br>%{customdata[1]:d} actions<extra></extra>"
+        + "}<br>%{customdata[1]:d} actions<extra></extra>",
+        # Action count printed right past each bar's end -- the same number
+        # already driving the fade above, spelled out instead of only being
+        # discoverable on hover. cliponaxis=False so a bar running close to
+        # the axis's own edge doesn't get its label cut off there.
+        texttemplate="%{text:d}", textposition="outside", textfont=dict(size=10, color="rgba(255,255,255,0.75)"),
+        cliponaxis=False,
     )
     # E_pct etc. are mathematically bounded to [-1, 1] and never actually
     # exceed 100% -- but Plotly's autorange only fits the tallest bar, so a
     # high-but-valid value (season Alzata E% = 91%) can visually run past
     # the last gridline and look like it broke the scale. Pin an explicit
     # range that always includes the full 0-100% span (and any negative
-    # values, e.g. Battuta) so that's never ambiguous.
+    # values, e.g. Battuta) so that's never ambiguous. Padding widened
+    # slightly (0.05 -> 0.09) so the new action-count label past the bar's
+    # end has room before it, too.
     xaxis_kwargs = dict(tickformat=".0%") if is_pct else {}
     if is_pct:
-        lo = min(0.0, float(team[metric_col].min())) - 0.05
-        hi = max(1.0, float(team[metric_col].max())) + 0.05
+        lo = min(0.0, float(team[metric_col].min())) - 0.09
+        hi = max(1.0, float(team[metric_col].max())) + 0.09
         xaxis_kwargs["range"] = [lo, hi]
     fig.update_layout(
         xaxis=xaxis_kwargs, height=280,
