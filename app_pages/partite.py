@@ -62,15 +62,16 @@ def _render_by_competition(season: str, matches: list[dict]):
             st.markdown(cv.render_competition_box("Serie A1", matches, show_round=False), unsafe_allow_html=True)
         with col_standings:
             st.markdown(
-                cv.render_standings_box(mc.SEASON_STANDINGS.get(season, []), color=mc.COMPETITIONS["Serie A1"]["color"]),
+                cv.render_standings_box(mc.standings_for_season(season), color=mc.COMPETITIONS["Serie A1"]["color"]),
                 unsafe_allow_html=True,
             )
             # Doesn't move with the sidebar's period, unlike the results box
             # beside it -- a league table needs every team's results, not
             # just the matches this app has (Milano's own), so there's no
-            # correct way to recompute a mid-season snapshot from what's
-            # scoped here. This is the season's final table.
-            st.caption(f":material/info: Final {season} standings — not affected by the period filter above.")
+            # correct way to recompute a snapshot from what's scoped here.
+            # Kept current by hand instead, from Data Entry's own standings
+            # editor -- this always shows whatever was last saved there.
+            st.caption(f":material/info: {season} standings as last entered — not affected by the period filter above.")
         secondary = [c for c in present if c != "Serie A1"]
     else:
         secondary = present
