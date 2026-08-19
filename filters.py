@@ -182,24 +182,6 @@ def _apply_match_pick():
     st.session_state["flt_has_end"] = False
 
 
-def _jump_year(state_key: str, year: int):
-    """Set `state_key`'s stored date to the given year, same month/day --
-    a one-click way to cross a year boundary. st.date_input's own calendar
-    popup has no year shortcut of its own (no clickable header, just
-    month-at-a-time arrows), so reaching, say, October from a March date a
-    year apart otherwise means arrowing through every month in between.
-    Clamped into the season's own bounds (day=28 fallback for a Feb 29
-    that doesn't exist in the target year) so this can never push the
-    stored date outside what st.date_input's min/max will accept."""
-    start_bound, end_bound = _season_bounds(season())
-    d = st.session_state[state_key]
-    try:
-        jumped = d.replace(year=year)
-    except ValueError:
-        jumped = d.replace(year=year, day=28)
-    st.session_state[state_key] = max(start_bound, min(jumped, end_bound))
-
-
 LOGO_WHITE_PATH = "Volley graphic design/image-removebg-preview (16) (1).png"
 
 
@@ -229,36 +211,12 @@ def render_sidebar_tools():
     st.markdown("**Period**")
     with st.container(border=True):
         start_bound, end_bound = _season_bounds(season())
-        # Season years span at most 2 (Aug-Jul), but the calendar popup
-        # can only step one month at a time with no year shortcut -- these
-        # buttons are the one-click alternative, and there's no point
-        # showing them when the whole season falls in a single year.
-        years = list(range(start_bound.year, end_bound.year + 1))
-
         st.date_input("Start", key="flt_start", min_value=start_bound, max_value=end_bound)
-        if len(years) > 1:
-            year_cols = st.columns(len(years))
-            for col, year in zip(year_cols, years):
-                with col:
-                    st.button(
-                        str(year), key=f"flt_start_year_{year}", width="stretch",
-                        on_click=_jump_year, args=("flt_start", year),
-                        help=f"Jump the start date to {year}, same month/day.",
-                    )
         st.checkbox("Different end date", key="flt_has_end")
         st.date_input(
             "End", key="flt_end", min_value=start_bound, max_value=end_bound,
             disabled=not st.session_state["flt_has_end"],
         )
-        if len(years) > 1 and st.session_state["flt_has_end"]:
-            year_cols = st.columns(len(years))
-            for col, year in zip(year_cols, years):
-                with col:
-                    st.button(
-                        str(year), key=f"flt_end_year_{year}", width="stretch",
-                        on_click=_jump_year, args=("flt_end", year),
-                        help=f"Jump the end date to {year}, same month/day.",
-                    )
 
         preset_cols = st.columns(len(PRESETS) + 1)
         with preset_cols[0]:
