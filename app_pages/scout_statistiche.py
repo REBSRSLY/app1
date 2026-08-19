@@ -266,30 +266,26 @@ def _render_team_outcome_mix(scoped: pd.DataFrame, fond_sel: str):
     st.caption(caption)
 
 
-def _render_team_trend(scout: pd.DataFrame) -> str:
+def _render_team_trend(scout: pd.DataFrame, fond_sel: str):
     """Team volume (bars, colored by that match's result) and efficiency
-    (line) per match for one fundamental, over the scoped matches --
+    (line) per match for the given fundamental, over the scoped matches --
     whether the team is trending up or down isn't visible from any of the
     other, single-snapshot charts below, and coloring the bars by result
     surfaces whether efficiency swings track winning/losing or move
     independently of it.
 
-    Returns the selected fundamental: this picker drives the outcome mix
-    box below as well, so the section describes one fundamental at a time
-    rather than two unrelated ones.
-    """
-    fond_options = dl.FONDAMENTALE_ORDER
-    fond_sel = st.selectbox(
-        "Fundamental", fond_options, index=fond_options.index("Attacco"),
-        format_func=lambda f: dl.FONDAMENTALE_LABELS.get(f, f), key="team_trend_fond",
-    )
+    `fond_sel` is picked once at the top of the section (same layout as
+    every other Scout & Stats section: Section -> Fundamental -> How to
+    read -> content) and shared with the Outcome mix box below, so the
+    section describes one fundamental at a time rather than two unrelated
+    ones."""
     d = scout[
         scout["match"].isin(_in_scope_dates()) & (scout["fondamentale"] == fond_sel)
         & scout["is_team"] & (scout["palla"] == "Totale") & (scout["match"] != dl.SEASON_LABEL)
     ].copy()
     if d.empty:
         st.info("No data available for this fundamental in the selected scope.")
-        return fond_sel
+        return
 
     d["pdate"] = pd.to_datetime(d["match"].apply(mc.parsed_date))
     d = d.sort_values("pdate")
@@ -348,17 +344,29 @@ def _render_team_trend(scout: pd.DataFrame) -> str:
     )
     st.plotly_chart(fig, width="stretch")
     st.caption("Dot size on the E% line follows that match's action volume — small dots are built on fewer actions.")
-    return fond_sel
 
 
 def _render_team_profile_section(scoped: pd.DataFrame, scout: pd.DataFrame):
+    # Same layout as every other Scout & Stats section: Section (above,
+    # in render()) -> Fundamental -> How to read -> content. The picker
+    # used to live inside the Trend chart's own box; pulled out here so
+    # it's the first thing under the section tabs, consistent with
+    # General stats / Game distribution / Scout Sheet, and shared with
+    # both the Trend chart and the Outcome mix box below.
+    fond_options = dl.FONDAMENTALE_ORDER
+    fond_sel = st.selectbox(
+        "Fundamental", fond_options, index=fond_options.index("Attacco"),
+        format_func=lambda f: dl.FONDAMENTALE_LABELS.get(f, f), key="team_trend_fond",
+    )
+    fond_label = dl.FONDAMENTALE_LABELS.get(fond_sel, fond_sel)
+    _render_how_to_expander(fond_sel, fond_label)
+
     st.caption("Team-wide performance across every fundamental, from the 'Squadra' rows of the scout sheet.")
 
     with st.container(border=True):
         st.markdown("**Trend over time** · team efficiency per match")
-        fond_sel = _render_team_trend(scout)
+        _render_team_trend(scout, fond_sel)
 
-    fond_label = dl.FONDAMENTALE_LABELS.get(fond_sel, fond_sel)
     col_profile, col_mix = st.columns(2)
     with col_profile:
         with st.container(border=True):
@@ -889,11 +897,8 @@ def _render_zone_distribution(scoped: pd.DataFrame):
 
 
 def _render_distribution(scoped: pd.DataFrame, scout: pd.DataFrame, palla_tipi_en: list[str]):
-    st.caption(
-        "For each player: how many times she attacks on each set type and with what effectiveness. "
-        "Reflects the game distribution set by the setter."
-    )
-
+    # Same layout as every other Scout & Stats section: Fundamental -> How
+    # to read -> everything else, including this section's own intro caption.
     fond_sel2 = st.selectbox(
         "Fundamental", dl.FONDAMENTALI_CON_PALLA,
         format_func=lambda f: dl.FONDAMENTALE_LABELS.get(f, f),
@@ -901,6 +906,11 @@ def _render_distribution(scoped: pd.DataFrame, scout: pd.DataFrame, palla_tipi_e
     )
     fond2_label = dl.FONDAMENTALE_LABELS.get(fond_sel2, fond_sel2)
     _render_how_to_expander(fond_sel2, fond2_label)
+
+    st.caption(
+        "For each player: how many times she attacks on each set type and with what effectiveness. "
+        "Reflects the game distribution set by the setter."
+    )
 
     dist = scoped[
         (scoped["fondamentale"] == fond_sel2)
@@ -1063,17 +1073,20 @@ def _resolve_raw_match() -> str:
 
 
 def _render_raw_sheet(scout: pd.DataFrame):
+    # Same layout as every other Scout & Stats section: Fundamental -> How
+    # to read -> everything else, including this section's own intro caption.
+    fond_sel = st.selectbox(
+        "Fundamental", dl.FONDAMENTALE_ORDER,
+        format_func=lambda f: dl.FONDAMENTALE_LABELS.get(f, f), key="raw_fond",
+    )
+    _render_how_to_expander(fond_sel, dl.FONDAMENTALE_LABELS.get(fond_sel, fond_sel))
+
     st.caption(
         "Complete scouting sheet for one match, same rows/columns as the Data Volley export "
         "(P / Set / Ind / E% / Tot, then one box per fundamental with = / / / - / ! / + / # and "
         "their % / BP / pC) — player surnames instead of codes. Follows the sidebar's period: "
         "the season aggregate when it spans the whole season, otherwise the most recent match in range."
     )
-    fond_sel = st.selectbox(
-        "Fundamental", dl.FONDAMENTALE_ORDER,
-        format_func=lambda f: dl.FONDAMENTALE_LABELS.get(f, f), key="raw_fond",
-    )
-    _render_how_to_expander(fond_sel, dl.FONDAMENTALE_LABELS.get(fond_sel, fond_sel))
 
     partita_sel3 = _resolve_raw_match()
     match_label = partita_sel3 if partita_sel3 == dl.SEASON_LABEL else mc.match_label(partita_sel3)
