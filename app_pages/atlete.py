@@ -101,10 +101,19 @@ BASE_CARD_CSS = """
     /* TQR track beside the wellness radar. Height matches the radar's own
        185px so the two line up; the athlete's bar is absolutely centred
        on the track rather than sharing its flex flow, so it overlays the
-       zones instead of pushing them around. flex-start (not center): the
-       column itself is now wider than the track needs, and hugging its
-       left edge is what actually pulls the track visually closer to the
-       radar instead of just adding equal padding on both sides. */
+       zones instead of pushing them around.
+
+       .tqr-block wraps the track AND its caption together and shrinks to
+       their own content width (fit-content) -- without it, .tqr-cap's
+       text-align:center centered the "13.0 / TQR · 05 May" caption across
+       the whole (now-wide) Streamlit column instead of under the track
+       itself, since a bare block element is full-width by default. The
+       column is still wider than this block needs; flex-start on the
+       column's own child keeps the whole thing hugging the radar's edge
+       rather than centered in all that extra room. */
+    .tqr-block {
+        width: fit-content;
+    }
     .tqr-wrap {
         display: flex;
         justify-content: flex-start;
@@ -133,9 +142,9 @@ BASE_CARD_CSS = """
     }
     .tqr-track {
         position: relative;
-        width: 14px;
+        width: 28px;
         height: 100%;
-        border-radius: 3px;
+        border-radius: 4px;
         overflow: hidden;
         display: flex;
         flex-direction: column;
@@ -145,9 +154,9 @@ BASE_CARD_CSS = """
         bottom: 0;
         left: 50%;
         transform: translateX(-50%);
-        width: 9px;
+        width: 19px;
         border: 1.5px solid #000000;
-        border-radius: 2px;
+        border-radius: 3px;
         box-sizing: border-box;
     }
     .tqr-cap {
@@ -512,16 +521,18 @@ def _render_tqr_column(tqr: float, day, color: str):
 
     st.markdown(
         f"""
-        <div class="tqr-wrap">
-          <div class="tqr-scale"><span>{TQR_MAX:.0f}</span><span>15</span><span>{TQR_MIN:.0f}</span></div>
-          <div class="tqr-track">
-            <div style="height:{green:.1f}%;background:{GOOD_COLOR};"></div>
-            <div style="height:{amber:.1f}%;background:{WARN_COLOR};"></div>
-            <div style="height:{red:.1f}%;background:{LOW_COLOR};"></div>
-            <div class="tqr-value" style="height:{filled:.1f}%;background:{color};"></div>
+        <div class="tqr-block">
+          <div class="tqr-wrap">
+            <div class="tqr-scale"><span>{TQR_MAX:.0f}</span><span>15</span><span>{TQR_MIN:.0f}</span></div>
+            <div class="tqr-track">
+              <div style="height:{green:.1f}%;background:{GOOD_COLOR};"></div>
+              <div style="height:{amber:.1f}%;background:{WARN_COLOR};"></div>
+              <div style="height:{red:.1f}%;background:{LOW_COLOR};"></div>
+              <div class="tqr-value" style="height:{filled:.1f}%;background:{color};"></div>
+            </div>
           </div>
+          <div class="tqr-cap"><b>{tqr:.1f}</b><br>TQR · {day.strftime("%d %b")}</div>
         </div>
-        <div class="tqr-cap"><b>{tqr:.1f}</b><br>TQR · {day.strftime("%d %b")}</div>
         """,
         unsafe_allow_html=True,
     )
