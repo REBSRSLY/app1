@@ -148,6 +148,11 @@ def _render_team_profile(scoped: pd.DataFrame, metric_label: str):
     team["Fundamental"] = team["fondamentale"].map(dl.FONDAMENTALE_ABBR)
     # Full name on hover, so the axis acronym never needs its own legend.
     team["FullName"] = team["fondamentale"].map(dl.FONDAMENTALE_LABELS)
+    # Fundamentals with few actions in this scope (e.g. Block early in a
+    # short period) get faded out rather than drawn as confidently as a
+    # fundamental backed by hundreds of actions -- see reliability_alpha.
+    team["_alpha"] = dl.reliability_alpha(team["Tot"])
+    any_low = bool((team["Tot"] < dl.MIN_RELIABLE_N).any())
 
     if metric_col == "E_pct":
         # Only E% is a diverging (can-go-negative) measure -- the others
@@ -158,7 +163,7 @@ def _render_team_profile(scoped: pd.DataFrame, metric_label: str):
             category_orders={"Fundamental": order_labels},
             color=metric_col, color_continuous_scale="RdBu", color_continuous_midpoint=0,
             labels={metric_col: axis_label, "Fundamental": ""},
-            custom_data=["FullName"],
+            custom_data=["FullName", "Tot"],
         )
         fig.update_layout(coloraxis_showscale=False)
     else:
@@ -167,10 +172,17 @@ def _render_team_profile(scoped: pd.DataFrame, metric_label: str):
             category_orders={"Fundamental": order_labels},
             labels={metric_col: axis_label, "Fundamental": ""},
             color_discrete_sequence=["#1655a5"],
-            custom_data=["FullName"],
+            custom_data=["FullName", "Tot"],
         )
+    # Opacity list must align with `team`'s own row order (what the trace's
+    # x/y arrays are built from), NOT order_labels -- category_orders only
+    # reorders the axis display, it doesn't reorder the underlying trace data.
+    fig.update_traces(marker=dict(opacity=team["_alpha"].tolist()))
     value_fmt = ":.0%" if is_pct else ":.1f"
-    fig.update_traces(hovertemplate="<b>%{customdata[0]}</b><br>" + axis_label + ": %{x" + value_fmt + "}<extra></extra>")
+    fig.update_traces(
+        hovertemplate="<b>%{customdata[0]}</b><br>" + axis_label + ": %{x" + value_fmt
+        + "}<br>%{customdata[1]:d} actions<extra></extra>"
+    )
     # E_pct etc. are mathematically bounded to [-1, 1] and never actually
     # exceed 100% -- but Plotly's autorange only fits the tallest bar, so a
     # high-but-valid value (season Alzata E% = 91%) can visually run past
@@ -188,7 +200,10 @@ def _render_team_profile(scoped: pd.DataFrame, metric_label: str):
         margin=dict(l=0, r=10, t=10, b=10),
     )
     st.plotly_chart(fig, width="stretch")
-    st.caption(f"Team {axis_label.lower()} for every fundamental in the selected scope.")
+    caption = f"Team {axis_label.lower()} for every fundamental in the selected scope."
+    if any_low:
+        caption += f" Faded bars are built on fewer than {dl.MIN_RELIABLE_N} actions — treat as indicative, not reliable."
+    st.caption(caption)
 
 
 def _render_team_outcome_mix(scoped: pd.DataFrame, fond_sel: str):
@@ -221,12 +236,26 @@ def _render_team_outcome_mix(scoped: pd.DataFrame, fond_sel: str):
         st.info(f"No {label.lower()} outcome data in this scope.")
         return
 
+    total_n = int(d["count"].sum())
+    low = dl.is_low_sample(total_n)
     color_map = {f"{nome} ({simbolo})": OUTCOME_COLORS.get(simbolo, "#888888") for simbolo, nome, _ in legenda}
     fig = px.pie(d, names="Outcome", values="count", hole=0.5, color="Outcome", color_discrete_map=color_map)
     fig.update_traces(textinfo="percent+label")
+    # The donut's own hole is otherwise dead space -- putting the action
+    # count there means the sample size behind every slice's percentage
+    # sits right at the chart's visual center, not buried in the caption
+    # below where it's easy to skip past. Red when it's too thin to trust
+    # (see MIN_RELIABLE_N), the same neutral white as everywhere else otherwise.
+    fig.add_annotation(
+        text=f"<b>{total_n}</b><br><span style='font-size:11px'>actions</span>",
+        showarrow=False, font=dict(size=20, color="#E45756" if low else "#ffffff"),
+    )
     fig.update_layout(height=320, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
     st.plotly_chart(fig, width="stretch")
-    st.caption(f"Share of the team's total {label.lower()} actions landing in each outcome.")
+    caption = f"Share of the team's total {label.lower()} actions landing in each outcome."
+    if low:
+        caption += f" Only {total_n} actions in this scope — shares are indicative, not reliable."
+    st.caption(caption)
 
 
 def _render_team_trend(scout: pd.DataFrame) -> str:
@@ -279,9 +308,21 @@ def _render_team_trend(scout: pd.DataFrame) -> str:
             "Actions: %{y}<extra></extra>"
         ),
     ))
+    # Marker size follows that match's own action volume: a match E% built
+    # on 3 actions swings wildly on nothing and shouldn't read as visually
+    # equal to one built on 25 -- the bars behind it already show volume,
+    # but a small dot on the line itself is what a reader's eye actually
+    # tracks across matches.
+    marker_sizes = 6 + 10 * dl.reliability_alpha(d["Tot"], floor=0.0)
     fig.add_trace(go.Scatter(
         x=d["pdate"], y=d["E_pct"], name="Efficiency E%", mode="lines+markers",
-        line=dict(color="#29B6F6", width=2), showlegend=False,
+        line=dict(color="#29B6F6", width=2), marker=dict(size=marker_sizes),
+        showlegend=False, customdata=customdata,
+        hovertemplate=(
+            "<b>%{customdata[0]}</b> · %{customdata[1]}<br>"
+            "vs %{customdata[2]} (%{customdata[3]}) · %{customdata[4]}<br>"
+            "Efficiency E%: %{y:.0%}<extra></extra>"
+        ),
     ))
     # Legend-only swatches (no real data points) so the result color code
     # is the only thing shown in the chart's top legend.
@@ -298,6 +339,7 @@ def _render_team_trend(scout: pd.DataFrame) -> str:
         legend=dict(orientation="h", y=1.22, font=dict(size=11)),
     )
     st.plotly_chart(fig, width="stretch")
+    st.caption("Dot size on the E% line follows that match's action volume — small dots are built on fewer actions.")
     return fond_sel
 
 
@@ -367,7 +409,7 @@ def _render_outcome_distribution(base: pd.DataFrame, fond_sel: str, player_order
             count = 0 if pd.isna(count) else count
             rows.append({
                 "player_name": r["player_name"], "Outcome": f"{nome} ({simbolo})",
-                "share": count / r["Tot"], "rank": rank,
+                "share": count / r["Tot"], "rank": rank, "Tot": int(r["Tot"]),
             })
     d = pd.DataFrame(rows)
     if d.empty:
@@ -375,18 +417,25 @@ def _render_outcome_distribution(base: pd.DataFrame, fond_sel: str, player_order
 
     order_labels = d.sort_values("rank")["Outcome"].drop_duplicates().tolist()
     color_map = {f"{nome} ({simbolo})": OUTCOME_COLORS.get(simbolo, "#888888") for simbolo, nome, _ in legenda}
+    any_low = bool((d.drop_duplicates("player_name")["Tot"] < dl.MIN_RELIABLE_N).any())
 
     fig = px.bar(
         d, x="share", y="player_name", color="Outcome", orientation="h",
         category_orders={"player_name": player_order[::-1], "Outcome": order_labels},
         color_discrete_map=color_map,
         labels={"share": "Share of actions", "player_name": ""},
+        custom_data=["Tot"],
+    )
+    fig.update_traces(
+        hovertemplate="<b>%{y}</b> · %{fullData.name}<br>Share: %{x:.0%}<br>%{customdata[0]:d} actions total<extra></extra>"
     )
     fig.update_layout(
         barmode="stack", xaxis_tickformat=".0%", legend_title_text="Outcome",
         height=max(220, 34 * len(player_order)), margin=dict(l=0, r=10, t=10, b=10),
     )
     st.plotly_chart(fig, width="stretch")
+    if any_low:
+        st.caption(f"Players with fewer than {dl.MIN_RELIABLE_N} total actions (hover a bar for the count) have a less reliable mix.")
 
 
 def _render_volume_efficiency(base: pd.DataFrame, perfetto_lbl: str):
@@ -460,9 +509,19 @@ def _render_general_stats(scoped: pd.DataFrame):
                 players_eff, x="E_pct", y="player_name", orientation="h",
                 labels={"E_pct": "Efficiency E%", "player_name": ""},
                 color="player_name", color_discrete_map=pc.color_map(players_eff["player_name"].unique()),
+                custom_data=["Tot"],
+            )
+            # Faded for players with few actions -- their E% sits on the same
+            # axis as a starter's hundreds of actions, so nothing else in this
+            # chart signals it's a much shakier number.
+            fig_effp.update_traces(
+                marker=dict(opacity=dl.reliability_alpha(players_eff["Tot"]).tolist()),
+                hovertemplate="<b>%{y}</b><br>Efficiency E%: %{x:.0%}<br>%{customdata[0]:d} actions<extra></extra>",
             )
             fig_effp.update_layout(showlegend=False, xaxis_tickformat=".0%")
             st.plotly_chart(fig_effp, width="stretch")
+            if (players_eff["Tot"] < dl.MIN_RELIABLE_N).any():
+                st.caption(f"Faded bars are built on fewer than {dl.MIN_RELIABLE_N} actions.")
 
     with st.container(border=True):
         st.markdown(f"**Outcome mix per player** · {fond_label}")
@@ -492,7 +551,10 @@ def _render_general_stats(scoped: pd.DataFrame):
             hide_index=True,
             width="stretch",
             column_config={
-                "Tot": st.column_config.NumberColumn(format="%d"),
+                "Tot": st.column_config.NumberColumn(
+                    format="%d",
+                    help=f"Actions this row is based on. Below {dl.MIN_RELIABLE_N}, its percentages are indicative, not reliable.",
+                ),
                 **{c: st.column_config.NumberColumn(format="percent") for c in percent_cols},
             },
         )
@@ -558,12 +620,12 @@ ZONE_METRIC_CONFIG = {
 }
 
 
-def _zone_color(value, cfg: dict) -> str:
+def _zone_color(value, cfg: dict, alpha: float = 0.75) -> str:
     if value is None or pd.isna(value):
         return "rgba(255,255,255,0.08)"
     t = max(0.0, min(1.0, (value - cfg["cmin"]) / (cfg["cmax"] - cfg["cmin"])))
     rgb = pcolors.sample_colorscale(cfg["colorscale"], [t])[0]
-    return rgb.replace("rgb", "rgba").replace(")", ",0.75)")
+    return rgb.replace("rgb", "rgba").replace(")", f",{alpha})")
 
 
 def _zone_text_color(value, cfg: dict) -> str:
@@ -608,11 +670,19 @@ def _render_zone_efficiency_court(attack_totale: pd.DataFrame, metric_col: str =
 
     fig = go.Figure()
     _add_court_shapes(fig)
+    any_low = False
     for zone, (x0, x1) in ZONE_X.items():
         stats = zone_stats[zone]
+        # A zone with few attacks (e.g. a rotation barely used this scope)
+        # fades toward the empty-cell gray instead of filling as solidly
+        # as a zone backed by hundreds -- same reliability signal as the
+        # rest of the app, applied on top of the usual 0.75 base alpha.
+        zone_alpha = 0.75 * dl.reliability_alpha(stats["tot"], floor=0.3)
+        low = dl.is_low_sample(stats["tot"])
+        any_low = any_low or (low and stats["tot"] > 0)
         fig.add_shape(
             type="rect", x0=x0, y0=6, x1=x1, y1=9,
-            fillcolor=_zone_color(stats["value"], cfg), line=dict(color="rgba(255,255,255,0.5)", width=1),
+            fillcolor=_zone_color(stats["value"], cfg, alpha=zone_alpha), line=dict(color="rgba(255,255,255,0.5)", width=1),
         )
         if stats["value"] is None:
             val_txt = "—"
@@ -620,9 +690,10 @@ def _render_zone_efficiency_court(attack_totale: pd.DataFrame, metric_col: str =
             val_txt = f"{stats['value'] * 100:.0f}%"
         else:
             val_txt = f"{stats['value']:.0f}"
+        attacks_txt = f"{stats['tot']} attacks" + (" (low sample)" if low and stats["tot"] > 0 else "")
         fig.add_annotation(
             x=(x0 + x1) / 2, y=7.5, showarrow=False, font=dict(color=_zone_text_color(stats["value"], cfg), size=17),
-            text=f"<b>{zone}</b><br>{cfg['label']} {val_txt}<br>{stats['tot']} attacks",
+            text=f"<b>{zone}</b><br>{cfg['label']} {val_txt}<br>{attacks_txt}",
         )
 
     # Dummy invisible trace, only to host a real gradient colorbar (the
@@ -646,6 +717,8 @@ def _render_zone_efficiency_court(attack_totale: pd.DataFrame, metric_col: str =
     fig.update_yaxes(visible=False, range=[-0.3, 9.3], scaleanchor="x")
     fig.update_layout(height=680, margin=dict(l=10, r=10, t=10, b=70), plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
     st.plotly_chart(fig, width="stretch")
+    if any_low:
+        st.caption(f"A paler zone had fewer than {dl.MIN_RELIABLE_N} attacks in this scope — read its color with caution.")
 
     return zone_stats
 
@@ -904,14 +977,22 @@ def _render_distribution(scoped: pd.DataFrame, scout: pd.DataFrame, palla_tipi_e
         # technique already used for the court charts below), one per cell,
         # each with its own black/white color.
         annotations = []
+        any_low = False
         for r in pivot_tot.index:
             for c in pivot_tot.columns:
                 tot_v = pivot_tot.loc[r, c]
                 eff_v = pivot_metrica.loc[r, c]
                 if pd.isna(tot_v):
                     continue
-                text = f"{int(tot_v)}<br>—" if pd.isna(eff_v) else (
-                    f"{int(tot_v)}<br>{eff_v * 100:.0f}%" if metrica_is_pct else f"{int(tot_v)}<br>{eff_v:.0f}"
+                # A "*" after the count flags cells too thin to trust the
+                # metric on -- the heatmap already prints the count, but a
+                # bare number doesn't say by itself that it's too few to
+                # read the color/percentage next to it with confidence.
+                low = dl.is_low_sample(tot_v)
+                any_low = any_low or low
+                count_txt = f"{int(tot_v)}*" if low else f"{int(tot_v)}"
+                text = f"{count_txt}<br>—" if pd.isna(eff_v) else (
+                    f"{count_txt}<br>{eff_v * 100:.0f}%" if metrica_is_pct else f"{count_txt}<br>{eff_v:.0f}"
                 )
                 annotations.append(dict(
                     x=c, y=r, text=text, showarrow=False,
@@ -937,7 +1018,10 @@ def _render_distribution(scoped: pd.DataFrame, scout: pd.DataFrame, palla_tipi_e
             annotations=annotations,
         )
         st.plotly_chart(fig_heat, width="stretch")
-    st.caption(f"In each cell: total number of actions and {metrica_display.lower()}. Rows ordered by role.")
+    caption = f"In each cell: total number of actions and {metrica_display.lower()}. Rows ordered by role."
+    if any_low:
+        caption += f" * = fewer than {dl.MIN_RELIABLE_N} actions, read with caution."
+    st.caption(caption)
 
     col_map, col_cum = st.columns(2)
     with col_map:

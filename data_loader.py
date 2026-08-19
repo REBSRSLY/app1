@@ -287,6 +287,46 @@ def legenda_fondamentale(fondamentale: str) -> list[tuple[str, str, str]]:
     return GLOSSARIO.get(fondamentale, {}).get("legenda", [])
 
 
+# ---------------------------------------------------------------------------
+# Not every player/fundamental/match has enough actions (Tot) for a rate
+# built on top of it (E%, Ind, an outcome share) to mean much -- 2 attacks
+# with 1 error is a 50% error rate on paper, but it isn't telling you
+# anything the way 20/200 would. Every chart that turns Tot rows into a
+# percentage or an average should make that visible rather than presenting
+# an n=2 and an n=200 bar/dot/slice with equal visual weight.
+#
+# MIN_RELIABLE_N is a soft threshold, not a cutoff: nothing here hides or
+# drops low-sample data (an outlier match is still real and worth seeing),
+# it only fades it down so a reader's eye is drawn to the numbers backed by
+# enough actions to trust, with a caption nearby spelling out why. 15 is a
+# practical rule of thumb for a 6-outcome breakdown (Data Volley's own
+# =/-/!/+/#//), not a statistical derivation -- low enough that a full
+# match's worth of a starter's main fundamental always clears it, low
+# enough that a specialist's occasional fundamental doesn't always fail it.
+# ---------------------------------------------------------------------------
+MIN_RELIABLE_N = 15
+
+
+def reliability_alpha(n, floor: float = 0.35, min_n: int = MIN_RELIABLE_N):
+    """Opacity for a bar/marker/slice built on `n` actions: ramps linearly
+    from `floor` at n=0 up to fully opaque at min_n and stays there past
+    it, so a chart's most-trustworthy numbers read as its most visually
+    prominent ones. `n` a plain number returns a float; a pandas Series
+    returns a Series on the same index, ready for direct column/marker
+    assignment."""
+    if isinstance(n, pd.Series):
+        alpha = (floor + (1.0 - floor) * (n.astype(float) / min_n)).clip(lower=floor, upper=1.0)
+        return alpha.fillna(floor)
+    alpha = floor + (1.0 - floor) * (float(n) / min_n) if pd.notna(n) else floor
+    return max(floor, min(1.0, alpha))
+
+
+def is_low_sample(n) -> bool:
+    """True when `n` actions are too few for a rate built on them to be
+    read with confidence -- see MIN_RELIABLE_N."""
+    return pd.notna(n) and n < MIN_RELIABLE_N
+
+
 def _parse_scout_sheet(df: pd.DataFrame, match_label: str) -> list[dict]:
     """Turn a raw scout sheet (header=None) into 'long' rows."""
     rows = []

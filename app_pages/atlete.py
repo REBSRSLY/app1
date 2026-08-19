@@ -340,15 +340,25 @@ def _performance_bar(recent: pd.DataFrame, value_col: str, title: str, color: st
     # Full name carried alongside the acronym so hovering a row spells out
     # what "AAR"/"CTR"/... actually mean, without a separate legend.
     agg["FullName"] = agg["fondamentale"].map(dl.FONDAMENTALE_LABELS)
+    # A fundamental this player barely touched in the period (e.g. a
+    # handful of blocks) gets faded rather than drawn as confidently as
+    # her main fundamental's hundreds of actions.
+    agg["_alpha"] = dl.reliability_alpha(agg["tot"])
 
     fig = px.bar(
         agg, x="mean", y="Fundamental", orientation="h", error_x="std",
         category_orders={"Fundamental": order_labels},
         labels={"mean": "", "Fundamental": ""},
         color_discrete_sequence=[color],
-        custom_data=["FullName"],
+        custom_data=["FullName", "tot"],
     )
-    fig.update_traces(hovertemplate="<b>%{customdata[0]}</b><br>%{x:.0f}<extra></extra>")
+    # Opacity list must align with `agg`'s own row order (what the trace's
+    # x/y arrays are built from), not order_labels -- category_orders only
+    # reorders the axis display, not the underlying trace data.
+    fig.update_traces(
+        marker=dict(opacity=agg["_alpha"].tolist()),
+        hovertemplate="<b>%{customdata[0]}</b><br>%{x:.0f} · %{customdata[1]:d} actions<extra></extra>",
+    )
     fig.update_layout(
         height=PERF_CHART_HEIGHT, margin=PERF_CHART_MARGIN,
         title=dict(text=title, font=dict(size=12)),
@@ -391,16 +401,21 @@ def _performance_range(recent: pd.DataFrame, value_col: str, title: str, color: 
     d["Fundamental"] = d["fondamentale"].map(dl.FONDAMENTALE_ABBR)
     d["FullName"] = d["fondamentale"].map(dl.FONDAMENTALE_LABELS)
     d["opacity"] = _recency_opacity(d)
+    # Dot size follows that match's own action count: a match E% built on
+    # 2 attacks is mostly noise next to one built on 20, and this is the
+    # only per-match signal in the chart that says so at a glance.
+    d["size"] = 5 + 9 * dl.reliability_alpha(d["Tot"], floor=0.0)
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         x=d[value_col], y=d["Fundamental"], mode="markers",
-        marker=dict(color=color, opacity=d["opacity"], size=8, line=dict(width=0)),
+        marker=dict(color=color, opacity=d["opacity"], size=d["size"], line=dict(width=0)),
         showlegend=False,
         # Full fundamental name first, so the acronym on the axis never
         # needs a legend of its own to be understood.
-        customdata=d[["FullName", "match"]],
-        hovertemplate="<b>%{customdata[0]}</b><br>%{customdata[1]}: %{x" + (":.0%" if is_percent else "") + "}<extra></extra>",
+        customdata=d[["FullName", "match", "Tot"]],
+        hovertemplate="<b>%{customdata[0]}</b><br>%{customdata[1]}: %{x" + (":.0%" if is_percent else "")
+        + "}<br>%{customdata[2]:d} actions<extra></extra>",
     ))
     dtick = (x_range[1] - x_range[0]) / 4
     # A tick exactly at the range's own edge (e.g. 100%) can get clipped by
@@ -453,6 +468,12 @@ def _render_performance(surname: str, color: str):
         _performance_range(recent, "E_pct", "Efficiency E%", color, is_percent=True, x_range=[-1, 1], order_labels=order_labels)
     with col_ind:
         _performance_bar(recent, "Ind", "Index", color, x_range=[0, 100], order_labels=order_labels)
+    low_n = recent.loc[recent["Tot"] > 0].groupby("fondamentale", observed=True)["Tot"].sum()
+    if (low_n < dl.MIN_RELIABLE_N).any():
+        st.caption(
+            f"Small dots (left) and faded bars (right) are built on fewer than {dl.MIN_RELIABLE_N} actions "
+            "in this period — treat those fundamentals as indicative, not reliable."
+        )
 
 
 TQR_MIN, TQR_MAX = 6.0, 20.0
