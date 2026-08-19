@@ -199,17 +199,5 @@ def matches_for_season(season: str) -> list[dict]:
     )
 
 
-def standings_for_season(season: str) -> list[dict]:
-    """The league table for the Matches page's standings box: whatever's
-    been entered through Data Entry if anything has, otherwise the
-    built-in 2023/24 table above (empty for any other season, since there
-    is no built-in record for it). Entered standings always win over the
-    built-in table when both exist -- Data Entry is meant to let the
-    2023/24 table itself be corrected too, not just extended to later
-    seasons."""
-    entered = fs.load_standings_entry(season)
-    if entered is not None:
-        return entered
-    return SEASON_STANDINGS.get(season, [])
 
 

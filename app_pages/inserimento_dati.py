@@ -177,80 +177,6 @@ def _render_column(title: str, entries: list[dict], empty_msg: str):
                         _refresh()
 
 
-STANDINGS_COLUMNS = ["pos", "team", "pts", "p", "w", "l", "sf", "sa", "last5", "is_us"]
-STANDINGS_INT_COLS = ["pos", "pts", "p", "w", "l", "sf", "sa"]
-
-
-def _standings_df(season: str) -> pd.DataFrame:
-    """Whatever's been saved for this season, or the built-in 2023/24
-    table as a starting point for that one season -- any other season
-    starts from a blank 14-row-shaped table, since there's nothing to
-    prefill it with."""
-    rows = fs.load_standings_entry(season)
-    if rows is None:
-        rows = mc.SEASON_STANDINGS.get(season, [])
-    if not rows:
-        return pd.DataFrame(columns=STANDINGS_COLUMNS)
-    return pd.DataFrame([
-        {
-            **{c: r.get(c) for c in STANDINGS_INT_COLS + ["team", "is_us"]},
-            "last5": ",".join(str(x) for x in r.get("last5", [])),
-        }
-        for r in rows
-    ])
-
-
-def _render_standings_editor(season: str):
-    """A full league table needs every team's result, which this app only
-    ever has for Milano's own matches -- there's no way to compute or
-    derive this from data already here, so it's typed/pasted in by hand
-    from wherever the staff track it (the league's own site, typically)
-    and saved as this season's own snapshot, replacing whatever was there
-    before. See match_calendar.standings_for_season, which is what the
-    Matches page actually reads."""
-    with st.container(border=True):
-        st.markdown("**Standings** · league table")
-        st.caption(
-            "Add/edit/delete rows freely, then Save. \"Last 5\" is optional -- comma-separated "
-            "points for the last 5 rounds, e.g. \"3,3,2,0,3\" -- leave it blank to skip those dots."
-        )
-        edited = st.data_editor(
-            _standings_df(season), num_rows="dynamic", hide_index=True, key="standings_editor",
-            column_config={
-                "pos": st.column_config.NumberColumn("Pos", min_value=1, step=1),
-                "team": st.column_config.TextColumn("Team", required=True),
-                "pts": st.column_config.NumberColumn("Pts", min_value=0, step=1),
-                "p": st.column_config.NumberColumn("P", min_value=0, step=1),
-                "w": st.column_config.NumberColumn("W", min_value=0, step=1),
-                "l": st.column_config.NumberColumn("L", min_value=0, step=1),
-                "sf": st.column_config.NumberColumn("Sets W", min_value=0, step=1),
-                "sa": st.column_config.NumberColumn("Sets L", min_value=0, step=1),
-                "last5": st.column_config.TextColumn("Last 5"),
-                "is_us": st.column_config.CheckboxColumn("Milano?"),
-            },
-        )
-        if st.button("Save standings", key="save_standings_btn"):
-            rows = []
-            for _, r in edited.iterrows():
-                team = str(r.get("team") or "").strip()
-                if not team:
-                    continue
-                last5_raw = str(r.get("last5") or "").strip()
-                last5 = []
-                if last5_raw:
-                    try:
-                        last5 = [int(x) for x in last5_raw.split(",") if x.strip() != ""]
-                    except ValueError:
-                        st.warning(f"\"{team}\": couldn't read Last 5 (\"{last5_raw}\") — saved with no dots for this row.")
-                row = {c: (int(r[c]) if pd.notna(r.get(c)) else 0) for c in STANDINGS_INT_COLS}
-                row.update(team=team, last5=last5, is_us=bool(r.get("is_us", False)))
-                rows.append(row)
-            rows.sort(key=lambda r: r["pos"])
-            fs.save_standings(season, rows)
-            st.success(f"Saved standings for {season} ({len(rows)} team(s)).")
-            _refresh()
-
-
 def _route_scout_sheet(raw: pd.DataFrame, sheet: str, season: str) -> tuple[str, str]:
     """(status, detail) for one sheet of a scouting workbook. Match sheets
     are filed by their own date -- a sheet dated last season belongs to
@@ -376,7 +302,6 @@ def render():
             _handle_uploads(uploaded, season)
 
     _render_match_details(season)
-    _render_standings_editor(season)
 
     scout = fs.list_scout(season)
     wellness = fs.list_wellness(season)

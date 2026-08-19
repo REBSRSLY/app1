@@ -169,32 +169,6 @@ def remove_match_entry(season: str, date: str):
     matches_path(season).write_text(json.dumps(entries, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
-def standings_path(season: str) -> Path:
-    return FILES_DIR / season / "standings.json"
-
-
-def load_standings_entry(season: str) -> list[dict] | None:
-    """The league table as last saved through Data Entry for this season,
-    or None if it's never been entered -- distinct from an empty list
-    (which would mean "entered, but every row was deleted"). A full
-    standings table needs every team's results, not just Milano's own
-    matches, so there's no way to compute this from data the app already
-    has; a human has to type it in from wherever they're tracking it."""
-    path = standings_path(season)
-    if not path.exists():
-        return None
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return None
-
-
-def save_standings(season: str, rows: list[dict]):
-    path = standings_path(season)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(rows, indent=2, ensure_ascii=False), encoding="utf-8")
-
-
 def archive(path: Path) -> Path:
     """Move a file out of the app's view, keeping it on disk under
     files/_archive/<same relative path> so it can be restored by hand. A
