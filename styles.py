@@ -19,6 +19,9 @@ CUSTOM_CSS = """
         [data-testid="stMarkdownContainer"] > p > strong:first-child {
             font-family: var(--display);
             font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+            font-size: 1.08em;
         }
 
         /* Every Plotly chart's own text (axis ticks, legends, hover,
@@ -80,30 +83,19 @@ CUSTOM_CSS = """
            now -- it has to match the fixed nav bar's own height exactly,
            so it's defined right next to it instead of split across files. */
 
-        /* The two real motifs from Identity/logo-presentation.html's
-           "motivi grafici" board (§5) -- Diagonale doppia and Mesh
-           gradient -- applied for real to the whole main pane instead of
-           staying small reference tiles, so every screen carries the
-           identity and bordered boxes (solid black below) read clearly
-           against it. Exact colors as specified, not the app's usual
-           --accent tokens: mesh is #101418/#E0158C/#0B2F6B, diagonals
-           are #E0158C (both bands, second one thinner/softer so they
-           still read as two distinct stripes rather than one solid slab).
+        /* The Mesh gradient motif from Identity/logo-presentation.html's
+           "motivi grafici" board (§5), applied to the whole main pane so
+           every screen carries the identity and bordered boxes (solid
+           black below) read clearly against it. Exact colors as specified,
+           not the app's usual --accent tokens: #101418/#E0158C/#0B2F6B.
            Mesh runs top-right (magenta) to bottom-left (blue); both
-           corners kept smaller/more transparent than the first pass so
-           #101418 -- the base -- is what actually dominates the page. */
+           corners kept small/transparent enough that #101418 -- the base
+           -- is what actually dominates the page. The Diagonale doppia
+           stripe motif that used to run across this same background was
+           removed -- it competed with the boxed content sitting on top
+           of it rather than reading as backdrop. */
         [data-testid="stMain"] {
             background:
-                /* Diagonale doppia, extended into a fuller set of parallel
-                   magenta stripes at varying widths/opacities so the motif
-                   runs across the whole page rather than one corner. */
-                linear-gradient(135deg, transparent 40%, #E0158C 40%, #E0158C 42.5%, transparent 42.5%),
-                linear-gradient(135deg, transparent 50%, rgba(224, 21, 140, 0.55) 50%, rgba(224, 21, 140, 0.55) 51.5%, transparent 51.5%),
-                linear-gradient(135deg, transparent 22%, rgba(224, 21, 140, 0.75) 22%, rgba(224, 21, 140, 0.75) 23.4%, transparent 23.4%),
-                linear-gradient(135deg, transparent 31%, rgba(224, 21, 140, 0.4) 31%, rgba(224, 21, 140, 0.4) 31.8%, transparent 31.8%),
-                linear-gradient(135deg, transparent 60%, rgba(224, 21, 140, 0.45) 60%, rgba(224, 21, 140, 0.45) 61.6%, transparent 61.6%),
-                linear-gradient(135deg, transparent 71%, rgba(224, 21, 140, 0.3) 71%, rgba(224, 21, 140, 0.3) 71.7%, transparent 71.7%),
-                linear-gradient(135deg, transparent 84%, rgba(224, 21, 140, 0.5) 84%, rgba(224, 21, 140, 0.5) 85.3%, transparent 85.3%),
                 radial-gradient(90% 70% at 100% 0%, #E0158C 0%, transparent 50%),
                 radial-gradient(90% 80% at 0% 100%, #0B2F6B 0%, transparent 55%),
                 #101418;

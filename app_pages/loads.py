@@ -20,6 +20,7 @@ def _render_jumps_cumulative(period: pd.DataFrame):
     daily["cumulative"] = daily.groupby("player_name")["SALTI"].cumsum()
     fig = px.line(
         daily, x="Data", y="cumulative", color="player_name",
+        category_orders={"player_name": pc.sort_by_role(daily["player_name"].unique())},
         color_discrete_map=pc.color_map(daily["player_name"].unique()),
         labels={"Data": "Date", "cumulative": "Cumulative jumps", "player_name": "Player"},
         markers=True,
@@ -29,11 +30,12 @@ def _render_jumps_cumulative(period: pd.DataFrame):
 
 
 def _render_jumps(salti):
-    salti_players = sorted(salti["player_name"].dropna().unique())
-    sel_players = st.multiselect("Players", salti_players, default=salti_players, key="jumps_players")
-
-    period = filters.filter_by_date_col(salti)
-    period = period[period["player_name"].isin(sel_players)].dropna(subset=["SALTI"])
+    # No player filter here (removed) -- every chart on this page shows
+    # the whole roster with a role-ordered legend, same as every other
+    # page's jump/load views. A player with nothing to show simply
+    # contributes nothing to the stack/line rather than needing to be
+    # deselected first.
+    period = filters.filter_by_date_col(salti).dropna(subset=["SALTI"])
 
     if period.empty:
         st.info("No jump data for this selection.")
@@ -44,6 +46,7 @@ def _render_jumps(salti):
         daily = period.groupby(["Data", "player_name"], as_index=False)["SALTI"].sum()
         fig = px.bar(
             daily, x="Data", y="SALTI", color="player_name", barmode="stack",
+            category_orders={"player_name": pc.sort_by_role(daily["player_name"].unique())},
             color_discrete_map=pc.color_map(daily["player_name"].unique()),
             labels={"Data": "Date", "SALTI": "Jumps", "player_name": "Player"},
         )
@@ -195,7 +198,7 @@ def _render_scatter(period_rpe: pd.DataFrame):
 
 
 def _render_individual_trend(rpe: pd.DataFrame, team_metrics: pd.DataFrame, start, end):
-    players = sorted(rpe["player_name"].dropna().unique())
+    players = pc.sort_by_role(rpe["player_name"].dropna().unique())
     if not players:
         st.info("No RPE data available.")
         return

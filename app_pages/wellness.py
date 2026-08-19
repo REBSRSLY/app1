@@ -288,7 +288,7 @@ def render():
                 role_sel = st.selectbox(
                     "Role", ["All roles"] + sorted(set(role_map.values())), key="team_role",
                 )
-            players = sorted(period["player_name"].unique())
+            players = pc.sort_by_role(period["player_name"].unique())
             if role_sel != "All roles":
                 players = [p for p in players if role_map.get(p) == role_sel]
             d = period[period["player_name"].isin(players)]
@@ -356,7 +356,7 @@ def render():
     with col_player:
         with st.container(border=True):
             st.markdown("**Individual player**")
-            all_players = sorted(wellness["player_name"].unique())
+            all_players = pc.sort_by_role(wellness["player_name"].unique())
             player_sel = st.selectbox("Player", all_players, key="wellness_player")
             p_period = period[period["player_name"] == player_sel]
 

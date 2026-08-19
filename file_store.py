@@ -16,6 +16,7 @@ removal is recoverable from disk.
 from __future__ import annotations
 
 import datetime as dt
+import json
 import re
 import shutil
 from pathlib import Path
@@ -127,6 +128,45 @@ def write_bytes(path: Path, data: bytes) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
     return path
+
+
+def matches_path(season: str) -> Path:
+    return FILES_DIR / season / "matches.json"
+
+
+def list_match_entries(season: str) -> list[dict]:
+    """Match metadata (date/opponent/competition/round/home/score) entered
+    through the Data Entry page for this season, oldest first. Distinct
+    from list_scout(): a scout file is one match's Data Volley export,
+    this is the "who did we play and when" record that match_calendar's
+    own built-in history otherwise supplies -- so a new season (or a match
+    the built-in record doesn't have) can still show a real opponent name
+    and competition instead of a blank once its scout sheet is uploaded."""
+    path = matches_path(season)
+    if not path.exists():
+        return []
+    try:
+        entries = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return []
+    return sorted(entries, key=lambda e: e["date"])
+
+
+def save_match_entry(season: str, entry: dict):
+    """Add the entry, or overwrite the existing one for the same date --
+    editing a match (filling in the score once it's known, say) is meant
+    to correct that one entry in place, not pile up duplicates."""
+    entries = [e for e in list_match_entries(season) if e["date"] != entry["date"]]
+    entries.append(entry)
+    entries.sort(key=lambda e: e["date"])
+    path = matches_path(season)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(entries, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def remove_match_entry(season: str, date: str):
+    entries = [e for e in list_match_entries(season) if e["date"] != date]
+    matches_path(season).write_text(json.dumps(entries, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 def archive(path: Path) -> Path:

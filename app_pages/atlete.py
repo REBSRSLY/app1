@@ -101,13 +101,27 @@ BASE_CARD_CSS = """
     /* TQR track beside the wellness radar. Height matches the radar's own
        185px so the two line up; the athlete's bar is absolutely centred
        on the track rather than sharing its flex flow, so it overlays the
-       zones instead of pushing them around. */
+       zones instead of pushing them around. flex-start (not center): the
+       column itself is now wider than the track needs, and hugging its
+       left edge is what actually pulls the track visually closer to the
+       radar instead of just adding equal padding on both sides. */
     .tqr-wrap {
         display: flex;
-        justify-content: center;
+        justify-content: flex-start;
         gap: 5px;
         height: 155px;
         margin-top: 14px;
+    }
+    /* The radar/TQR columns' own gap, tightened below the column ratio
+       change's default spacing so the track reads as part of the same
+       picture as the radar rather than a separate block next to it. Keyed
+       (.st-key-wellness_radar_row), not :has(.tqr-wrap) -- :has()'s inner
+       clause matches any DESCENDANT, so it also caught the two outer
+       column rows the radar/TQR pair happens to be nested inside (the
+       page's own col_grid/col_overview split, and a wider row above this
+       one), tightening gaps that had nothing to do with this fix. */
+    .st-key-wellness_radar_row [data-testid="stHorizontalBlock"] {
+        gap: 4px !important;
     }
     .tqr-scale {
         display: flex;
@@ -721,12 +735,17 @@ def _render_wellness_radar(surname: str, color: str):
     # The track's own thinness comes from the shape coordinates (0.3-0.7 of
     # the plot area), not from starving the column: Plotly won't render
     # below a minimum width, and a narrower column just clips the figure.
-    col_radar, col_tqr = st.columns([4, 1])
-    with col_radar:
-        st.plotly_chart(fig, width="stretch", theme=None)
-    with col_tqr:
-        if pd.notna(tqr_last):
-            _render_tqr_column(float(tqr_last), last_date, color)
+    # [3, 2] (was [4, 1]): doubles the TQR column's own absolute width --
+    # 2/5 of the row instead of 1/5 -- while the fixed-px track inside it
+    # (see .tqr-track/.tqr-value above) stays exactly as thin as before;
+    # the extra room just gives the label/number more breathing space.
+    with st.container(key="wellness_radar_row"):
+        col_radar, col_tqr = st.columns([3, 2])
+        with col_radar:
+            st.plotly_chart(fig, width="stretch", theme=None)
+        with col_tqr:
+            if pd.notna(tqr_last):
+                _render_tqr_column(float(tqr_last), last_date, color)
 
 
 def _render_overview(surname: str):

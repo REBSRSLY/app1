@@ -38,6 +38,13 @@ PLAYER_COLORS = {
 
 DEFAULT_COLOR = "#9E9E9E"
 
+# PLAYER_COLORS is already declared role-by-role (Setters, Opposites,
+# Outside Hitters, Middle Blockers, Liberos) -- its own key order doubles
+# as the canonical role order, so every list/legend of players in the app
+# can share one definition of "in role order" instead of each page
+# re-deriving its own.
+ROLE_ORDERED_NAMES = list(PLAYER_COLORS.keys())
+
 
 def color_for(player_name: str) -> str:
     return PLAYER_COLORS.get(player_name, DEFAULT_COLOR)
@@ -46,3 +53,16 @@ def color_for(player_name: str) -> str:
 def color_map(names) -> dict:
     """color_discrete_map-ready {name: color} dict for the given names."""
     return {n: color_for(n) for n in names}
+
+
+def sort_by_role(names) -> list[str]:
+    """`names` (any iterable, duplicates or not) as a de-duplicated list in
+    role order -- Setters, Opposites, Outside Hitters, Middle Blockers,
+    Liberos, matching each player's own color family. A name outside
+    PLAYER_COLORS (shouldn't happen for the 15-player roster, but not
+    assumed) keeps its relative input order, appended at the end rather
+    than dropped."""
+    present = set(names)
+    known = [n for n in ROLE_ORDERED_NAMES if n in present]
+    unknown = [n for n in dict.fromkeys(names) if n not in PLAYER_COLORS]
+    return known + unknown

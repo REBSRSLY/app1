@@ -1,10 +1,18 @@
-"""Static match calendar for the 2023/24 season (Vero Volley Milano, women's A1).
+"""Match calendar: the 2023/24 season's built-in history, plus whatever's
+been entered for later seasons through the Data Entry page.
 
-Sourced from the public season record (Serie A1, Coppa Italia, Supercoppa,
-CEV Champions League, playoffs) and cross-checked date-by-date against the
-45 match sheets in anonymized_matches_F.xlsx — every date lines up exactly.
-Score is always written as Milano-Opponent sets.
+The 2023/24 list below is sourced from the public season record (Serie A1,
+Coppa Italia, Supercoppa, CEV Champions League, playoffs) and cross-checked
+date-by-date against the 45 match sheets in anonymized_matches_F.xlsx —
+every date lines up exactly. Score is always written as Milano-Opponent
+sets. A season with no built-in record of its own (2024/25 onward) starts
+empty and is filled in entirely from file_store's matches.json, one match
+at a time, as the staff add them -- see matches_for_season() below, which
+is what every page actually reads instead of MATCHES/SEASON_MATCHES
+directly.
 """
+
+import file_store as fs
 
 MATCHES = [
     {"date": "23-10-08", "competition": "Serie A1", "round": "andata", "opponent": "Busto Arsizio", "home": True, "score": "3-0"},
@@ -53,8 +61,6 @@ MATCHES = [
     {"date": "24-04-10", "competition": "Playoff scudetto", "round": "semifinale gara 2", "opponent": "Scandicci", "home": True, "score": "0-3"},
     {"date": "24-05-05", "competition": "Champions League", "round": "finale", "opponent": "Conegliano", "home": False, "score": "2-3"},
 ]
-
-MATCH_BY_DATE = {m["date"]: m for m in MATCHES}
 
 # ---------------------------------------------------------------------------
 # Competition labels & colors, used by the calendar legend/chips and by the
@@ -118,12 +124,26 @@ def parsed_date(sheet_date: str):
     return _date(2000 + yy, mm, dd)
 
 
+def match_by_date(sheet_date: str) -> dict | None:
+    """Full match dict -- built-in history or entered via Data Entry --
+    for one date, regardless of which season it falls in. Every page reads
+    a match this way (or via matches_for_season() for a whole season)
+    rather than the flat MATCHES global above, which only ever holds the
+    2023/24 built-in record and doesn't see entered matches."""
+    day = parsed_date(sheet_date)
+    for m in matches_for_season(fs.season_of(day)):
+        if m["date"] == sheet_date:
+            return m
+    return None
+
+
 def match_label(sheet_date: str) -> str:
     """'date - Opponent (round)' label for selectboxes and chips."""
-    m = MATCH_BY_DATE.get(sheet_date)
+    m = match_by_date(sheet_date)
     if m is None:
         return sheet_date
-    return f"{sheet_date} · {m['opponent']} ({m['round']})"
+    round_part = f" ({m['round']})" if m.get("round") else ""
+    return f"{sheet_date} · {m['opponent']}{round_part}"
 
 
 # ---------------------------------------------------------------------------
@@ -165,7 +185,17 @@ SEASON_STANDINGS = {
 
 
 def matches_for_season(season: str) -> list[dict]:
-    """All match dicts for the given season, each with a parsed `pdate`."""
-    return [{**m, "pdate": parsed_date(m["date"])} for m in SEASON_MATCHES.get(season, [])]
+    """All match dicts for the given season -- the built-in history above,
+    overlaid with whatever's been entered through Data Entry (an entry on
+    a date the built-in record already has replaces that row, so filling
+    in/correcting a match is an edit in place, not a duplicate) -- each
+    with a parsed `pdate`, sorted chronologically."""
+    by_date = {m["date"]: m for m in SEASON_MATCHES.get(season, [])}
+    for entry in fs.list_match_entries(season):
+        by_date[entry["date"]] = entry
+    return sorted(
+        ({**m, "pdate": parsed_date(m["date"])} for m in by_date.values()),
+        key=lambda m: m["pdate"],
+    )
 
 

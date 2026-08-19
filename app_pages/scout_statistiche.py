@@ -290,7 +290,7 @@ def _render_team_trend(scout: pd.DataFrame, fond_sel: str):
     d["pdate"] = pd.to_datetime(d["match"].apply(mc.parsed_date))
     d = d.sort_values("pdate")
 
-    matches = d["match"].map(mc.MATCH_BY_DATE)
+    matches = d["match"].map(mc.match_by_date)
     scores = matches.apply(lambda m: m["score"] if m else None)
     # Semi-transparent so the E% line stays readable crossing over the bars.
     bar_colors = [rgba_from_hex(SCORE_TREND_COLORS.get(s, "#4C78A8"), 0.55) for s in scores]
@@ -599,6 +599,7 @@ def _render_cumulative_actions(scout: pd.DataFrame, fond_sel2: str, height: int 
 
     fig = px.line(
         daily, x="pdate", y="cumulative", color="player_name",
+        category_orders={"player_name": pc.sort_by_role(daily["player_name"].unique())},
         color_discrete_map=pc.color_map(daily["player_name"].unique()),
         labels={"pdate": "Match date", "cumulative": "Cumulative actions", "player_name": "Player"},
         markers=True,
@@ -1061,15 +1062,40 @@ def _render_distribution(scoped: pd.DataFrame, scout: pd.DataFrame, palla_tipi_e
             _render_cumulative_actions(scout, fond_sel2, height=520)
 
 
+def _render_match_picker_box(matches: list[dict]) -> str:
+    """A single match sheet can't represent a period covering several of
+    them -- this box lists what's actually in scope (opponent, date, and
+    the score if the match has one) and lets the reader pick exactly
+    which one to view, instead of the page silently guessing "most
+    recent" on their behalf."""
+    by_date = {m["date"]: m for m in matches}
+    options = list(by_date.keys())
+    filters.ensure_valid_selection("raw_sheet_match_pick", options)
+    with st.container(border=True):
+        st.markdown("**Matches in this period** · pick one to view its sheet")
+        st.selectbox(
+            "Match", options, key="raw_sheet_match_pick",
+            format_func=lambda d: (
+                f"{by_date[d]['opponent']} · {mc.parsed_date(d).strftime('%d %b %Y')}"
+                + (f" · {by_date[d]['score']}" if by_date[d].get("score") else "")
+            ),
+        )
+    return st.session_state["raw_sheet_match_pick"]
+
+
 def _resolve_raw_match() -> str:
-    """No separate picker here -- follows the sidebar's own period/season
-    filter instead: the season-aggregate sheet when the period spans the
-    whole season, otherwise the most recent match within the selected
-    period (matches_in_scope() is already sorted most-recent-first)."""
+    """Season-aggregate sheet when the period spans the whole season; the
+    single match directly when only one is in scope; otherwise the picker
+    box above chooses from whatever's actually in range (defaulting to
+    the most recent, matches_in_scope() being sorted that way already)."""
     if filters.is_full_season():
         return dl.SEASON_LABEL
     matches = filters.matches_in_scope()
-    return matches[0]["date"] if matches else dl.SEASON_LABEL
+    if not matches:
+        return dl.SEASON_LABEL
+    if len(matches) == 1:
+        return matches[0]["date"]
+    return _render_match_picker_box(matches)
 
 
 def _render_raw_sheet(scout: pd.DataFrame):
@@ -1085,7 +1111,8 @@ def _render_raw_sheet(scout: pd.DataFrame):
         "Complete scouting sheet for one match, same rows/columns as the Data Volley export "
         "(P / Set / Ind / E% / Tot, then one box per fundamental with = / / / - / ! / + / # and "
         "their % / BP / pC) — player surnames instead of codes. Follows the sidebar's period: "
-        "the season aggregate when it spans the whole season, otherwise the most recent match in range."
+        "the season aggregate when it spans the whole season, a single match directly, or a pick "
+        "from the matches in range when there's more than one."
     )
 
     partita_sel3 = _resolve_raw_match()

@@ -65,6 +65,12 @@ def _render_by_competition(season: str, matches: list[dict]):
                 cv.render_standings_box(mc.SEASON_STANDINGS.get(season, []), color=mc.COMPETITIONS["Serie A1"]["color"]),
                 unsafe_allow_html=True,
             )
+            # Doesn't move with the sidebar's period, unlike the results box
+            # beside it -- a league table needs every team's results, not
+            # just the matches this app has (Milano's own), so there's no
+            # correct way to recompute a mid-season snapshot from what's
+            # scoped here. This is the season's final table.
+            st.caption(f":material/info: Final {season} standings — not affected by the period filter above.")
         secondary = [c for c in present if c != "Serie A1"]
     else:
         secondary = present
