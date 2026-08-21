@@ -15,8 +15,10 @@ MONTH_NAMES = [
 
 # Same win-margin colour scale everywhere a result is shown (box rows,
 # standings "last 5" dots): 3pt = clear win, 2pt = tie-break win,
-# 1pt = tie-break loss, 0pt = clear loss.
-RESULT_COLORS = {3: "#2E7D32", 2: "#8BC34A", 1: "#FFA726", 0: "#E53935"}
+# 1pt = tie-break loss, 0pt = clear loss. Same shared green/yellow/
+# orange/red family as scout_statistiche's OUTCOME_COLORS/
+# SCORE_TREND_COLORS and ui_helpers' GOOD/WARN/LOW_COLOR.
+RESULT_COLORS = {3: "#54A24B", 2: "#FDD835", 1: "#F58518", 0: "#E45756"}
 
 # ---------------------------------------------------------------------------
 # Per-competition boxes
@@ -121,7 +123,7 @@ def render_competition_box(comp_key: str, matches: list[dict], show_round: bool 
     return render_box(comp_key, conf["color"], body, record_html)
 
 
-def render_standings_box(standings: list[dict], title: str = "Standings", color: str = "#4C78A8") -> str:
+def render_standings_box(standings: list[dict], title: str = "Standings", color: str = "#64B5F6") -> str:
     # No max-height/scroll here (unlike comp-results): the standings table
     # is meant to be fully visible at a glance, not truncated.
     return render_box(title, color, render_standings(standings))

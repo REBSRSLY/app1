@@ -22,7 +22,7 @@ RECOVERY_THRESHOLD = 15
 # Same convention as scout_statistiche.py's own OUTCOME_COLORS/SYMBOL_TO_COL
 # -- duplicated here (rather than imported across pages) just for the one
 # "Serve outcome mix" tile below.
-_OUTCOME_COLORS = {"=": "#E45756", "-": "#F58518", "!": "#B0B0B0", "+": "#54A24B", "#": "#2E7D32", "/": "#8D6E63"}
+_OUTCOME_COLORS = {"=": "#7A1B1B", "-": "#F58518", "!": "#FDD835", "+": "#54A24B", "#": "#1B5E20", "/": "#E45756"}
 _SYMBOL_TO_COL = {"=": "Err", "-": "Neg", "!": "Neutral", "+": "Pos", "#": "Perfect", "/": "Slash"}
 _SCORE_POINTS = {"3-0": 3, "3-1": 3, "3-2": 2, "2-3": 1, "1-3": 0, "0-3": 0}
 _MONTH_NAMES = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]

@@ -13,6 +13,7 @@ directly.
 """
 
 import file_store as fs
+import players_grid as pg
 
 MATCHES = [
     {"date": "23-10-08", "competition": "Serie A1", "round": "andata", "opponent": "Busto Arsizio", "home": True, "score": "3-0"},
@@ -67,13 +68,18 @@ MATCHES = [
 # Matches page. "Jump session" isn't a real competition -- it's the calendar
 # overlay for SALTI_F monitoring days -- kept here so all calendar event
 # colors live in one place.
+#
+# The 5 real competitions reuse the role palette (players_grid.ROLE_COLORS)
+# rather than their own colors -- both are exactly 5 categories, so a color
+# never means two different things depending on which chart you're looking
+# at. "Jump session" isn't a competition, so it keeps its own neutral gray.
 # ---------------------------------------------------------------------------
 COMPETITIONS = {
-    "Serie A1": {"label": "Championship match", "color": "#4C78A8"},
-    "Playoff scudetto": {"label": "Championship playoffs", "color": "#E45756"},
-    "Coppa Italia": {"label": "Cup match (Coppa Italia)", "color": "#F58518"},
-    "Champions League": {"label": "Champions League", "color": "#54A24B"},
-    "Supercoppa Italiana": {"label": "Supercoppa", "color": "#B279A2"},
+    "Serie A1": {"label": "Championship match", "color": pg.ROLE_COLORS["Setter"]},
+    "Playoff scudetto": {"label": "Championship playoffs", "color": pg.ROLE_COLORS["Opposite"]},
+    "Coppa Italia": {"label": "Cup match (Coppa Italia)", "color": pg.ROLE_COLORS["Outside Hitter"]},
+    "Champions League": {"label": "Champions League", "color": pg.ROLE_COLORS["Middle Blocker"]},
+    "Supercoppa Italiana": {"label": "Supercoppa", "color": pg.ROLE_COLORS["Libero"]},
     "Jump session": {"label": "Jump session", "color": "#9D9D9D"},
 }
 

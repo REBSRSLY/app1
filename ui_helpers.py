@@ -12,10 +12,12 @@ WELLNESS_ICONS = {"Fatica": "🔋", "Sonno": "😴", "Doms": "💪", "Stress": "
 
 # Shared TQR readiness threshold and colors, used by every "TQR N.N" header
 # (Players page overview, Wellness page radars, Home page's low-recovery
-# banner) so the same cutoff and color always mean the same thing.
+# banner) so the same cutoff and color always mean the same thing. Same
+# shared green/yellow/red family as scout_statistiche's OUTCOME_COLORS/
+# SCORE_TREND_COLORS and calendar_view's RESULT_COLORS.
 GOOD_COLOR = "#54A24B"
 LOW_COLOR = "#E45756"
-WARN_COLOR = "#FFC107"
+WARN_COLOR = "#FDD835"
 RECOVERY_THRESHOLD = 15
 
 

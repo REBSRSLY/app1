@@ -11,36 +11,45 @@ import player_colors as pc
 import players_grid as pg
 from ui_helpers import close_polygon, dark_polar_layout, rgba_from_hex
 
-# Result -> color for the "Trend over time" bars, dark-to-light-to-dark
-# across the 6 possible scorelines (dominant win -> tie-break win ->
-# tie-break loss -> dominant loss). Distinct from RESULT_COLORS/
-# result_points elsewhere in the app, which only need the coarser 4-level
-# points scale (3-0 and 3-1 are both "3 points" there) -- this chart's
-# whole point is to distinguish all 6 by color.
+# Result -> color for the "Trend over time" bars, across the 6 possible
+# scorelines (dominant win -> tie-break win -> tie-break loss -> dominant
+# loss). Samples the same shared worst->best green/yellow/orange/red scale
+# as OUTCOME_COLORS below, calendar_view.RESULT_COLORS and ui_helpers'
+# GOOD/WARN/LOW_COLOR -- one consistent color family for "how good was
+# this result/grade", not a different scheme per chart. Distinct from
+# RESULT_COLORS/result_points elsewhere in the app, which only need the
+# coarser 4-level points scale (3-0 and 3-1 are both "3 points" there) --
+# this chart's whole point is to distinguish all 6 scorelines.
 SCORE_TREND_COLORS = {
     "3-0": "#1B5E20",
     "3-1": "#54A24B",
-    "3-2": "#F0C808",
+    "3-2": "#FDD835",
     "2-3": "#F58518",
     "1-3": "#E45756",
     "0-3": "#7A1B1B",
 }
 
-# Fixed colors for set type: same color everywhere in the app, order never cycled.
-# Keys are the raw (Italian) values from the source data; translated to English
-# display labels only where they're plotted (see PALLA_COLORS_EN below).
+# Set type reuses the role palette (players_grid.ROLE_COLORS) instead of
+# its own colors -- both are exactly 5 categories, and this way a color
+# never means two different things depending on which chart you're
+# looking at. Keys are the raw (Italian) values from the source data;
+# translated to English display labels only where they're plotted (see
+# PALLA_COLORS_EN below).
 PALLA_COLORS = {
-    "Alta": "#4C78A8",
-    "Media": "#F58518",
-    "Veloce": "#54A24B",
-    "Tesa": "#E45756",
-    "Other": "#B0B0B0",
+    "Alta": pg.ROLE_COLORS["Setter"],
+    "Media": pg.ROLE_COLORS["Opposite"],
+    "Veloce": pg.ROLE_COLORS["Outside Hitter"],
+    "Tesa": pg.ROLE_COLORS["Middle Blocker"],
+    "Other": pg.ROLE_COLORS["Libero"],
 }
 PALLA_COLORS_EN = {dl.PALLA_LABELS[k]: v for k, v in PALLA_COLORS.items()}
 
-# Fixed worst-to-best color per outcome symbol, reused by the outcome-
-# distribution chart regardless of which fundamental is selected.
-OUTCOME_COLORS = {"=": "#E45756", "-": "#F58518", "!": "#B0B0B0", "+": "#54A24B", "#": "#2E7D32", "/": "#8D6E63"}
+# Worst-to-best color per outcome symbol, reused by the outcome-
+# distribution chart regardless of which fundamental is selected -- the
+# same 6-stop green/yellow/orange/red scale as SCORE_TREND_COLORS above
+# (see that comment), in the symbols' own worst->best order (=, /, -, !,
+# +, #) rather than by symbol.
+OUTCOME_COLORS = {"=": "#7A1B1B", "-": "#F58518", "!": "#FDD835", "+": "#54A24B", "#": "#1B5E20", "/": "#E45756"}
 SYMBOL_TO_COL = {"=": "Err", "-": "Neg", "!": "Neutral", "+": "Pos", "#": "Perfect", "/": "Slash"}
 
 # Column layout of the original Data Volley "by fundamental" export (see
