@@ -1073,19 +1073,20 @@ def _render_distribution(scoped: pd.DataFrame, scout: pd.DataFrame, palla_tipi_e
 
 def _render_match_picker_box(matches: list[dict]) -> str:
     """A single match sheet can't represent a period covering several of
-    them -- this box lists what's actually in scope (opponent, date, and
-    the score if the match has one) and lets the reader pick exactly
-    which one to view, instead of the page silently guessing "most
-    recent" on their behalf."""
+    them -- this box lets the reader scrub a slider across whatever's in
+    scope (oldest to most recent) with a label showing opponent,
+    competition, and date at each stop, instead of the page silently
+    guessing "most recent" on their behalf."""
     by_date = {m["date"]: m for m in matches}
-    options = list(by_date.keys())
+    options = sorted(by_date.keys(), key=mc.parsed_date)
     filters.ensure_valid_selection("raw_sheet_match_pick", options)
     with st.container(border=True):
-        st.markdown("**Matches in this period** · pick one to view its sheet")
-        st.selectbox(
-            "Match", options, key="raw_sheet_match_pick",
+        st.markdown("**Matches in this period** · slide to pick one to view its sheet")
+        st.select_slider(
+            "Match", options, value=options[-1], key="raw_sheet_match_pick",
             format_func=lambda d: (
-                f"{by_date[d]['opponent']} · {mc.parsed_date(d).strftime('%d %b %Y')}"
+                f"{by_date[d]['opponent']} · {by_date[d]['competition']} · "
+                f"{mc.parsed_date(d).strftime('%d %b %Y')}"
                 + (f" · {by_date[d]['score']}" if by_date[d].get("score") else "")
             ),
         )
