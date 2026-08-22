@@ -145,72 +145,6 @@ def _match_details_dialog(season: str, day: dt.date):
                 _refresh()
 
 
-def _render_match_details(season: str):
-    """Opponent, competition and score for a match live in match_calendar's
-    built-in history for 2023/24, but nowhere for any season entered
-    through this page -- without this, an uploaded scout sheet for a new
-    match shows up on the Matches page and the sidebar's own Match picker
-    with no name attached to it. One form to add or correct a match
-    (saving again on the same date overwrites that entry, so filling in
-    the score after the built-in "Serie A1" placeholder is just an edit),
-    and the list below it to remove one. A match with no details at all
-    is instead caught by the mandatory dialog above, right after upload --
-    this form is for editing/correcting afterwards, or for backfilling
-    matches that predate a scout file (fixtures not yet played, say)."""
-    with st.container(border=True):
-        st.markdown("**Match details** · opponent, competition, score")
-        st.caption(
-            "Attaches the details a scout file's own filename can't carry (just its date). "
-            "Saving again on a date that's already here replaces that entry."
-        )
-        with st.form("match_entry_form", clear_on_submit=False):
-            col_date, col_opp, col_comp = st.columns([1, 1.4, 1.2])
-            with col_date:
-                day = st.date_input("Date", key="match_entry_date")
-            with col_opp:
-                opponent = st.text_input("Opponent", key="match_entry_opponent")
-            with col_comp:
-                competition = st.selectbox(
-                    "Competition", mc.COMPETITION_ORDER, key="match_entry_competition",
-                )
-            col_round, col_home, col_score = st.columns([1, 1, 1])
-            with col_round:
-                round_ = st.text_input(
-                    "Round", key="match_entry_round",
-                    help="Free text, e.g. \"andata\"/\"ritorno\"/\"girone\" — leave blank if it doesn't apply.",
-                )
-            with col_home:
-                venue = st.radio("Venue", ["Home", "Away"], key="match_entry_venue", horizontal=True)
-            with col_score:
-                score = st.text_input("Score", key="match_entry_score", placeholder="3-1", help="Milano's sets first.")
-
-            if st.form_submit_button("Save match"):
-                entry, error = _build_match_entry(day, opponent, competition, round_, venue, score)
-                if error:
-                    st.error(error)
-                else:
-                    fs.save_match_entry(fs.season_of(day), entry)
-                    st.success(f"Saved {entry['opponent']} · {entry['date']}")
-                    _refresh()
-
-        entries = fs.list_match_entries(season)
-        if entries:
-            st.caption(f"{len(entries)} match(es) entered for {season}:")
-            for entry in entries:
-                col_info, col_x = st.columns([5, 1], vertical_alignment="center")
-                with col_info:
-                    venue_txt = "Home" if entry["home"] else "Away"
-                    st.markdown(
-                        f'<span style="font-size:0.85rem;">{entry["date"]} · <b>{entry["opponent"]}</b> '
-                        f'· {entry["competition"]} · {venue_txt} · {entry["score"]}</span>',
-                        unsafe_allow_html=True,
-                    )
-                with col_x:
-                    if st.button("✕", key=f"rm_match_{entry['date']}", help="Remove this match entry"):
-                        fs.remove_match_entry(season, entry["date"])
-                        _refresh()
-
-
 def _fmt_date(day: dt.date | None) -> str:
     return day.strftime("%d %b %Y") if day else "Season total"
 
@@ -379,8 +313,6 @@ def render():
             )
         if uploaded:
             _handle_uploads(uploaded, season)
-
-    _render_match_details(season)
 
     scout = fs.list_scout(season)
     wellness = fs.list_wellness(season)

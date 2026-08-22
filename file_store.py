@@ -164,11 +164,6 @@ def save_match_entry(season: str, entry: dict):
     path.write_text(json.dumps(entries, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
-def remove_match_entry(season: str, date: str):
-    entries = [e for e in list_match_entries(season) if e["date"] != date]
-    matches_path(season).write_text(json.dumps(entries, indent=2, ensure_ascii=False), encoding="utf-8")
-
-
 def archive(path: Path) -> Path:
     """Move a file out of the app's view, keeping it on disk under
     files/_archive/<same relative path> so it can be restored by hand. A
