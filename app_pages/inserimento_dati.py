@@ -265,7 +265,13 @@ def _route_scout_sheet(raw: pd.DataFrame, sheet: str, season: str) -> tuple[str,
         return "skip", f"'{sheet}': name is neither a YY-MM-DD date nor a season total"
 
     target.parent.mkdir(parents=True, exist_ok=True)
-    raw.to_excel(target, header=False, index=False)
+    # sheet_name=sheet: preserves the uploaded sheet's own name (a date, or
+    # the season-total label) instead of defaulting to "Sheet1" -- without
+    # this, re-uploading this exact file later (or anything else that
+    # legitimately still has "Sheet1" as its tab) would silently stop
+    # being recognised, since routing above depends entirely on the sheet
+    # name, not the file's.
+    raw.to_excel(target, sheet_name=sheet, header=False, index=False)
     return "ok", f"{target.name} ({len(rows)} rows)"
 
 

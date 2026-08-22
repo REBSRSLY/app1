@@ -61,7 +61,14 @@ def seed_scout(force: bool) -> int:
         if path.exists() and not force:
             continue
         path.parent.mkdir(parents=True, exist_ok=True)
-        raw.to_excel(path, header=False, index=False)
+        # sheet_name=sheet: without it, to_excel() defaults to "Sheet1" for
+        # every file, which is indistinguishable from a real upload's own
+        # sheet only by luck. The whole point of "one file = one sheet" is
+        # that a seeded file reads exactly like a staff upload -- silently
+        # dropping the sheet's own name broke that (re-uploading one of
+        # these files, or anything else with a "Sheet1" tab, always got
+        # routed as unrecognised instead of by its actual date).
+        raw.to_excel(path, sheet_name=sheet, header=False, index=False)
         written += 1
     return written
 
