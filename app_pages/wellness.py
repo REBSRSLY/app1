@@ -8,7 +8,16 @@ import data_loader as dl
 import filters
 import player_colors as pc
 import players_grid as pg
-from ui_helpers import GOOD_COLOR, LOW_COLOR, RECOVERY_THRESHOLD, WELLNESS_ICONS, close_polygon, dark_polar_layout, tqr_yaxis_ticks
+from ui_helpers import (
+    TQR_BANDS,
+    TQR_MAX,
+    TQR_MIN,
+    WELLNESS_ICONS,
+    close_polygon,
+    dark_polar_layout,
+    tqr_yaxis_ticks,
+    tqr_zone_color,
+)
 
 # Wellness questionnaire items: all 1-5, high = worse (confirmed by negative
 # correlation with Tqr, which is 6-20 with high = better).
@@ -48,11 +57,16 @@ def _render_how_to():
     with st.expander("How to read this page", icon=":material/menu_book:"):
         st.markdown(
             "**TQR (Total Quality Recovery)** is a self-reported recovery score on a "
-            f"6–20 scale, higher = better recovered. The club treats **{RECOVERY_THRESHOLD} "
-            f"and above as optimal recovery** — a value below {RECOVERY_THRESHOLD} means the "
-            "player hasn't bounced back enough since her last session, and is the trigger "
-            "for the Home page's low-recovery alert."
+            "6–20 scale, higher = better recovered."
         )
+        # CoreBo's own published scale (corebosport.com), band by band --
+        # derived from TQR_BANDS (ui_helpers) rather than retyped, so this
+        # list can't drift from the colors/labels used everywhere else.
+        lower = int(TQR_MIN)
+        for upper, label in TQR_BANDS:
+            range_txt = str(lower) if lower == upper else f"{lower}-{upper}"
+            st.markdown(f"**{range_txt}** — {label}")
+            lower = upper + 1
         st.markdown("**The 5 daily wellness items** (each rated 1–5 by the player):")
         for p in NEGATIVE_PARAMS:
             st.markdown(f"**{WELLNESS_ICONS[p]} {PARAM_LABELS[p]}** — {PARAM_DESCRIPTIONS[p]}")
@@ -104,7 +118,7 @@ def _render_player_radar(p_period, use_icons=False, height=None, show_header=Tru
     line_faint = color.replace("rgb", "rgba").replace(")", ",0.7)")
 
     if show_header:
-        tqr_color = LOW_COLOR if tqr_avg < RECOVERY_THRESHOLD else GOOD_COLOR
+        tqr_color = tqr_zone_color(tqr_avg)
         font_size = "0.95rem" if use_icons else "1.15rem"
         st.markdown(
             f'<div style="text-align:center; font-size:{font_size}; font-weight:700; color:{tqr_color};">TQR {tqr_avg:.1f}</div>',
@@ -159,23 +173,43 @@ def _render_player_radar(p_period, use_icons=False, height=None, show_header=Tru
 
 
 def _render_team_tqr_trend(period: pd.DataFrame):
-    """Team-average TQR per day against the recovery threshold -- the y-axis
-    ticks themselves are colored (red below, yellow at, green above the
-    threshold) so the read doesn't depend on spotting the dashed line."""
-    daily = period.groupby("Data")["Tqr"].mean().reset_index().dropna(subset=["Tqr"]).sort_values("Data")
+    """Team-average TQR per day, with a faint ±1 std dev band across
+    players around it each day -- the mean alone hides how spread out the
+    squad actually was that day, which matters as much as the average
+    itself. The y-axis ticks themselves are colored red/amber/green by
+    CoreBo's own scale, so the reading doesn't depend on a separate
+    reference line."""
+    daily = (
+        period.groupby("Data")["Tqr"].agg(["mean", "std"]).reset_index()
+        .dropna(subset=["mean"]).sort_values("Data")
+    )
     if daily.empty:
         st.info("No wellness data in this date range.")
         return
+    daily["std"] = daily["std"].fillna(0)
+    upper = (daily["mean"] + daily["std"]).clip(upper=TQR_MAX)
+    lower = (daily["mean"] - daily["std"]).clip(lower=TQR_MIN)
 
     fig = go.Figure()
+    # ±1 std dev band: a zero-width lower trace, then the upper trace
+    # filled back down to it (fill="tonexty") -- same technique as the
+    # radar charts' own std band, just for a line chart instead of polar.
     fig.add_trace(go.Scatter(
-        x=daily["Data"], y=daily["Tqr"], mode="lines+markers", name="Team average TQR",
+        x=daily["Data"], y=lower, mode="lines", line=dict(width=0),
+        showlegend=False, hoverinfo="skip",
+    ))
+    fig.add_trace(go.Scatter(
+        x=daily["Data"], y=upper, mode="lines", fill="tonexty",
+        line=dict(width=0), fillcolor="rgba(46,204,113,0.18)",
+        showlegend=False, hoverinfo="skip",
+    ))
+    fig.add_trace(go.Scatter(
+        x=daily["Data"], y=daily["mean"], mode="lines+markers", name="Team average TQR",
         line=dict(color="#2ecc71", width=2),
     ))
-    fig.add_hline(y=RECOVERY_THRESHOLD, line_dash="dash", line_color=LOW_COLOR)
     fig.update_layout(
         height=280, margin=dict(l=10, r=10, t=10, b=10),
-        yaxis=dict(title="TQR", range=[6, 20], **tqr_yaxis_ticks()), xaxis_title=None,
+        yaxis=dict(title="TQR", range=[TQR_MIN, TQR_MAX], **tqr_yaxis_ticks()), xaxis_title=None,
         showlegend=False,
     )
     st.plotly_chart(fig, width="stretch")
@@ -212,10 +246,9 @@ def _render_individual_tqr_trends(period: pd.DataFrame):
                 line=dict(color=color_map.get(player)),
                 legendgroup=role, **group_kwargs,
             ))
-    fig.add_hline(y=RECOVERY_THRESHOLD, line_dash="dash", line_color=LOW_COLOR)
     fig.update_layout(
         height=420, margin=dict(l=10, r=10, t=10, b=150),
-        yaxis=dict(title="TQR", range=[6, 20], **tqr_yaxis_ticks()),
+        yaxis=dict(title="TQR", range=[TQR_MIN, TQR_MAX], **tqr_yaxis_ticks()),
         xaxis_title=None,
         legend=dict(orientation="h", yanchor="top", y=-0.2, x=0, groupclick="togglegroup", tracegroupgap=15),
     )
@@ -240,13 +273,8 @@ def _render_team_legend_box():
     with st.container(border=True):
         st.markdown("**How to read** · Team charts")
         st.markdown(
-            "**Radar** — faint shaded band = ±1 std dev across players over this period · "
-            "solid outline = most recent day in range. Axis inverted where needed so bigger "
-            "always means better, matching TQR."
-        )
-        st.markdown(
-            f"**Trend** — solid line = team average TQR per day · dashed line = recovery "
-            f"threshold ({RECOVERY_THRESHOLD}) · y-axis numbers colored red/yellow/green around it."
+            "**Radar** — faint shaded band = ± std across players over this period · "
+            "solid outline = most recent day in range."
         )
 
 
@@ -257,12 +285,8 @@ def _render_individual_legend_box():
     with st.container(border=True):
         st.markdown("**How to read** · Individual charts")
         st.markdown(
-            "**Radar** — bigger = feeling better. Faint shaded band = ±1 std dev over this "
+            "**Radar** — bigger = feeling better. Faint shaded band = ± std over this "
             "period · solid outline = most recent day in range."
-        )
-        st.markdown(
-            f"**Trend** — one line per player, legend grouped by role below the chart · "
-            f"dashed line = recovery threshold ({RECOVERY_THRESHOLD})."
         )
 
 
@@ -383,7 +407,7 @@ def render():
                     if tqr_avg is None or pd.isna(tqr_avg):
                         tqr_html = '<span style="color:var(--muted);font-weight:700;">—</span>'
                     else:
-                        tqr_color = LOW_COLOR if tqr_avg < RECOVERY_THRESHOLD else GOOD_COLOR
+                        tqr_color = tqr_zone_color(tqr_avg)
                         tqr_html = f'<span style="color:{tqr_color};font-weight:700;">{tqr_avg:.1f}</span>'
                     st.markdown(
                         '<div style="display:flex;justify-content:space-between;align-items:baseline;">'

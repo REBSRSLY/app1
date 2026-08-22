@@ -8,7 +8,19 @@ import filters
 import player_colors as pc
 import players_grid as pg
 import training_load
-from ui_helpers import GOOD_COLOR, LOW_COLOR, WARN_COLOR, WELLNESS_ICONS, close_polygon, dark_polar_layout, rgba_from_hex
+from ui_helpers import (
+    GOOD_COLOR,
+    LOW_COLOR,
+    TQR_MAX,
+    TQR_MIN,
+    WARN_COLOR,
+    WELLNESS_ICONS,
+    close_polygon,
+    dark_polar_layout,
+    rgba_from_hex,
+    tqr_recovery_label,
+    tqr_zone_color,
+)
 
 # English labels for the 5 wellness items, paired with WELLNESS_ICONS so
 # every radar trace can name its own points on hover (duplicated from
@@ -430,52 +442,6 @@ def _render_performance(surname: str, color: str):
         )
 
 
-TQR_MIN, TQR_MAX = 6.0, 20.0
-
-# CoreBo's own published TQR scale (corebosport.com): 8 bands covering 6-20
-# with no gaps, each with its own recovery label. Ordered worst -> best;
-# the first band whose upper bound the (rounded) score doesn't exceed
-# wins. "Reasonable recovery" (13-14) is genuinely the yellow middle band,
-# not a rounding artifact of the red/green split below.
-TQR_BANDS = [
-    (7, "No recovery"),
-    (8, "Extremely poor recovery"),
-    (10, "Very poor recovery"),
-    (12, "Poor recovery"),
-    (14, "Reasonable recovery"),
-    (16, "Good recovery"),
-    (18, "Very good recovery"),
-    (20, "Max recovery"),
-]
-
-
-def tqr_recovery_label(tqr: float) -> str:
-    """CoreBo's own wording for whichever of the 8 bands `tqr` (rounded to
-    the nearest whole point, same granularity the scale itself is defined
-    at) falls into."""
-    v = round(tqr)
-    for upper, label in TQR_BANDS:
-        if v <= upper:
-            return label
-    return TQR_BANDS[-1][1]
-
-
-def _tqr_zone(tqr: float) -> tuple[str, str]:
-    """(color, label) for the CoreBo band `tqr` falls into, at the scale's
-    own whole-point granularity (see tqr_recovery_label) -- so the zone
-    color always matches the label's own band, never a fraction's worth
-    off it. Same 3-color reading as the gauge's own steps below: red
-    <13, amber 13-14 ("reasonable recovery"), green >14."""
-    v = round(tqr)
-    if v < 13:
-        color = LOW_COLOR
-    elif v < 15:
-        color = WARN_COLOR
-    else:
-        color = GOOD_COLOR
-    return color, tqr_recovery_label(tqr)
-
-
 def _render_tqr_gauge(tqr: float, day, color: str):
     """TQR as a gauge, same style as the player's own ACWR one below it --
     one consistent "dial" language for every recovery/load metric on this
@@ -507,7 +473,7 @@ def _render_tqr_gauge(tqr: float, day, color: str):
     fig.update_layout(height=150, margin=dict(l=20, r=20, t=10, b=0), paper_bgcolor="rgba(0,0,0,0)")
     st.plotly_chart(fig, width="stretch")
 
-    zone_color, zone_label = _tqr_zone(tqr)
+    zone_color, zone_label = tqr_zone_color(tqr), tqr_recovery_label(tqr)
     st.markdown(
         f'<div style="text-align:center;margin-top:-10px;">'
         f'<span style="color:{zone_color};font-weight:700;font-size:0.95rem;">{zone_label}</span>'
