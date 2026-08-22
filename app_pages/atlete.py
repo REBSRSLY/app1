@@ -98,81 +98,6 @@ BASE_CARD_CSS = """
     [class*="st-key-role_group_"], .st-key-player_overview_box, .st-key-player_crest_box {
         background: var(--surface) !important;
     }
-    /* TQR track beside the wellness radar. Height matches the radar's own
-       185px so the two line up; the athlete's bar is absolutely centred
-       on the track rather than sharing its flex flow, so it overlays the
-       zones instead of pushing them around.
-
-       .tqr-block wraps the track AND its caption together and shrinks to
-       their own content width (fit-content) -- without it, .tqr-cap's
-       text-align:center centered the "13.0 / TQR · 05 May" caption across
-       the whole (now-wide) Streamlit column instead of under the track
-       itself, since a bare block element is full-width by default. The
-       column is still wider than this block needs; flex-start on the
-       column's own child keeps the whole thing hugging the radar's edge
-       rather than centered in all that extra room. */
-    .tqr-block {
-        width: fit-content;
-    }
-    .tqr-wrap {
-        display: flex;
-        justify-content: flex-start;
-        gap: 5px;
-        height: 155px;
-        margin-top: 14px;
-    }
-    /* The radar/TQR columns' own gap, tightened below the column ratio
-       change's default spacing so the track reads as part of the same
-       picture as the radar rather than a separate block next to it. Keyed
-       (.st-key-wellness_radar_row), not :has(.tqr-wrap) -- :has()'s inner
-       clause matches any DESCENDANT, so it also caught the two outer
-       column rows the radar/TQR pair happens to be nested inside (the
-       page's own col_grid/col_overview split, and a wider row above this
-       one), tightening gaps that had nothing to do with this fix. */
-    .st-key-wellness_radar_row [data-testid="stHorizontalBlock"] {
-        gap: 4px !important;
-    }
-    .tqr-scale {
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-        font-size: 9px;
-        color: var(--muted);
-        line-height: 1;
-    }
-    .tqr-track {
-        position: relative;
-        width: 28px;
-        height: 100%;
-        border-radius: 4px;
-        overflow: hidden;
-        display: flex;
-        flex-direction: column;
-    }
-    .tqr-value {
-        position: absolute;
-        bottom: 0;
-        left: 50%;
-        transform: translateX(-50%);
-        width: 19px;
-        border: 1.5px solid #000000;
-        border-radius: 3px;
-        box-sizing: border-box;
-    }
-    .tqr-cap {
-        text-align: center;
-        color: var(--muted);
-        font-size: 10px;
-        line-height: 1.3;
-        margin-top: 5px;
-        /* Wide enough for the CoreBo recovery label ("Extremely poor
-           recovery" etc.) to wrap onto two lines instead of forcing
-           .tqr-block's fit-content sizing to stretch the whole column
-           to fit one unbroken line. */
-        max-width: 108px;
-    }
-    .tqr-cap b { color: #f2f2f2; font-size: 0.85rem; }
-    .tqr-cap .tqr-recovery-label { display: block; margin-top: 1px; }
     /* Player photo: rendered from the full-resolution source and scaled
        here, so the browser downsamples a 254px image instead of blowing
        up a 64px one (see _render_overview). */
@@ -535,38 +460,58 @@ def tqr_recovery_label(tqr: float) -> str:
     return TQR_BANDS[-1][1]
 
 
-def _render_tqr_column(tqr: float, day, color: str):
-    """TQR as a slim vertical 6-20 track standing beside the radar.
+def _tqr_zone(tqr: float) -> tuple[str, str]:
+    """(color, label) for the CoreBo band `tqr` falls into, at the scale's
+    own whole-point granularity (see tqr_recovery_label) -- so the zone
+    color always matches the label's own band, never a fraction's worth
+    off it. Same 3-color reading as the gauge's own steps below: red
+    <13, amber 13-14 ("reasonable recovery"), green >14."""
+    v = round(tqr)
+    if v < 13:
+        color = LOW_COLOR
+    elif v < 15:
+        color = WARN_COLOR
+    else:
+        color = GOOD_COLOR
+    return color, tqr_recovery_label(tqr)
 
-    Plain HTML, not a Plotly figure: Plotly clamps a chart to ~150px
-    wide, which overflowed a column this narrow whatever the shape
-    coordinates said. CSS gives the track an exact width and keeps the
-    athlete's own bar centred inside it. Bands match CoreBo's own TQR
-    scale: red below 13, yellow/amber for the 13-14 "reasonable recovery"
-    band, green above 14 -- not the app's own earlier (16/14) guess.
+
+def _render_tqr_gauge(tqr: float, day, color: str):
+    """TQR as a gauge, same style as the player's own ACWR one below it --
+    one consistent "dial" language for every recovery/load metric on this
+    page instead of the TQR column reading as a different kind of widget.
+    Bands match CoreBo's own published TQR scale (corebosport.com): red
+    below 13, amber for the 13-14 "reasonable recovery" band, green above
+    14 -- explicit tickvals so 15 (the amber/green boundary) lands exactly
+    on its own tick rather than wherever Plotly's automatic axis ticks
+    happen to fall for a 6-20 range.
     """
-    span = TQR_MAX - TQR_MIN
-    filled = max(0.0, min(1.0, (tqr - TQR_MIN) / span)) * 100
-    # Drawn top-down, so the zones read green (20) -> amber (15) -> red (6).
-    green = (TQR_MAX - 15) / span * 100
-    amber = (15 - 13) / span * 100
-    red = (13 - TQR_MIN) / span * 100
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=tqr,
+        number=dict(font=dict(size=30, color="#f2f2f2"), valueformat=".1f"),
+        gauge=dict(
+            axis=dict(
+                range=[TQR_MIN, TQR_MAX], tickfont=dict(size=9, color="#9a9a9a"),
+                tickmode="array", tickvals=[TQR_MIN, 13, 15, TQR_MAX],
+            ),
+            bar=dict(color=color, thickness=0.3, line=dict(color="#000000", width=1.5)),
+            bgcolor="rgba(0,0,0,0)",
+            steps=[
+                {"range": [TQR_MIN, 13], "color": LOW_COLOR},
+                {"range": [13, 15], "color": WARN_COLOR},
+                {"range": [15, TQR_MAX], "color": GOOD_COLOR},
+            ],
+        ),
+    ))
+    fig.update_layout(height=150, margin=dict(l=20, r=20, t=10, b=0), paper_bgcolor="rgba(0,0,0,0)")
+    st.plotly_chart(fig, width="stretch")
 
+    zone_color, zone_label = _tqr_zone(tqr)
     st.markdown(
-        f"""
-        <div class="tqr-block">
-          <div class="tqr-wrap">
-            <div class="tqr-scale"><span>{TQR_MAX:.0f}</span><span>15</span><span>{TQR_MIN:.0f}</span></div>
-            <div class="tqr-track">
-              <div style="height:{green:.1f}%;background:{GOOD_COLOR};"></div>
-              <div style="height:{amber:.1f}%;background:{WARN_COLOR};"></div>
-              <div style="height:{red:.1f}%;background:{LOW_COLOR};"></div>
-              <div class="tqr-value" style="height:{filled:.1f}%;background:{color};"></div>
-            </div>
-          </div>
-          <div class="tqr-cap"><b>{tqr:.1f}</b><span class="tqr-recovery-label">{tqr_recovery_label(tqr)}</span>TQR · {day.strftime("%d %b")}</div>
-        </div>
-        """,
+        f'<div style="text-align:center;margin-top:-10px;">'
+        f'<span style="color:{zone_color};font-weight:700;font-size:0.95rem;">{zone_label}</span>'
+        f'<div style="color:var(--muted);font-size:11px;">TQR · {day.strftime("%d %b %Y")}</div></div>',
         unsafe_allow_html=True,
     )
 
@@ -774,22 +719,15 @@ def _render_wellness_radar(surname: str, color: str):
         ),
     )
 
-    # Radar and the TQR track side by side, same height, so the wellness
-    # box reads as one picture rather than a chart with a bar on top of it.
-    # The track's own thinness comes from the shape coordinates (0.3-0.7 of
-    # the plot area), not from starving the column: Plotly won't render
-    # below a minimum width, and a narrower column just clips the figure.
-    # [3, 2] (was [4, 1]): doubles the TQR column's own absolute width --
-    # 2/5 of the row instead of 1/5 -- while the fixed-px track inside it
-    # (see .tqr-track/.tqr-value above) stays exactly as thin as before;
-    # the extra room just gives the label/number more breathing space.
-    with st.container(key="wellness_radar_row"):
-        col_radar, col_tqr = st.columns([3, 2])
-        with col_radar:
-            st.plotly_chart(fig, width="stretch", theme=None)
-        with col_tqr:
-            if pd.notna(tqr_last):
-                _render_tqr_column(float(tqr_last), last_date, color)
+    # Radar and the TQR gauge side by side, same height, so the wellness
+    # box reads as one picture rather than two unrelated charts stacked
+    # together.
+    col_radar, col_tqr = st.columns([3, 2])
+    with col_radar:
+        st.plotly_chart(fig, width="stretch", theme=None)
+    with col_tqr:
+        if pd.notna(tqr_last):
+            _render_tqr_gauge(float(tqr_last), last_date, color)
 
 
 def _render_overview(surname: str):
