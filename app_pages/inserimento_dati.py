@@ -73,6 +73,78 @@ def _validate_score(score: str) -> str | None:
     return None
 
 
+def _build_match_entry(day: dt.date, opponent: str, competition: str, round_: str, venue: str, score: str) -> tuple[dict | None, str | None]:
+    """(entry, error) -- error is set (and entry is None) if validation
+    fails. Shared between the standalone Match details form and the
+    upload-triggered dialog below so the two can't validate differently."""
+    if not opponent.strip():
+        return None, "Opponent is required."
+    error = _validate_score(score.strip())
+    if error:
+        return None, error
+    entry = {
+        "date": fs.date_to_sheet_label(day),
+        "competition": competition,
+        "round": round_.strip(),
+        "opponent": opponent.strip(),
+        "home": venue == "Home",
+        "score": score.strip(),
+    }
+    return entry, None
+
+
+def _matches_missing_details() -> list[tuple[str, dt.date]]:
+    """(season, date) for every uploaded scout match file whose date has
+    no name attached yet -- no built-in 2023/24 record, and nothing saved
+    through Data Entry either. Scans every season actually on disk, not
+    just whichever one happens to be selected in the dropdown below: a
+    just-uploaded match files itself by its own date's season
+    (file_store.season_of), which isn't necessarily the one showing."""
+    missing = []
+    for season in fs.seasons_on_disk():
+        for entry in fs.list_scout(season):
+            if entry["kind"] != "match":
+                continue
+            if mc.match_by_date(fs.date_to_sheet_label(entry["date"])) is None:
+                missing.append((season, entry["date"]))
+    return missing
+
+
+@st.dialog("Match details required", dismissible=False)
+def _match_details_dialog(season: str, day: dt.date):
+    """Blocking pop-up (dismissible=False -- no X, no click-outside-to-
+    close) for a match that was just uploaded but has no opponent/
+    competition/score yet: every other screen that names a match
+    (Matches, the sidebar's Match picker, Scout Sheet) reads that context
+    from here, not from the scout file itself, so an unnamed match
+    reads as blank everywhere until this is filled in."""
+    st.caption(
+        f"A scout file for **{day.strftime('%d %B %Y')}** was uploaded, but this match has no "
+        "opponent, competition or score yet. Fill it in to continue."
+    )
+    with st.form("match_details_dialog_form"):
+        opponent = st.text_input("Opponent", key="dlg_match_opponent")
+        competition = st.selectbox("Competition", mc.COMPETITION_ORDER, key="dlg_match_competition")
+        col_round, col_home, col_score = st.columns([1, 1, 1])
+        with col_round:
+            round_ = st.text_input(
+                "Round", key="dlg_match_round",
+                help="Free text, e.g. \"andata\"/\"ritorno\"/\"girone\" — leave blank if it doesn't apply.",
+            )
+        with col_home:
+            venue = st.radio("Venue", ["Home", "Away"], key="dlg_match_venue", horizontal=True)
+        with col_score:
+            score = st.text_input("Score", key="dlg_match_score", placeholder="3-1", help="Milano's sets first.")
+
+        if st.form_submit_button("Save match"):
+            entry, error = _build_match_entry(day, opponent, competition, round_, venue, score)
+            if error:
+                st.error(error)
+            else:
+                fs.save_match_entry(season, entry)
+                _refresh()
+
+
 def _render_match_details(season: str):
     """Opponent, competition and score for a match live in match_calendar's
     built-in history for 2023/24, but nowhere for any season entered
@@ -81,7 +153,10 @@ def _render_match_details(season: str):
     with no name attached to it. One form to add or correct a match
     (saving again on the same date overwrites that entry, so filling in
     the score after the built-in "Serie A1" placeholder is just an edit),
-    and the list below it to remove one."""
+    and the list below it to remove one. A match with no details at all
+    is instead caught by the mandatory dialog above, right after upload --
+    this form is for editing/correcting afterwards, or for backfilling
+    matches that predate a scout file (fixtures not yet played, say)."""
     with st.container(border=True):
         st.markdown("**Match details** · opponent, competition, score")
         st.caption(
@@ -109,26 +184,14 @@ def _render_match_details(season: str):
             with col_score:
                 score = st.text_input("Score", key="match_entry_score", placeholder="3-1", help="Milano's sets first.")
 
-            submitted = st.form_submit_button("Save match")
-            if submitted:
-                if not opponent.strip():
-                    st.error("Opponent is required.")
+            if st.form_submit_button("Save match"):
+                entry, error = _build_match_entry(day, opponent, competition, round_, venue, score)
+                if error:
+                    st.error(error)
                 else:
-                    error = _validate_score(score.strip())
-                    if error:
-                        st.error(error)
-                    else:
-                        entry = {
-                            "date": fs.date_to_sheet_label(day),
-                            "competition": competition,
-                            "round": round_.strip(),
-                            "opponent": opponent.strip(),
-                            "home": venue == "Home",
-                            "score": score.strip(),
-                        }
-                        fs.save_match_entry(fs.season_of(day), entry)
-                        st.success(f"Saved {opponent.strip()} · {fs.date_to_sheet_label(day)}")
-                        _refresh()
+                    fs.save_match_entry(fs.season_of(day), entry)
+                    st.success(f"Saved {entry['opponent']} · {entry['date']}")
+                    _refresh()
 
         entries = fs.list_match_entries(season)
         if entries:
@@ -268,6 +331,16 @@ def _handle_uploads(uploaded_files, season: str):
 
 def render():
     st.markdown(ENTRY_CSS, unsafe_allow_html=True)
+
+    # Checked on every visit, not just right after an upload -- a match
+    # left unnamed in an earlier session should keep blocking here until
+    # it's resolved, not just once. Only ever one at a time; the next
+    # missing match (if any) is picked up on the rerun this dialog
+    # triggers when the current one is saved.
+    missing = _matches_missing_details()
+    if missing:
+        _match_details_dialog(*missing[0])
+
     st.caption(
         "Everything the app reads lives in files/, one file per sheet: a scout file is a single "
         "match, a wellness file is one day of one kind. Drop any mix of workbooks below — each "
