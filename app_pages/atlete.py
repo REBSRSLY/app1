@@ -165,8 +165,14 @@ BASE_CARD_CSS = """
         font-size: 10px;
         line-height: 1.3;
         margin-top: 5px;
+        /* Wide enough for the CoreBo recovery label ("Extremely poor
+           recovery" etc.) to wrap onto two lines instead of forcing
+           .tqr-block's fit-content sizing to stretch the whole column
+           to fit one unbroken line. */
+        max-width: 108px;
     }
     .tqr-cap b { color: #f2f2f2; font-size: 0.85rem; }
+    .tqr-cap .tqr-recovery-label { display: block; margin-top: 1px; }
     /* Player photo: rendered from the full-resolution source and scaled
        here, so the browser downsamples a 254px image instead of blowing
        up a 64px one (see _render_overview). */
@@ -501,6 +507,33 @@ def _render_performance(surname: str, color: str):
 
 TQR_MIN, TQR_MAX = 6.0, 20.0
 
+# CoreBo's own published TQR scale (corebosport.com): 8 bands covering 6-20
+# with no gaps, each with its own recovery label. Ordered worst -> best;
+# the first band whose upper bound the (rounded) score doesn't exceed
+# wins. "Reasonable recovery" (13-14) is genuinely the yellow middle band,
+# not a rounding artifact of the red/green split below.
+TQR_BANDS = [
+    (7, "No recovery"),
+    (8, "Extremely poor recovery"),
+    (10, "Very poor recovery"),
+    (12, "Poor recovery"),
+    (14, "Reasonable recovery"),
+    (16, "Good recovery"),
+    (18, "Very good recovery"),
+    (20, "Max recovery"),
+]
+
+
+def tqr_recovery_label(tqr: float) -> str:
+    """CoreBo's own wording for whichever of the 8 bands `tqr` (rounded to
+    the nearest whole point, same granularity the scale itself is defined
+    at) falls into."""
+    v = round(tqr)
+    for upper, label in TQR_BANDS:
+        if v <= upper:
+            return label
+    return TQR_BANDS[-1][1]
+
 
 def _render_tqr_column(tqr: float, day, color: str):
     """TQR as a slim vertical 6-20 track standing beside the radar.
@@ -508,16 +541,16 @@ def _render_tqr_column(tqr: float, day, color: str):
     Plain HTML, not a Plotly figure: Plotly clamps a chart to ~150px
     wide, which overflowed a column this narrow whatever the shape
     coordinates said. CSS gives the track an exact width and keeps the
-    athlete's own bar centred inside it. Red below the 15 recovery
-    threshold, amber straddling it, green above -- the same reading as
-    every other TQR colour in the app.
+    athlete's own bar centred inside it. Bands match CoreBo's own TQR
+    scale: red below 13, yellow/amber for the 13-14 "reasonable recovery"
+    band, green above 14 -- not the app's own earlier (16/14) guess.
     """
     span = TQR_MAX - TQR_MIN
     filled = max(0.0, min(1.0, (tqr - TQR_MIN) / span)) * 100
     # Drawn top-down, so the zones read green (20) -> amber (15) -> red (6).
-    green = (TQR_MAX - 16) / span * 100
-    amber = (16 - 14) / span * 100
-    red = (14 - TQR_MIN) / span * 100
+    green = (TQR_MAX - 15) / span * 100
+    amber = (15 - 13) / span * 100
+    red = (13 - TQR_MIN) / span * 100
 
     st.markdown(
         f"""
@@ -531,7 +564,7 @@ def _render_tqr_column(tqr: float, day, color: str):
               <div class="tqr-value" style="height:{filled:.1f}%;background:{color};"></div>
             </div>
           </div>
-          <div class="tqr-cap"><b>{tqr:.1f}</b><br>TQR · {day.strftime("%d %b")}</div>
+          <div class="tqr-cap"><b>{tqr:.1f}</b><span class="tqr-recovery-label">{tqr_recovery_label(tqr)}</span>TQR · {day.strftime("%d %b")}</div>
         </div>
         """,
         unsafe_allow_html=True,
