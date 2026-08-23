@@ -842,16 +842,21 @@ def _render_zone_settype_tables(zone_mix: dict):
                 )
 
 
-def _render_zone_distribution(scoped: pd.DataFrame):
+def _render_zone_distribution(scoped: pd.DataFrame, fond_sel: str):
     """Charts 4 & 5 (merged behind a toggle): where the setters' sets end
-    up (P4/P3/P2), either colored by efficiency or by set-type mix. Orro
-    and Prandi -- the setters -- aren't attackers assigned to a zone here;
-    their own setting numbers get a table beside the court instead."""
+    up (P4/P3/P2), either colored by efficiency or by set-type mix, for
+    whichever of the 4 "with palla" fundamentals is selected above (not
+    hardcoded to Attacco -- Att dopo Ricez/Contrattacco/Muro all carry the
+    same zone/set-type breakdown). Orro and Prandi -- the setters -- aren't
+    attackers assigned to a zone here; their own setting numbers get a
+    table beside the court instead, always from Alzata regardless of which
+    fundamental is selected, since that's the setters' own actions rather
+    than one of the 4 zone-attributed ones."""
     names = dl.load_player_names()
     roles = dl.load_player_roles()
     name_to_role = {names[code]: dl.ROLE_LABELS.get(r, r) for code, r in roles.items() if code in names}
 
-    attack = scoped[(scoped["fondamentale"] == "Attacco") & (~scoped["is_team"])].copy()
+    attack = scoped[(scoped["fondamentale"] == fond_sel) & (~scoped["is_team"])].copy()
     attack["Role"] = attack["player_name"].map(name_to_role)
 
     setters_alzata = scoped[
@@ -944,7 +949,7 @@ def _render_distribution(scoped: pd.DataFrame, scout: pd.DataFrame, palla_tipi_e
 
     # Order requested: Setting distribution first, then the Heatmap, then
     # the Game map / Cumulative actions pair below both.
-    _render_zone_distribution(scoped)
+    _render_zone_distribution(scoped, fond_sel2)
 
     with st.container(border=True):
         st.markdown("**Heatmap** · Volume and effectiveness per player and set type")
