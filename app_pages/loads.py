@@ -66,12 +66,6 @@ def _render_how_to_expander():
     with st.expander("How to read \"RPE / Load\"", icon=":material/menu_book:"):
         st.markdown("**RPE** — the athlete's own 1–10 rating of how hard a session felt.")
         st.markdown("**TL** (training load) — `RPE × session minutes`, Foster's sRPE method.")
-        st.markdown(
-            "**Avg TL** / **Avg RPE** — the team's figures for the reference day (the latest "
-            "training day in the selected period). Team values average the athletes who "
-            "trained that day rather than summing them, so they stay on the same scale as "
-            "a single athlete's."
-        )
         st.markdown("---")
         st.markdown(
             f"**Acute load** = `rolling {training_load.ACUTE_DAYS}-day sum of daily TL` — "
@@ -87,37 +81,6 @@ def _render_how_to_expander():
             "chart), above 1.5 flags a sudden spike (red band), below 0.8 a de-trained "
             f"drop-off. Needs {training_load.CHRONIC_DAYS}+ days of prior history before it can be computed at all."
         )
-        st.markdown(
-            f"**Weekly monotony** = `{training_load.ACUTE_DAYS}-day mean / {training_load.ACUTE_DAYS}-day "
-            "std of daily TL` — above ~2.0 means the week held no real rest days, just sameness."
-        )
-
-
-def _render_kpis(rpe: pd.DataFrame, team_metrics: pd.DataFrame):
-    """All four figures averaged across the sidebar's selected period,
-    rather than read off a single "as of" reference day. ACWR and monotony
-    are rolling-window metrics, so each day's value already carries its own
-    trailing 7/28-day context -- averaging those daily values gives the
-    period's typical ratio, which is what the surrounding charts show too."""
-    start, end = filters.period()
-    in_period = team_metrics.loc[
-        (team_metrics.index >= pd.Timestamp(start)) & (team_metrics.index <= pd.Timestamp(end))
-    ]
-    period_rpe = filters.filter_by_date_col(rpe)
-
-    def _fmt(series: pd.Series, spec: str) -> str:
-        clean = series.dropna()
-        return format(clean.mean(), spec) if not clean.empty else "—"
-
-    cols = st.columns(4)
-    with cols[0]:
-        st.metric("Avg TL", _fmt(in_period["daily_tl"], ".0f") if not in_period.empty else "—", border=True)
-    with cols[1]:
-        st.metric("Avg RPE", _fmt(period_rpe["Rpe"], ".1f") if not period_rpe.empty else "—", border=True)
-    with cols[2]:
-        st.metric("Team ACWR", _fmt(in_period["acwr"], ".2f") if not in_period.empty else "—", border=True)
-    with cols[3]:
-        st.metric("Weekly monotony", _fmt(in_period["monotony"], ".2f") if not in_period.empty else "—", border=True)
 
 
 def _render_acwr_chart(team_metrics: pd.DataFrame, start, end):
@@ -228,7 +191,6 @@ def _render_load(rpe: pd.DataFrame):
     team_metrics = training_load.metrics_frame(rpe)
 
     _render_how_to_expander()
-    _render_kpis(rpe, team_metrics)
 
     col_heat, col_acwr = st.columns([1, 1.3])
     with col_heat:
