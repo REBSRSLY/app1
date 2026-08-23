@@ -1071,62 +1071,79 @@ def _render_distribution(scoped: pd.DataFrame, scout: pd.DataFrame, palla_tipi_e
             _render_cumulative_actions(scout, fond_sel2, height=520)
 
 
-def _render_match_picker_box(matches: list[dict]) -> str:
-    """A single match sheet can't represent a period covering several of
-    them -- this box lets the reader scrub a slider across whatever's in
-    scope (oldest to most recent) with a label showing opponent,
-    competition, and date at each stop, instead of the page silently
-    guessing "most recent" on their behalf."""
+
+# Alternating bands on the Scout Sheet stepper mark each calendar month's
+# stretch of matches so a full season's worth of stops doesn't read as one
+# undifferentiated row -- plain neutral grays rather than the app's palette,
+# since this is a navigation cue, not data.
+STEPPER_MONTH_LIGHT = "#8a8a8a"
+STEPPER_MONTH_DARK = "#3d3d3d"
+
+
+def _month_band_gradient(matches: list[dict]) -> str:
+    """CSS linear-gradient alternating STEPPER_MONTH_LIGHT/DARK, hard-stopped
+    wherever consecutive matches -- evenly spaced by index, like the
+    slider's own stops -- cross into a new calendar month."""
+    n = len(matches)
+    if n <= 1:
+        return STEPPER_MONTH_LIGHT
+    months = [(m["pdate"].year, m["pdate"].month) for m in matches]
+    stops, light, start = [], True, 0
+    for i in range(1, n + 1):
+        if i == n or months[i] != months[start]:
+            left = 0.0 if start == 0 else (start - 0.5) / (n - 1) * 100
+            right = 100.0 if i == n else (i - 0.5) / (n - 1) * 100
+            color = STEPPER_MONTH_LIGHT if light else STEPPER_MONTH_DARK
+            stops.append(f"{color} {left:.3f}%, {color} {right:.3f}%")
+            light = not light
+            start = i
+    return "linear-gradient(to right, " + ", ".join(stops) + ")"
+
+
+def _render_season_stepper(matches: list[dict]) -> str:
+    """Every match entered for the active season (not the sidebar's period
+    -- this picks the sheet directly, instead of following it) as a single
+    discrete stepper: a floating label at each stop shows that match's
+    date, opponent and competition, and the track itself is banded by
+    calendar month so a long season is easy to scan at a glance."""
     by_date = {m["date"]: m for m in matches}
-    options = sorted(by_date.keys(), key=mc.parsed_date)
+    options = [m["date"] for m in matches]
     filters.ensure_valid_selection("raw_sheet_match_pick", options)
-    with st.container(border=True):
-        st.markdown("**Matches in this period** · slide to pick one to view its sheet")
+    st.markdown(
+        f"""<style>
+        .st-key-raw_sheet_stepper [data-testid="stSlider"]
+        div[data-orientation="horizontal"][style*="position: relative"] > div:first-child {{
+            background-image: {_month_band_gradient(matches)} !important;
+        }}
+        </style>""",
+        unsafe_allow_html=True,
+    )
+    with st.container(key="raw_sheet_stepper"):
         st.select_slider(
             "Match", options, value=options[-1], key="raw_sheet_match_pick",
             format_func=lambda d: (
-                f"{by_date[d]['opponent']} · {by_date[d]['competition']} · "
-                f"{mc.parsed_date(d).strftime('%d %b %Y')}"
-                + (f" · {by_date[d]['score']}" if by_date[d].get("score") else "")
+                f"{mc.parsed_date(d).strftime('%d %b %Y')} · {by_date[d]['opponent']} · "
+                f"{by_date[d]['competition']}"
             ),
         )
     return st.session_state["raw_sheet_match_pick"]
 
 
-def _resolve_raw_match() -> str:
-    """Season-aggregate sheet when the period spans the whole season; the
-    single match directly when only one is in scope; otherwise the picker
-    box above chooses from whatever's actually in range (defaulting to
-    the most recent, matches_in_scope() being sorted that way already)."""
-    if filters.is_full_season():
-        return dl.SEASON_LABEL
-    matches = filters.matches_in_scope()
-    if not matches:
-        return dl.SEASON_LABEL
-    if len(matches) == 1:
-        return matches[0]["date"]
-    return _render_match_picker_box(matches)
-
-
 def _render_raw_sheet(scout: pd.DataFrame):
     # Same layout as every other Scout & Stats section: Fundamental -> How
-    # to read -> everything else, including this section's own intro caption.
+    # to read -> everything else.
     fond_sel = st.selectbox(
         "Fundamental", dl.FONDAMENTALE_ORDER,
         format_func=lambda f: dl.FONDAMENTALE_LABELS.get(f, f), key="raw_fond",
     )
     _render_how_to_expander(fond_sel, dl.FONDAMENTALE_LABELS.get(fond_sel, fond_sel))
 
-    st.caption(
-        "Complete scouting sheet for one match, same rows/columns as the Data Volley export "
-        "(P / Set / Ind / E% / Tot, then one box per fundamental with = / / / - / ! / + / # and "
-        "their % / BP / pC) — player surnames instead of codes. Follows the sidebar's period: "
-        "the season aggregate when it spans the whole season, a single match directly, or a pick "
-        "from the matches in range when there's more than one."
-    )
-
-    partita_sel3 = _resolve_raw_match()
-    match_label = partita_sel3 if partita_sel3 == dl.SEASON_LABEL else mc.match_label(partita_sel3)
+    matches = mc.matches_for_season(filters.season())
+    if not matches:
+        st.info("No matches recorded for this season.")
+        return
+    partita_sel3 = _render_season_stepper(matches)
+    match_label = mc.match_label(partita_sel3)
     st.markdown(f"**Showing:** {match_label}")
 
     raw = scout[(scout["match"] == partita_sel3) & (scout["fondamentale"] == fond_sel)].copy()
