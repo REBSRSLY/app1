@@ -269,10 +269,16 @@ def _render_scatter(period_rpe: pd.DataFrame):
         legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0, font=dict(size=10)),
         updatemenus=[dict(
             type="buttons", showactive=False, x=0, y=-0.24, xanchor="left", yanchor="top",
-            buttons=[dict(
-                label="▶ Play", method="animate",
-                args=[None, dict(frame=dict(duration=450, redraw=True), fromcurrent=True, transition=dict(duration=0))],
-            )],
+            buttons=[
+                dict(
+                    label="▶ Play", method="animate",
+                    args=[None, dict(frame=dict(duration=450, redraw=True), fromcurrent=True, transition=dict(duration=0))],
+                ),
+                dict(
+                    label="⏸ Pause", method="animate",
+                    args=[[None], dict(mode="immediate", frame=dict(duration=0, redraw=False), transition=dict(duration=0))],
+                ),
+            ],
         )],
         sliders=[dict(
             active=0, x=0.1, y=-0.24, len=0.9, xanchor="left", yanchor="top",
@@ -288,7 +294,7 @@ def _render_scatter(period_rpe: pd.DataFrame):
     st.plotly_chart(fig, width="stretch")
     st.caption(
         "Play or drag the slider to scrub through match days. Nested rings = more than one player logged the "
-        "exact same duration/RPE that day (outer ring = earlier in the roster order, innermost = latest)."
+        "exact same duration/RPE that day."
     )
 
 
