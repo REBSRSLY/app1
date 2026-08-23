@@ -142,6 +142,13 @@ CUSTOM_CSS = """
         [data-testid="stExpander"] details {
             background: var(--surface);
         }
+        /* Every st.expander in the app is one of the "How to read ..."
+           affordances -- a touch smaller than the default so the header
+           reads as a secondary aside next to the (bigger) content above
+           it, not a heading of its own weight. */
+        [data-testid="stExpander"] summary {
+            font-size: 0.88em;
+        }
         .st-key-home_low_recovery_box,
         [class*="st-key-wellness_card_"] {
             background: var(--surface) !important;

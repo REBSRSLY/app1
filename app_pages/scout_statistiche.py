@@ -370,15 +370,7 @@ def _render_team_profile_section(scoped: pd.DataFrame, scout: pd.DataFrame):
     # it's the first thing under the section tabs, consistent with
     # Player Profiles / Game distribution / Scout Sheet, and shared with
     # both the Trend chart and the Outcome mix box below.
-    fond_options = dl.FONDAMENTALE_ORDER
-    fond_sel = st.selectbox(
-        "Fundamental", fond_options, index=fond_options.index("Attacco"),
-        format_func=lambda f: dl.FONDAMENTALE_LABELS.get(f, f), key="team_trend_fond",
-    )
-    fond_label = dl.FONDAMENTALE_LABELS.get(fond_sel, fond_sel)
-    _render_how_to_expander(fond_sel, fond_label)
-
-    st.caption("Team-wide performance across every fundamental, from the 'Squadra' rows of the scout sheet.")
+    fond_sel, _ = _render_fundamental_row(dl.FONDAMENTALE_ORDER, "team_trend_fond", "Attacco")
 
     with st.container(border=True):
         st.markdown("**Trend over time** · team efficiency per match")
@@ -419,6 +411,25 @@ def _render_how_to_expander(fond_sel: str, fond_label: str):
                     f"**Ind** = `{formule['ind']}` — a 0–100 weighted average across "
                     f"all 6 grades, higher weight = better outcome."
                 )
+
+
+def _render_fundamental_row(options: list[str], key: str, default: str | None = None) -> tuple[str, str]:
+    """Fundamental selectbox and its "How to read" expander sharing one
+    row -- the selectbox narrow (just wide enough for the longest
+    fundamental name, "Attack after Reception"), the expander taking the
+    rest, instead of two separate full-width rows stacked on top of each
+    other."""
+    index = options.index(default) if default in options else 0
+    col_fond, col_how = st.columns([1, 3])
+    with col_fond:
+        fond_sel = st.selectbox(
+            "Fundamental", options, index=index,
+            format_func=lambda f: dl.FONDAMENTALE_LABELS.get(f, f), key=key,
+        )
+    fond_label = dl.FONDAMENTALE_LABELS.get(fond_sel, fond_sel)
+    with col_how:
+        _render_how_to_expander(fond_sel, fond_label)
+    return fond_sel, fond_label
 
 
 def _render_player_outcome_mix(scoped: pd.DataFrame, players: list[str]):
@@ -480,15 +491,7 @@ def _render_player_outcome_mix(scoped: pd.DataFrame, players: list[str]):
 
 def _render_general_stats(scoped: pd.DataFrame):
     fondamentali = sorted(scoped["fondamentale"].unique())
-    fond_sel = st.selectbox(
-        "Fundamental", fondamentali,
-        index=fondamentali.index("Attacco") if "Attacco" in fondamentali else 0,
-        format_func=lambda f: dl.FONDAMENTALE_LABELS.get(f, f),
-        key="gen_fond",
-    )
-    fond_label = dl.FONDAMENTALE_LABELS.get(fond_sel, fond_sel)
-
-    _render_how_to_expander(fond_sel, fond_label)
+    fond_sel, fond_label = _render_fundamental_row(fondamentali, "gen_fond", "Attacco")
 
     base = scoped[(scoped["fondamentale"] == fond_sel) & (scoped["palla"] == "Totale")]
     players = base[~base["is_team"]].sort_values("Tot", ascending=False)
@@ -865,19 +868,8 @@ def _render_zone_distribution(scoped: pd.DataFrame, fond_sel: str):
 
 def _render_distribution(scoped: pd.DataFrame, scout: pd.DataFrame, palla_tipi_en: list[str]):
     # Same layout as every other Scout & Stats section: Fundamental -> How
-    # to read -> everything else, including this section's own intro caption.
-    fond_sel2 = st.selectbox(
-        "Fundamental", dl.FONDAMENTALI_CON_PALLA,
-        format_func=lambda f: dl.FONDAMENTALE_LABELS.get(f, f),
-        key="dist_fond",
-    )
-    fond2_label = dl.FONDAMENTALE_LABELS.get(fond_sel2, fond_sel2)
-    _render_how_to_expander(fond_sel2, fond2_label)
-
-    st.caption(
-        "For each player: how many times she attacks on each set type and with what effectiveness. "
-        "Reflects the game distribution set by the setter."
-    )
+    # to read -> everything else.
+    fond_sel2, _ = _render_fundamental_row(dl.FONDAMENTALI_CON_PALLA, "dist_fond")
 
     dist = scoped[
         (scoped["fondamentale"] == fond_sel2)
@@ -1092,11 +1084,7 @@ def _render_season_stepper(matches: list[dict]) -> str:
 def _render_raw_sheet(scout: pd.DataFrame):
     # Same layout as every other Scout & Stats section: Fundamental -> How
     # to read -> everything else.
-    fond_sel = st.selectbox(
-        "Fundamental", dl.FONDAMENTALE_ORDER,
-        format_func=lambda f: dl.FONDAMENTALE_LABELS.get(f, f), key="raw_fond",
-    )
-    _render_how_to_expander(fond_sel, dl.FONDAMENTALE_LABELS.get(fond_sel, fond_sel))
+    fond_sel, _ = _render_fundamental_row(dl.FONDAMENTALE_ORDER, "raw_fond")
 
     matches = mc.matches_for_season(filters.season())
     if not matches:
