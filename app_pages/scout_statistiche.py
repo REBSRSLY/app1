@@ -82,7 +82,7 @@ RAW_COLUMN_GROUPS = [
     ["Perfect", "Perfect_pct", "Perfect_BP", "Perfect_pC"],
 ]
 
-SECTIONS = ["Team Profile", "General stats", "Game distribution", "Scout Sheet"]
+SECTIONS = ["Team Profile", "Player Profiles", "Game distribution", "Scout Sheet"]
 
 # Which front-row zone each role attacks from -- we don't have real
 # per-attack court coordinates, so this fixed assumption (given by the
@@ -368,7 +368,7 @@ def _render_team_profile_section(scoped: pd.DataFrame, scout: pd.DataFrame):
     # in render()) -> Fundamental -> How to read -> content. The picker
     # used to live inside the Trend chart's own box; pulled out here so
     # it's the first thing under the section tabs, consistent with
-    # General stats / Game distribution / Scout Sheet, and shared with
+    # Player Profiles / Game distribution / Scout Sheet, and shared with
     # both the Trend chart and the Outcome mix box below.
     fond_options = dl.FONDAMENTALE_ORDER
     fond_sel = st.selectbox(
@@ -478,28 +478,6 @@ def _render_player_outcome_mix(scoped: pd.DataFrame, players: list[str]):
     st.caption(f"{player_sel}'s outcome mix (=/-/!/+/# and the slash) for every fundamental with data in this scope.")
 
 
-def _render_volume_efficiency(base: pd.DataFrame, perfetto_lbl: str):
-    """Bubble scatter (bubble size = volume): separates high-volume,
-    high-efficiency go-to options from low-volume specialists and from
-    players who are getting a lot of touches without producing."""
-    d = base[base["Tot"] > 0]
-    if d.empty:
-        return
-
-    fig = px.scatter(
-        d, x="E_pct", y="Perfect_pct", size="Tot", color="player_name",
-        color_discrete_map=pc.color_map(d["player_name"].unique()),
-        labels={"E_pct": "Efficiency E%", "Perfect_pct": f"% {perfetto_lbl}", "player_name": "Player"},
-        hover_name="player_name", size_max=32,
-    )
-    fig.update_layout(
-        xaxis_tickformat=".0%", yaxis_tickformat=".0%", showlegend=False,
-        height=320, margin=dict(l=0, r=10, t=10, b=10),
-    )
-    st.plotly_chart(fig, width="stretch")
-    st.caption("Bubble size = volume of actions. Top-right = high-volume and high-quality.")
-
-
 def _render_general_stats(scoped: pd.DataFrame):
     fondamentali = sorted(scoped["fondamentale"].unique())
     fond_sel = st.selectbox(
@@ -510,24 +488,14 @@ def _render_general_stats(scoped: pd.DataFrame):
     )
     fond_label = dl.FONDAMENTALE_LABELS.get(fond_sel, fond_sel)
 
-    perfetto_lbl = dl.perfetto_label(fond_sel)
-    errore_lbl = dl.errore_label(fond_sel)
     _render_how_to_expander(fond_sel, fond_label)
 
     base = scoped[(scoped["fondamentale"] == fond_sel) & (scoped["palla"] == "Totale")]
-    team_row = base[base["is_team"]]
     players = base[~base["is_team"]].sort_values("Tot", ascending=False)
 
-    if team_row.empty or players.empty:
+    if players.empty:
         st.info("No data available for this fundamental in the selected scope.")
         return
-
-    t = team_row.iloc[0]
-    with st.container(horizontal=True):
-        st.metric("Total actions", int(t["Tot"]), border=True)
-        st.metric("Efficiency (E%)", f"{t['E_pct'] * 100:.0f}%", border=True)
-        st.metric(f"% {perfetto_lbl} (#)", f"{t['Perfect_pct'] * 100:.0f}%" if pd.notna(t["Perfect_pct"]) else "—", border=True)
-        st.metric(f"% {errore_lbl} (=)", f"{t['Err_pct'] * 100:.0f}%" if pd.notna(t["Err_pct"]) else "—", border=True)
 
     col_vol, col_eff = st.columns(2)
     with col_vol:
@@ -567,38 +535,6 @@ def _render_general_stats(scoped: pd.DataFrame):
         st.markdown("**Outcome mix per player** · every fundamental")
         all_players = pc.sort_by_role(scoped[~scoped["is_team"]]["player_name"].dropna().unique())
         _render_player_outcome_mix(scoped, all_players)
-
-    with st.container(border=True):
-        st.markdown(f"**Volume vs. quality** · {fond_label}")
-        _render_volume_efficiency(players, perfetto_lbl)
-
-    with st.container(border=True):
-        st.markdown(f"**Detail per player** · {fond_label}")
-        col_perfetto = f"% {perfetto_lbl} (#)"
-        col_errore = f"% {errore_lbl} (=)"
-        tabella = players[["player_name", "Tot", "E_pct", "Err_pct", "Slash_pct", "Neg_pct", "Neutral_pct", "Pos_pct", "Perfect_pct"]].rename(columns={
-            "player_name": "Player",
-            "E_pct": "Efficiency E%",
-            "Err_pct": col_errore,
-            "Slash_pct": "/",
-            "Neg_pct": "-",
-            "Neutral_pct": "!",
-            "Pos_pct": "+",
-            "Perfect_pct": col_perfetto,
-        })
-        percent_cols = ["Efficiency E%", col_errore, "/", "-", "!", "+", col_perfetto]
-        st.dataframe(
-            tabella,
-            hide_index=True,
-            width="stretch",
-            column_config={
-                "Tot": st.column_config.NumberColumn(
-                    format="%d",
-                    help=f"Actions this row is based on. Below {dl.MIN_RELIABLE_N}, its percentages are indicative, not reliable.",
-                ),
-                **{c: st.column_config.NumberColumn(format="percent") for c in percent_cols},
-            },
-        )
 
 
 def _render_cumulative_actions(scout: pd.DataFrame, fond_sel2: str, height: int = 340):
@@ -1222,7 +1158,7 @@ def render():
 
     if section == "Team Profile":
         _render_team_profile_section(scoped, scout)
-    elif section == "General stats":
+    elif section == "Player Profiles":
         _render_general_stats(scoped)
     elif section == "Game distribution":
         _render_distribution(scoped, scout, palla_tipi_en)
