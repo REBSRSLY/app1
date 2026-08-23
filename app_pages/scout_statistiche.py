@@ -428,7 +428,10 @@ def _render_fundamental_row(options: list[str], key: str, default: str | None = 
         )
     fond_label = dl.FONDAMENTALE_LABELS.get(fond_sel, fond_sel)
     with col_how:
-        _render_how_to_expander(fond_sel, fond_label)
+        # Nudged down via styles.py's .st-key-fund_row_how so it lines up
+        # with the selectbox's own box, not its label above.
+        with st.container(key="fund_row_how"):
+            _render_how_to_expander(fond_sel, fond_label)
     return fond_sel, fond_label
 
 

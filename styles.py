@@ -149,6 +149,15 @@ CUSTOM_CSS = """
         [data-testid="stExpander"] summary {
             font-size: 0.88em;
         }
+        /* scout_statistiche.py's _render_fundamental_row puts the
+           Fundamental selectbox and its "How to read" expander side by
+           side -- the selectbox's own column has a widget label above its
+           box, the expander's column doesn't, so without this the expander
+           lines up with that label instead of the box beside it. Pushes it
+           down by the label's own height so the two boxes' tops match. */
+        .st-key-fund_row_how {
+            margin-top: 26px;
+        }
         .st-key-home_low_recovery_box,
         [class*="st-key-wellness_card_"] {
             background: var(--surface) !important;
