@@ -43,10 +43,11 @@ def _render_form_chart(matches: list[dict]):
     st.caption("Bar height = result points · bar color = competition (see the boxes below).")
 
 
-# Serie A1's box is sized to the standings table's own natural height
-# (~600px for 14 teams + header) so its Results/Standings switcher doesn't
-# resize the box next to Playoff when flipped.
-SERIE_A_BOX_HEIGHT = 600
+# Serie A1's box matches Playoff's own default height (rather than the
+# standings table's taller natural size) so the two stay aligned, same
+# height, side by side -- the standings table scrolls internally at this
+# height like the results view already does.
+SERIE_A_BOX_HEIGHT = 520
 # Coppa Italia + Supercoppa stack in Champions League's column, each at
 # half its box height (chrome included), so the two-box stack lands at the
 # same total height as the single Champions League box beside it.
@@ -56,10 +57,11 @@ MINOR_BOX_HEIGHT = 221
 def _render_serie_a_box(season: str, matches: list[dict]):
     """Serie A1's results and the season's final standings share one card
     -- a plain on/off toggle (no label) floats into the box's own header,
-    top-right where a record chip would sit, instead of a separate labeled
-    widget above the box. Both views render at the same fixed height
-    (SERIE_A_BOX_HEIGHT) so toggling doesn't change the box's footprint
-    next to Playoff."""
+    top-right, instead of a separate labeled widget above the box. The
+    Results view's W-L record chip moves in next to the title (record_inline)
+    to leave that corner free for the toggle. Both views render at the same
+    fixed height (SERIE_A_BOX_HEIGHT, matching Playoff's own) so toggling
+    doesn't change the box's footprint, or its alignment with Playoff."""
     color = mc.COMPETITIONS["Serie A1"]["color"]
     with st.container(key="serie_a_box"):
         # Widget first so its value is known before the CSS below picks a
@@ -68,40 +70,40 @@ def _render_serie_a_box(season: str, matches: list[dict]):
         # recompute against this specific React-driven checkbox.
         standings_view = st.toggle("Standings view", key="serie_a_standings_toggle", label_visibility="collapsed")
         track_color = color if standings_view else f"{color}55"
-        st.markdown(
-            f"""<style>
-            .st-key-serie_a_box {{ position: relative; }}
-            /* st.toggle renders as a styled stCheckbox (there's no separate
-               "stToggle" testid) -- its label has 3 children: a visually-
-               hidden span wrapping the real <input>, the track/knob pair
-               (first div, matched structurally since the emotion-hash
-               classes aren't stable to target directly), then the (here,
-               collapsed) text label. Floats into the box's own header,
-               top-right where a record chip would otherwise sit -- targets
-               the widget's own stElementContainer (keyed via the widget's
-               own `key`, not the checkbox itself) since Streamlit already
-               makes that container position:relative, which would else
-               intercept the checkbox's own absolute positioning before it
-               reaches the box. */
-            .st-key-serie_a_standings_toggle {{
-                position: absolute !important; top: 15px; right: 18px; z-index: 2;
-            }}
-            .st-key-serie_a_box [data-testid="stCheckbox"] label > div:first-of-type {{
-                background-color: {track_color} !important;
-            }}
-            </style>""",
-            unsafe_allow_html=True,
-        )
+        # CSS and the box HTML in one st.markdown call, not two -- Streamlit
+        # puts a gap between every pair of in-flow children of a vertical
+        # block, and a *separate* zero-height style-only markdown still
+        # counts as one of that pair even though the toggle beside it is
+        # position:absolute, which pushed the box 15px below Playoff's own.
+        style = f"""<style>
+        .st-key-serie_a_box {{ position: relative; }}
+        /* st.toggle renders as a styled stCheckbox (there's no separate
+           "stToggle" testid) -- its label has 3 children: a visually-
+           hidden span wrapping the real <input>, the track/knob pair
+           (first div, matched structurally since the emotion-hash classes
+           aren't stable to target directly), then the (here, collapsed)
+           text label. Floats into the box's own header, top-right --
+           targets the widget's own stElementContainer (keyed via the
+           widget's own `key`, not the checkbox itself) since Streamlit
+           already makes that container position:relative, which would
+           else intercept the checkbox's own absolute positioning before
+           it reaches the box. */
+        .st-key-serie_a_standings_toggle {{
+            position: absolute !important; top: 15px; right: 18px; z-index: 2;
+            transform: scale(1.6); transform-origin: top right;
+        }}
+        .st-key-serie_a_box [data-testid="stCheckbox"] label > div:first-of-type {{
+            background-color: {track_color} !important;
+        }}
+        </style>"""
         if not standings_view:
-            st.markdown(
-                cv.render_competition_box("Serie A1", matches, show_round=False, height_px=SERIE_A_BOX_HEIGHT),
-                unsafe_allow_html=True,
+            box_html = cv.render_competition_box(
+                "Serie A1", matches, show_round=False, height_px=SERIE_A_BOX_HEIGHT, record_inline=True,
             )
+            st.markdown(style + box_html, unsafe_allow_html=True)
         else:
-            st.markdown(
-                cv.render_standings_box(mc.SEASON_STANDINGS.get(season, []), color=color, height_px=SERIE_A_BOX_HEIGHT),
-                unsafe_allow_html=True,
-            )
+            box_html = cv.render_standings_box(mc.SEASON_STANDINGS.get(season, []), color=color, height_px=SERIE_A_BOX_HEIGHT)
+            st.markdown(style + box_html, unsafe_allow_html=True)
             # Doesn't move with the sidebar's period, unlike the results
             # view -- a league table needs every team's results, not just
             # the matches this app has (Milano's own), so there's no

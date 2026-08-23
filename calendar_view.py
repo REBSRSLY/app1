@@ -35,6 +35,11 @@ BOX_CSS = """
         box-sizing: border-box;
     }
     .comp-box-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:10px; }
+    /* Groups the title and record chip together on the left instead of
+       pushing the chip to the far right -- used by the Matches page's
+       Serie A1 box, which puts a toggle switch in that top-right corner
+       instead. */
+    .comp-box-header-inline { justify-content:flex-start; }
     .comp-box-title { font-size:1.05rem; font-weight:700; color:var(--box-accent, var(--accent)); }
     .comp-box-record {
         font-size:11.5px; color:var(--muted); background:rgba(255,255,255,0.05);
@@ -89,12 +94,16 @@ def _result_row_html(m: dict, show_round: bool) -> str:
     )
 
 
-def render_box(title: str, color: str, body_html: str, record_html: str = "") -> str:
+def render_box(title: str, color: str, body_html: str, record_html: str = "", record_inline: bool = False) -> str:
     """Generic color-bordered card (title colored to match, like the Players
-    page's role boxes) with an optional record chip and a body."""
+    page's role boxes) with an optional record chip and a body. record_inline
+    groups the chip right next to the title instead of pushing it to the
+    header's far right -- for a box (Matches page's Serie A1) that puts
+    something else, like a toggle switch, in that top-right corner."""
+    header_cls = "comp-box-header comp-box-header-inline" if record_inline else "comp-box-header"
     return (
         f'<div class="comp-box" style="--box-accent:{color}">'
-        f'<div class="comp-box-header">'
+        f'<div class="{header_cls}">'
         f'<div class="comp-box-title">{title}</div>'
         f'{record_html}'
         f'</div>'
@@ -103,7 +112,9 @@ def render_box(title: str, color: str, body_html: str, record_html: str = "") ->
     )
 
 
-def render_competition_box(comp_key: str, matches: list[dict], show_round: bool = True, height_px: int = 520) -> str:
+def render_competition_box(
+    comp_key: str, matches: list[dict], show_round: bool = True, height_px: int = 520, record_inline: bool = False,
+) -> str:
     """Self-contained box: header (name, W-L record) + scrollable results
     list, most recent match first -- the box has a capped height (default
     roughly matching the standings box's own natural size; callers with a
@@ -122,7 +133,7 @@ def render_competition_box(comp_key: str, matches: list[dict], show_round: bool 
     record_html = f'<div class="comp-box-record">{wins}W – {losses}L · {len(comp_matches)} played</div>'
     rows = "".join(_result_row_html(m, show_round) for m in comp_matches)
     body = f'<div class="comp-results" style="height:{height_px}px;">{rows}</div>'
-    return render_box(comp_key, conf["color"], body, record_html)
+    return render_box(comp_key, conf["color"], body, record_html, record_inline=record_inline)
 
 
 def render_standings_box(standings: list[dict], title: str = "Standings", color: str = "#64B5F6", height_px: int | None = None) -> str:
