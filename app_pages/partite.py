@@ -43,6 +43,46 @@ def _render_form_chart(matches: list[dict]):
     st.caption("Bar height = result points · bar color = competition (see the boxes below).")
 
 
+# Serie A1's box is sized to the standings table's own natural height
+# (~600px for 14 teams + header) so its Results/Standings switcher doesn't
+# resize the box next to Playoff when flipped.
+SERIE_A_BOX_HEIGHT = 600
+# Coppa Italia + Supercoppa stack in Champions League's column, each at
+# half its box height (chrome included), so the two-box stack lands at the
+# same total height as the single Champions League box beside it.
+MINOR_BOX_HEIGHT = 221
+
+
+def _render_serie_a_box(season: str, matches: list[dict]):
+    """Serie A1's results and the season's final standings share one card
+    -- a switcher above it picks which one shows, both rendered at the
+    same fixed height (SERIE_A_BOX_HEIGHT) so toggling doesn't change the
+    box's footprint next to Playoff."""
+    view = st.segmented_control(
+        "Serie A1 view", ["Results", "Standings"], default="Results",
+        required=True, key="serie_a_view", label_visibility="collapsed",
+    )
+    if view == "Results":
+        st.markdown(
+            cv.render_competition_box("Serie A1", matches, show_round=False, height_px=SERIE_A_BOX_HEIGHT),
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            cv.render_standings_box(
+                mc.SEASON_STANDINGS.get(season, []), color=mc.COMPETITIONS["Serie A1"]["color"],
+                height_px=SERIE_A_BOX_HEIGHT,
+            ),
+            unsafe_allow_html=True,
+        )
+        # Doesn't move with the sidebar's period, unlike the results view --
+        # a league table needs every team's results, not just the matches
+        # this app has (Milano's own), so there's no correct way to
+        # recompute a mid-season snapshot from what's scoped here. This is
+        # the season's final table.
+        st.caption(f":material/info: Final {season} standings — not affected by the period filter above.")
+
+
 def _render_by_competition(season: str, matches: list[dict]):
     with st.container(key="css_comp_box"):
         st.markdown(cv.BOX_CSS, unsafe_allow_html=True)
@@ -55,34 +95,29 @@ def _render_by_competition(season: str, matches: list[dict]):
     st.markdown("**Form** · result points, chronological")
     _render_form_chart(matches)
 
-    show_standings = "Serie A1" in present
-    if show_standings:
-        col_results, col_standings = st.columns([1, 1.2])
-        with col_results:
-            st.markdown(cv.render_competition_box("Serie A1", matches, show_round=False), unsafe_allow_html=True)
-        with col_standings:
-            st.markdown(
-                cv.render_standings_box(mc.SEASON_STANDINGS.get(season, []), color=mc.COMPETITIONS["Serie A1"]["color"]),
-                unsafe_allow_html=True,
-            )
-            # Doesn't move with the sidebar's period, unlike the results box
-            # beside it -- a league table needs every team's results, not
-            # just the matches this app has (Milano's own), so there's no
-            # correct way to recompute a mid-season snapshot from what's
-            # scoped here. This is the season's final table.
-            st.caption(f":material/info: Final {season} standings — not affected by the period filter above.")
-        secondary = [c for c in present if c != "Serie A1"]
-    else:
-        secondary = present
+    # Row 1: Serie A1 (results/standings switcher) + Playoff scudetto.
+    if "Serie A1" in present or "Playoff scudetto" in present:
+        col_serie_a, col_playoff = st.columns(2)
+        if "Serie A1" in present:
+            with col_serie_a:
+                _render_serie_a_box(season, matches)
+        if "Playoff scudetto" in present:
+            with col_playoff:
+                st.markdown(cv.render_competition_box("Playoff scudetto", matches), unsafe_allow_html=True)
 
-    if len(secondary) == 1:
-        st.markdown(cv.render_competition_box(secondary[0], matches), unsafe_allow_html=True)
-    else:
-        for i in range(0, len(secondary), 2):
-            cols = st.columns(2)
-            for col, comp in zip(cols, secondary[i:i + 2]):
-                with col:
-                    st.markdown(cv.render_competition_box(comp, matches), unsafe_allow_html=True)
+    # Row 2: Champions League on the left; Coppa Italia + Supercoppa
+    # stacked on the right (each at half height), so the row reads at the
+    # same overall height on both sides.
+    if "Champions League" in present or "Coppa Italia" in present or "Supercoppa Italiana" in present:
+        col_cl, col_minor = st.columns(2)
+        if "Champions League" in present:
+            with col_cl:
+                st.markdown(cv.render_competition_box("Champions League", matches), unsafe_allow_html=True)
+        with col_minor:
+            if "Coppa Italia" in present:
+                st.markdown(cv.render_competition_box("Coppa Italia", matches, height_px=MINOR_BOX_HEIGHT), unsafe_allow_html=True)
+            if "Supercoppa Italiana" in present:
+                st.markdown(cv.render_competition_box("Supercoppa Italiana", matches, height_px=MINOR_BOX_HEIGHT), unsafe_allow_html=True)
 
 
 def _render_month_distribution(matches: list[dict]):

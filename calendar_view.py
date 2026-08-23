@@ -40,12 +40,12 @@ BOX_CSS = """
         font-size:11.5px; color:var(--muted); background:rgba(255,255,255,0.05);
         border:1px solid var(--line); border-radius:20px; padding:3px 10px; white-space:nowrap;
     }
-    /* Sized to roughly match the standings box's own natural height (14
-       teams + header lands around ~600px) -- matches contained here are
+    /* Height set inline per call (render_competition_box/render_standings_box's
+       height_px) rather than fixed here -- matches contained here are
        sorted most-recent-first (see render_competition_box), so whatever's
        most relevant right now, wins or losses, is what's visible without
        scrolling, not whatever happened to be scrolled to. */
-    .comp-results { height:520px; overflow-y:auto; padding-right:6px; }
+    .comp-results { overflow-y:auto; padding-right:6px; }
     .result-row { padding:8px 2px; border-bottom:1px solid var(--line); }
     .result-row:last-child { border-bottom:none; }
     .result-top { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:3px; }
@@ -103,12 +103,14 @@ def render_box(title: str, color: str, body_html: str, record_html: str = "") ->
     )
 
 
-def render_competition_box(comp_key: str, matches: list[dict], show_round: bool = True) -> str:
+def render_competition_box(comp_key: str, matches: list[dict], show_round: bool = True, height_px: int = 520) -> str:
     """Self-contained box: header (name, W-L record) + scrollable results
-    list, most recent match first -- the box has a capped height (roughly
-    matching the standings box next to it) and scrolls for competitions
-    with a lot of matches, so whatever's most recent (a loss included)
-    is what's visible by default, not whatever's oldest."""
+    list, most recent match first -- the box has a capped height (default
+    roughly matching the standings box's own natural size; callers with a
+    tighter row -- Coppa Italia/Supercoppa sharing a row with Champions
+    League -- pass a smaller height_px instead) and scrolls for
+    competitions with a lot of matches, so whatever's most recent (a loss
+    included) is what's visible by default, not whatever's oldest."""
     conf = mc.COMPETITIONS[comp_key]
     comp_matches = sorted((m for m in matches if m["competition"] == comp_key), key=lambda m: m["date"], reverse=True)
 
@@ -119,14 +121,20 @@ def render_competition_box(comp_key: str, matches: list[dict], show_round: bool 
     losses = len(comp_matches) - wins
     record_html = f'<div class="comp-box-record">{wins}W – {losses}L · {len(comp_matches)} played</div>'
     rows = "".join(_result_row_html(m, show_round) for m in comp_matches)
-    body = f'<div class="comp-results">{rows}</div>'
+    body = f'<div class="comp-results" style="height:{height_px}px;">{rows}</div>'
     return render_box(comp_key, conf["color"], body, record_html)
 
 
-def render_standings_box(standings: list[dict], title: str = "Standings", color: str = "#64B5F6") -> str:
-    # No max-height/scroll here (unlike comp-results): the standings table
-    # is meant to be fully visible at a glance, not truncated.
-    return render_box(title, color, render_standings(standings))
+def render_standings_box(standings: list[dict], title: str = "Standings", color: str = "#64B5F6", height_px: int | None = None) -> str:
+    # No max-height/scroll by default: the standings table is meant to be
+    # fully visible at a glance, not truncated. A caller sharing this box
+    # with another view via a switcher (Matches page's Serie A1 box) passes
+    # height_px so both views render at the same fixed size instead of the
+    # box resizing when the reader flips between them.
+    body = render_standings(standings)
+    if height_px is not None:
+        body = f'<div class="comp-results" style="height:{height_px}px;">{body}</div>'
+    return render_box(title, color, body)
 
 
 # ---------------------------------------------------------------------------
