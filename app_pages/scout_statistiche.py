@@ -277,7 +277,7 @@ def _render_team_outcome_mix(scoped: pd.DataFrame):
     fig.update_traces(hovertemplate="<b>%{x}</b> · %{fullData.name}: %{y}<extra></extra>")
     fig.update_layout(
         barmode=barmode, barnorm=barnorm, height=340, margin=dict(l=10, r=10, t=10, b=10),
-        yaxis_tickformat=".0%" if barnorm else None,
+        yaxis_ticksuffix="%" if barnorm else None,
     )
     st.plotly_chart(fig, width="stretch")
     st.caption("Outcome mix (=/-/!/+/# and the slash) for every fundamental with data in this scope.")
@@ -486,7 +486,7 @@ def _render_player_outcome_mix(scoped: pd.DataFrame, players: list[str]):
     fig.update_traces(hovertemplate="<b>%{x}</b> · %{fullData.name}: %{y}<extra></extra>")
     fig.update_layout(
         barmode=barmode, barnorm=barnorm, height=320, margin=dict(l=10, r=10, t=10, b=10),
-        yaxis_tickformat=".0%" if barnorm else None,
+        yaxis_ticksuffix="%" if barnorm else None,
     )
     st.plotly_chart(fig, width="stretch")
     st.caption(f"{player_sel}'s outcome mix (=/-/!/+/# and the slash) for every fundamental with data in this scope.")
@@ -1016,7 +1016,7 @@ def _render_distribution(scoped: pd.DataFrame, scout: pd.DataFrame, palla_tipi_e
             )
             fig1.update_layout(
                 barmode=barmode, barnorm=barnorm, legend_title_text="Set type", height=520,
-                yaxis_tickformat=".0%" if barnorm else None,
+                yaxis_ticksuffix="%" if barnorm else None,
             )
             st.plotly_chart(fig1, width="stretch")
 

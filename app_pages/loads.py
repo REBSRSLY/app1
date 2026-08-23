@@ -58,7 +58,7 @@ def _render_jumps(salti):
         fig.update_layout(
             barmode=barmode, barnorm=barnorm,
             legend_title_text="Player", height=320, margin=dict(l=10, r=10, t=10, b=10),
-            yaxis_tickformat=".0%" if barnorm else None,
+            yaxis_ticksuffix="%" if barnorm else None,
         )
         st.plotly_chart(fig, width="stretch")
 

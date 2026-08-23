@@ -11,21 +11,35 @@ import match_calendar as mc
 import player_colors as pc
 import players_grid as pg
 import training_load
-from ui_helpers import close_polygon, dark_polar_layout, tqr_yaxis_ticks
+from ui_helpers import (
+    GOOD_COLOR,
+    LOW_COLOR,
+    TQR_GREEN_MIN,
+    TQR_MAX,
+    TQR_MIN,
+    WARN_COLOR,
+    close_polygon,
+    dark_polar_layout,
+    tqr_recovery_label,
+    tqr_yaxis_ticks,
+    tqr_zone_color,
+)
 import calendar_view as cv
 
-GOOD_COLOR = "#54A24B"
-LOW_COLOR = "#E45756"
-WARN_COLOR = "#F0A600"
-RECOVERY_THRESHOLD = 15
-
 # Same convention as scout_statistiche.py's own OUTCOME_COLORS/SYMBOL_TO_COL
-# -- duplicated here (rather than imported across pages) just for the one
-# "Serve outcome mix" tile below.
+# -- duplicated here (rather than imported across pages) just for the two
+# outcome-mix tiles below.
 _OUTCOME_COLORS = {"=": "#7A1B1B", "-": "#F58518", "!": "#FDD835", "+": "#54A24B", "#": "#1B5E20", "/": "#E45756"}
 _SYMBOL_TO_COL = {"=": "Err", "-": "Neg", "!": "Neutral", "+": "Pos", "#": "Perfect", "/": "Slash"}
 _SCORE_POINTS = {"3-0": 3, "3-1": 3, "3-2": 2, "2-3": 1, "1-3": 0, "0-3": 0}
 _MONTH_NAMES = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+# Every plotly tile's own chart draws at this height, and every tile's
+# bordered card (chart or text) is held to this same min-height via CSS
+# below -- one standard footprint for every card on the grid, chart or
+# not, instead of each tile picking its own (previously 62-150px).
+TILE_CHART_HEIGHT = 132
+TILE_CARD_MIN_HEIGHT = 216
 
 # Every card the Home dashboard can show, keyed for the Customize popover's
 # checkboxes -- "default": True is what a first-time visitor sees; nothing
@@ -36,33 +50,35 @@ _MONTH_NAMES = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep
 # context for a card this small).
 TILE_CATALOG = [
     ("wellness_low_recovery", "Low recovery", "Wellness", True),
+    ("wellness_team_tqr_gauge", "Team TQR", "Wellness", True),
+    ("wellness_team_tqr_trend", "Team TQR trend", "Wellness", False),
     ("wellness_individual_tqr", "Individual TQR trends", "Wellness", False),
     ("loads_readiness", "Team readiness (ACWR)", "Loads", True),
     ("loads_acwr_chart", "ACWR & weekly load", "Loads", True),
     ("loads_jumps", "Jumps per player", "Loads", False),
-    ("loads_rpe_by_role", "RPE distribution by role", "Loads", False),
     ("loads_rpe_scatter", "RPE vs. session duration", "Loads", False),
     ("matches_league_position", "League position", "Matches", True),
     ("matches_recent_form", "Recent form", "Matches", True),
     ("matches_score_patterns", "Score patterns", "Matches", True),
     ("matches_per_month", "Matches per month", "Matches", False),
     ("scout_top_scorers", "Top scorers", "Scout & Stats", True),
+    ("scout_top_efficiency", "Top efficiency", "Scout & Stats", False),
     ("scout_team_shape", "Team shape radar", "Scout & Stats", True),
     ("scout_serve_outcome", "Serve outcome mix", "Scout & Stats", True),
+    ("scout_attack_outcome", "Attack outcome mix", "Scout & Stats", False),
     ("scout_efficiency_trend", "Efficiency trend", "Scout & Stats", False),
     ("scout_team_profile_bar", "Team profile · E% bar", "Scout & Stats", False),
-    ("players_squad_overview", "Squad overview", "Players", False),
 ]
 TILE_LABELS = {key: label for key, label, _page, _default in TILE_CATALOG}
 
-HERO_CSS = """
+HERO_CSS = f"""
 <style>
     /* A real hero moment instead of a plain header row -- a single-color
        mesh glow (Magenta Numia only, no blue) anchored at the top-left
        corner, simpler than the page-wide background's own mesh+diagonal
        combo so the hero still reads as its own distinct moment rather
        than repeating what's already behind every other box on the page. */
-    .st-key-home_hero_box {
+    .st-key-home_hero_box {{
         background:
             radial-gradient(90% 140% at 0% 0%, #E0158C 0%, transparent 65%),
             #101418;
@@ -70,13 +86,25 @@ HERO_CSS = """
         border-radius: 14px;
         padding: 6px 18px;
         margin-bottom: 4px;
-    }
-    .st-key-home_customize_box button { white-space: nowrap; }
+    }}
+    .st-key-home_customize_box button {{ white-space: nowrap; }}
     /* Dashboard tiles: dense grid, small cards -- every chart inside is
-       sized to match (see each _tile_* function's own height=); this
-       trims Streamlit's default inter-element spacing inside each card,
-       which was the biggest source of the page needing to scroll. */
-    .st-key-home_grid [data-testid="stElementContainer"] { margin-bottom: 2px !important; }
+       sized to match (see TILE_CHART_HEIGHT); this trims Streamlit's
+       default inter-element spacing inside each card, which was the
+       biggest source of the page needing to scroll. */
+    .st-key-home_grid [data-testid="stElementContainer"] {{ margin-bottom: 2px !important; }}
+    /* One standard card footprint for every tile, chart or text-only, so
+       a row of mixed tile types still lines up edge to edge instead of
+       each card hugging its own (different) content height. Targets the
+       actual bordered container (a plain stVerticalBlock in this
+       Streamlit version, two levels below stColumn: stColumn's own
+       auto-wrapper stVerticalBlock, then stLayoutWrapper, then the real
+       bordered one from st.container(border=True)) -- there's no
+       separate "border wrapper" testid to key off directly. */
+    .st-key-home_grid [data-testid="stColumn"] > [data-testid="stVerticalBlock"]
+        > [data-testid="stLayoutWrapper"] > [data-testid="stVerticalBlock"] {{
+        min-height: {TILE_CARD_MIN_HEIGHT}px;
+    }}
 </style>
 """
 
@@ -136,7 +164,7 @@ def _tile_low_recovery():
             return
         last_date = wellness["Data"].max()
         last_day = wellness[wellness["Data"] == last_date].sort_values("Tqr")
-        below = last_day[last_day["Tqr"] < RECOVERY_THRESHOLD]
+        below = last_day[last_day["Tqr"] < TQR_GREEN_MIN]
         if below.empty:
             st.markdown(
                 f'<div style="display:flex;align-items:center;gap:8px;padding-top:6px;">'
@@ -150,10 +178,85 @@ def _tile_low_recovery():
         st.markdown(
             f'<div style="display:flex;align-items:baseline;gap:8px;">'
             f'<span style="font-size:2rem;font-weight:800;color:{LOW_COLOR};line-height:1;">{len(below)}</span>'
-            f'<span style="font-size:11px;color:var(--muted);">below TQR {RECOVERY_THRESHOLD}</span></div>'
+            f'<span style="font-size:11px;color:var(--muted);">below TQR {TQR_GREEN_MIN}</span></div>'
             f'<div style="font-size:11.5px;color:var(--muted);margin-top:2px;">{names}{more}</div>',
             unsafe_allow_html=True,
         )
+
+
+def _tile_team_tqr_gauge():
+    """Same gauge language as Team readiness/ACWR beside it, and as the
+    Players page's own per-player TQR gauge -- the team's most recent-day
+    average TQR, banded by CoreBo's 3-zone scale, with the recovery label
+    spelled out underneath so the color isn't the only thing carrying
+    the meaning."""
+    with st.container(border=True):
+        st.markdown("**Team TQR**")
+        wellness = filters.filter_by_date_col(dl.load_wellness_data()["wellness"])
+        d = wellness.dropna(subset=["Tqr"])
+        if d.empty:
+            st.caption("No data in range.")
+            return
+        last_date = d["Data"].max()
+        tqr = float(d.loc[d["Data"] == last_date, "Tqr"].mean())
+        color = tqr_zone_color(tqr)
+        fig = go.Figure(go.Indicator(
+            mode="gauge+number",
+            value=tqr,
+            number=dict(font=dict(size=24, color="#f2f2f2"), valueformat=".1f"),
+            gauge=dict(
+                axis=dict(range=[TQR_MIN, TQR_MAX], tickvals=[TQR_MIN, 13, TQR_GREEN_MIN, TQR_MAX], tickfont=dict(size=8, color="#9a9a9a")),
+                bar=dict(color="#ffffff", thickness=0.28),
+                bgcolor="rgba(0,0,0,0)",
+                steps=[
+                    {"range": [TQR_MIN, 13], "color": LOW_COLOR},
+                    {"range": [13, TQR_GREEN_MIN], "color": WARN_COLOR},
+                    {"range": [TQR_GREEN_MIN, TQR_MAX], "color": GOOD_COLOR},
+                ],
+            ),
+        ))
+        fig.update_layout(height=TILE_CHART_HEIGHT - 20, margin=dict(l=14, r=14, t=0, b=0), paper_bgcolor="rgba(0,0,0,0)")
+        st.plotly_chart(fig, width="stretch")
+        st.markdown(
+            f'<div style="text-align:center;font-size:11px;color:{color};font-weight:700;">{tqr_recovery_label(tqr)}</div>',
+            unsafe_allow_html=True,
+        )
+
+
+def _tile_team_tqr_trend():
+    """Mini version of the Wellness page's own Team TQR trend: mean line
+    with a faint +/- std band around it, y-axis ticks colored by the same
+    3-zone scale as every other TQR display in the app -- no separate
+    threshold line needed, the ticks already carry that."""
+    with st.container(border=True):
+        st.markdown("**Team TQR** trend")
+        wellness = filters.filter_by_date_col(dl.load_wellness_data()["wellness"])
+        daily = (
+            wellness.groupby("Data")["Tqr"].agg(["mean", "std"]).reset_index()
+            .dropna(subset=["mean"]).sort_values("Data")
+        )
+        if daily.empty:
+            st.caption("No data in range.")
+            return
+        daily["std"] = daily["std"].fillna(0)
+        upper = (daily["mean"] + daily["std"]).clip(upper=TQR_MAX)
+        lower = (daily["mean"] - daily["std"]).clip(lower=TQR_MIN)
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=daily["Data"], y=lower, mode="lines", line=dict(width=0), showlegend=False, hoverinfo="skip",
+        ))
+        fig.add_trace(go.Scatter(
+            x=daily["Data"], y=upper, mode="lines", fill="tonexty",
+            line=dict(width=0), fillcolor="rgba(46,204,113,0.18)", showlegend=False, hoverinfo="skip",
+        ))
+        fig.add_trace(go.Scatter(
+            x=daily["Data"], y=daily["mean"], mode="lines", line=dict(color="#2ecc71", width=2), showlegend=False,
+        ))
+        fig.update_layout(
+            height=TILE_CHART_HEIGHT, margin=dict(l=10, r=10, t=0, b=10),
+            yaxis=dict(range=[TQR_MIN, TQR_MAX], **tqr_yaxis_ticks()), xaxis_title=None,
+        )
+        st.plotly_chart(fig, width="stretch")
 
 
 def _tile_readiness():
@@ -174,7 +277,7 @@ def _tile_readiness():
         fig = go.Figure(go.Indicator(
             mode="gauge+number",
             value=acwr,
-            number=dict(font=dict(size=26, color="#f2f2f2"), valueformat=".2f"),
+            number=dict(font=dict(size=24, color="#f2f2f2"), valueformat=".2f"),
             gauge=dict(
                 axis=dict(range=[0, 2], tickfont=dict(size=8, color="#9a9a9a")),
                 bar=dict(color="#ffffff", thickness=0.28),
@@ -187,7 +290,7 @@ def _tile_readiness():
                 ],
             ),
         ))
-        fig.update_layout(height=88, margin=dict(l=14, r=14, t=0, b=0), paper_bgcolor="rgba(0,0,0,0)")
+        fig.update_layout(height=TILE_CHART_HEIGHT - 20, margin=dict(l=14, r=14, t=0, b=0), paper_bgcolor="rgba(0,0,0,0)")
         st.plotly_chart(fig, width="stretch")
 
 
@@ -214,7 +317,7 @@ def _tile_league_position():
                 textfont=dict(color="#f2f2f2", size=10),
             ))
             fig.update_layout(
-                height=62, margin=dict(l=8, r=40, t=0, b=0),
+                height=TILE_CHART_HEIGHT - 60, margin=dict(l=8, r=40, t=0, b=0),
                 xaxis=dict(visible=False, range=[0, max(us["pts"], other["pts"]) * 1.3]),
                 yaxis=dict(tickfont=dict(size=10)),
                 paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#f2f2f2",
@@ -266,7 +369,7 @@ def _tile_score_patterns():
             x=[counts[s] for s in scores], y=scores, orientation="h",
             marker_color=[cv.RESULT_COLORS[_SCORE_POINTS.get(s, 0)] for s in scores],
         ))
-        fig.update_layout(height=85, margin=dict(l=10, r=10, t=0, b=10), xaxis_title=None, yaxis_title=None)
+        fig.update_layout(height=TILE_CHART_HEIGHT - 20, margin=dict(l=10, r=10, t=0, b=10), xaxis_title=None, yaxis_title=None)
         st.plotly_chart(fig, width="stretch")
 
 
@@ -288,7 +391,7 @@ def _tile_matches_per_month():
             color_discrete_map={k: v["color"] for k, v in mc.COMPETITIONS.items()},
             labels={"month": "", "count": "", "competition": ""},
         )
-        fig.update_layout(height=120, margin=dict(l=10, r=10, t=0, b=10), showlegend=False)
+        fig.update_layout(height=TILE_CHART_HEIGHT, margin=dict(l=10, r=10, t=0, b=10), showlegend=False)
         st.plotly_chart(fig, width="stretch")
 
 
@@ -316,6 +419,47 @@ def _tile_top_scorers():
             f'<span style="font-size:0.95rem;">{medals[i]}</span>'
             f'<span style="flex:1;padding-left:6px;font-weight:700;font-size:0.86rem;">{r.Index}</span>'
             f'<span style="color:var(--accent);font-weight:700;font-size:0.86rem;">{int(r.points)} pts</span>'
+            f'</div>'
+            for i, r in enumerate(rows)
+        )
+        st.markdown(rows_html, unsafe_allow_html=True)
+
+
+def _tile_top_efficiency():
+    """Complements Top scorers (volume) with a quality leaderboard --
+    best Attack E% among players who've actually had enough touches
+    (dl.MIN_RELIABLE_N) to trust the number, so a 1-for-1 outlier can't
+    top the list. Aggregates each player's own matches into one
+    volume-weighted E% first (rather than ranking raw per-match rows,
+    which would let the same player fill more than one medal spot)."""
+    with st.container(border=True):
+        st.markdown("**Top efficiency** · Attack")
+        scout = dl.load_scout_data()
+        in_scope = {m["date"] for m in filters.matches_in_scope()}
+        base = scout[
+            scout["match"].isin(in_scope) & (~scout["is_team"])
+            & (scout["fondamentale"] == "Attacco") & (scout["palla"] == "Totale") & (scout["Tot"] > 0)
+        ]
+        if base.empty:
+            st.caption("No data in scope.")
+            return
+        agg = base.groupby("player_name").apply(
+            lambda g: pd.Series({"E_pct": (g["E_pct"] * g["Tot"]).sum() / g["Tot"].sum(), "Tot": g["Tot"].sum()}),
+            include_groups=False,
+        )
+        agg = agg[agg["Tot"] >= dl.MIN_RELIABLE_N]
+        if agg.empty:
+            st.caption("Not enough volume in scope.")
+            return
+        ranked = agg.sort_values("E_pct", ascending=False).head(3)
+        medals = ["🥇", "🥈", "🥉"]
+        rows = list(ranked.reset_index().itertuples())
+        rows_html = "".join(
+            f'<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 2px;'
+            f'{"border-bottom:1px solid var(--line);" if i < len(rows) - 1 else ""}">'
+            f'<span style="font-size:0.95rem;">{medals[i]}</span>'
+            f'<span style="flex:1;padding-left:6px;font-weight:700;font-size:0.86rem;">{r.player_name}</span>'
+            f'<span style="color:var(--accent);font-weight:700;font-size:0.86rem;">{r.E_pct * 100:.0f}%</span>'
             f'</div>'
             for i, r in enumerate(rows)
         )
@@ -366,40 +510,66 @@ def _tile_team_shape():
         fig.update_layout(**dark_polar_layout([0, top]))
         fig.update_layout(
             polar=dict(radialaxis=dict(showticklabels=False), angularaxis=dict(tickfont=dict(size=8))),
-            height=100, margin=dict(l=32, r=32, t=6, b=6),
+            height=TILE_CHART_HEIGHT - 32, margin=dict(l=32, r=32, t=6, b=6),
         )
         st.plotly_chart(fig, width="stretch", theme=None)
+
+
+def _outcome_mix_bar(fondamentale: str):
+    """Slim single 100%-stacked horizontal bar of the season's outcome
+    mix -- a compact, small-multiple-friendly stand-in for the full
+    Scout & Stats outcome-mix chart, which needs far more room than a
+    Home tile has. A bar reads the mix (length = share) more reliably
+    than the donut this used to be (angle is harder to compare than
+    length), and stacks the same colors used everywhere else in the app."""
+    scout = dl.load_scout_data()
+    team = scout[
+        (scout["match"] == dl.SEASON_LABEL) & scout["is_team"]
+        & (scout["fondamentale"] == fondamentale) & (scout["palla"] == "Totale") & (scout["Tot"] > 0)
+    ]
+    if team.empty:
+        st.caption("No data available.")
+        return
+    row = team.iloc[0]
+    legenda = dl.legenda_fondamentale(fondamentale)
+    rows = []
+    for simbolo, _nome, _ in legenda:
+        col = _SYMBOL_TO_COL.get(simbolo)
+        if col is None:
+            continue
+        count = row.get(col, 0)
+        count = 0 if pd.isna(count) else count
+        if count <= 0:
+            continue
+        rows.append({"Outcome": simbolo, "count": count, "y": fondamentale})
+    d = pd.DataFrame(rows)
+    if d.empty:
+        st.caption("No outcome data.")
+        return
+    fig = px.bar(
+        d, x="count", y="y", color="Outcome", orientation="h",
+        color_discrete_map=_OUTCOME_COLORS,
+        labels={"count": "", "y": ""},
+    )
+    fig.update_traces(hovertemplate="%{fullData.name}: %{x}<extra></extra>")
+    fig.update_layout(
+        barmode="stack", barnorm="percent", showlegend=False,
+        height=TILE_CHART_HEIGHT - 60, margin=dict(l=0, r=10, t=10, b=25),
+        xaxis=dict(ticksuffix="%"), yaxis=dict(showticklabels=False),
+    )
+    st.plotly_chart(fig, width="stretch")
 
 
 def _tile_serve_outcome():
     with st.container(border=True):
         st.markdown("**Serve outcome mix**")
-        scout = dl.load_scout_data()
-        team = scout[
-            (scout["match"] == dl.SEASON_LABEL) & scout["is_team"]
-            & (scout["fondamentale"] == "Battuta") & (scout["palla"] == "Totale") & (scout["Tot"] > 0)
-        ]
-        if team.empty:
-            st.caption("No serve data available.")
-            return
-        row = team.iloc[0]
-        legenda = dl.legenda_fondamentale("Battuta")
-        rows = []
-        for simbolo, nome, _ in legenda:
-            col = _SYMBOL_TO_COL.get(simbolo)
-            if col is None:
-                continue
-            count = row.get(col, 0)
-            rows.append({"Outcome": nome, "count": 0 if pd.isna(count) else count})
-        d = pd.DataFrame(rows)
-        if d.empty or d["count"].sum() == 0:
-            st.caption("No serve outcome data.")
-            return
-        color_map = {nome: _OUTCOME_COLORS.get(simbolo, "#888888") for simbolo, nome, _ in legenda}
-        fig = px.pie(d, names="Outcome", values="count", hole=0.55, color="Outcome", color_discrete_map=color_map)
-        fig.update_traces(textinfo="percent", textfont_size=10)
-        fig.update_layout(height=82, margin=dict(l=10, r=10, t=0, b=6), showlegend=False)
-        st.plotly_chart(fig, width="stretch")
+        _outcome_mix_bar("Battuta")
+
+
+def _tile_attack_outcome():
+    with st.container(border=True):
+        st.markdown("**Attack outcome mix**")
+        _outcome_mix_bar("Attacco")
 
 
 def _tile_efficiency_trend():
@@ -417,11 +587,11 @@ def _tile_efficiency_trend():
         d["pdate"] = pd.to_datetime(d["match"].apply(mc.parsed_date))
         d = d.sort_values("pdate")
         fig = go.Figure(go.Scatter(
-            x=d["pdate"], y=d["E_pct"], mode="lines+markers",
-            line=dict(color="#29B6F6", width=2), marker=dict(size=4),
+            x=d["pdate"], y=d["E_pct"], mode="lines", fill="tozeroy",
+            line=dict(color="#29B6F6", width=2), fillcolor="rgba(41,182,246,0.15)",
         ))
         fig.update_layout(
-            height=110, margin=dict(l=10, r=10, t=0, b=10),
+            height=TILE_CHART_HEIGHT, margin=dict(l=10, r=10, t=0, b=10),
             yaxis=dict(tickformat=".0%", title=None), xaxis=dict(title=None),
         )
         st.plotly_chart(fig, width="stretch")
@@ -441,10 +611,9 @@ def _tile_individual_tqr():
             color_discrete_map=pc.color_map(daily["player_name"].unique()),
             labels={"Data": "", "Tqr": "", "player_name": "Player"},
         )
-        fig.add_hline(y=RECOVERY_THRESHOLD, line_dash="dash", line_color=LOW_COLOR)
         fig.update_layout(
-            height=150, margin=dict(l=10, r=10, t=0, b=10), showlegend=False,
-            yaxis=dict(range=[6, 20], **tqr_yaxis_ticks()),
+            height=TILE_CHART_HEIGHT + 20, margin=dict(l=10, r=10, t=0, b=10), showlegend=False,
+            yaxis=dict(range=[TQR_MIN, TQR_MAX], **tqr_yaxis_ticks()),
         )
         st.plotly_chart(fig, width="stretch")
 
@@ -469,7 +638,7 @@ def _tile_loads_acwr_chart():
         fig.add_hrect(y0=1.5, y1=top, yref="y2", fillcolor="rgba(228,87,86,0.14)", line_width=0)
         fig.update_layout(
             yaxis=dict(title=None), yaxis2=dict(title=None, overlaying="y", side="right", range=[0, top]),
-            showlegend=False, height=85, margin=dict(l=10, r=10, t=0, b=10),
+            showlegend=False, height=TILE_CHART_HEIGHT - 20, margin=dict(l=10, r=10, t=0, b=10),
         )
         st.plotly_chart(fig, width="stretch")
 
@@ -488,27 +657,7 @@ def _tile_loads_jumps():
             color_discrete_map=pc.color_map(daily["player_name"].unique()),
             labels={"Data": "", "SALTI": "", "player_name": "Player"},
         )
-        fig.update_layout(showlegend=False, height=150, margin=dict(l=10, r=10, t=0, b=10))
-        st.plotly_chart(fig, width="stretch")
-
-
-def _tile_loads_rpe_by_role():
-    with st.container(border=True):
-        st.markdown("**RPE** by role")
-        rpe = dl.load_wellness_data()["rpe"]
-        period = filters.filter_by_date_col(rpe)
-        d = period.dropna(subset=["Rpe", "RUOLO"]).copy()
-        if d.empty:
-            st.caption("No RPE data in this period.")
-            return
-        d["Role"] = d["RUOLO"].map(dl.ROLE_LABELS)
-        order = d.groupby("Role")["Rpe"].median().sort_values().index.tolist()
-        fig = px.box(
-            d, x="Rpe", y="Role", orientation="h", points="outliers",
-            category_orders={"Role": order}, color="Role", color_discrete_map=pg.ROLE_COLORS,
-            labels={"Rpe": "", "Role": ""},
-        )
-        fig.update_layout(showlegend=False, height=140, margin=dict(l=0, r=10, t=0, b=10))
+        fig.update_layout(showlegend=False, height=TILE_CHART_HEIGHT + 20, margin=dict(l=10, r=10, t=0, b=10))
         st.plotly_chart(fig, width="stretch")
 
 
@@ -526,7 +675,7 @@ def _tile_loads_rpe_scatter():
             color_discrete_map=pc.color_map(d["player_name"].unique()),
             labels={"Time": "", "Rpe": ""},
         )
-        fig.update_layout(showlegend=False, height=140, margin=dict(l=0, r=10, t=0, b=10))
+        fig.update_layout(showlegend=False, height=TILE_CHART_HEIGHT + 20, margin=dict(l=0, r=10, t=0, b=10))
         st.plotly_chart(fig, width="stretch")
 
 
@@ -551,31 +700,11 @@ def _tile_team_profile_bar():
             labels={"E_pct": "", "Fundamental": ""},
         )
         fig.update_layout(
-            coloraxis_showscale=False, xaxis_tickformat=".0%", height=150,
+            coloraxis_showscale=False, xaxis_tickformat=".0%", height=TILE_CHART_HEIGHT + 20,
             yaxis=dict(categoryorder="array", categoryarray=order_labels[::-1]),
             margin=dict(l=0, r=10, t=0, b=10),
         )
         st.plotly_chart(fig, width="stretch")
-
-
-def _tile_squad_overview():
-    with st.container(border=True):
-        st.markdown("**Squad overview**")
-        counts: dict[str, int] = {}
-        for p in pg.ALL_PLAYERS:
-            counts[p["role"]] = counts.get(p["role"], 0) + 1
-        rows_html = "".join(
-            f'<div style="display:flex;justify-content:space-between;align-items:center;padding:2px 0;">'
-            f'<span style="display:flex;align-items:center;gap:6px;font-size:0.82rem;">'
-            f'<span style="width:8px;height:8px;border-radius:50%;background:{pg.ROLE_COLORS.get(role, "#888")};"></span>{role}</span>'
-            f'<span style="font-weight:700;font-size:0.86rem;">{n}</span></div>'
-            for role, n in counts.items()
-        )
-        st.markdown(
-            f'<div style="font-size:1.7rem;font-weight:800;line-height:1;margin-bottom:4px;">{len(pg.ALL_PLAYERS)}'
-            f'<span style="font-size:11px;color:var(--muted);font-weight:400;"> players</span></div>{rows_html}',
-            unsafe_allow_html=True,
-        )
 
 
 def _in_scope_dates():
@@ -584,25 +713,30 @@ def _in_scope_dates():
 
 TILE_RENDERERS = {
     "wellness_low_recovery": _tile_low_recovery,
+    "wellness_team_tqr_gauge": _tile_team_tqr_gauge,
+    "wellness_team_tqr_trend": _tile_team_tqr_trend,
     "wellness_individual_tqr": _tile_individual_tqr,
     "loads_readiness": _tile_readiness,
     "loads_acwr_chart": _tile_loads_acwr_chart,
     "loads_jumps": _tile_loads_jumps,
-    "loads_rpe_by_role": _tile_loads_rpe_by_role,
     "loads_rpe_scatter": _tile_loads_rpe_scatter,
     "matches_league_position": _tile_league_position,
     "matches_recent_form": _tile_recent_form,
     "matches_score_patterns": _tile_score_patterns,
     "matches_per_month": _tile_matches_per_month,
     "scout_top_scorers": _tile_top_scorers,
+    "scout_top_efficiency": _tile_top_efficiency,
     "scout_team_shape": _tile_team_shape,
     "scout_serve_outcome": _tile_serve_outcome,
+    "scout_attack_outcome": _tile_attack_outcome,
     "scout_efficiency_trend": _tile_efficiency_trend,
     "scout_team_profile_bar": _tile_team_profile_bar,
-    "players_squad_overview": _tile_squad_overview,
 }
 
-TILES_PER_ROW = 5
+# 4 (not 5) -- gives each card more room now that several draw a real
+# chart rather than a thin sparkline, and divides the 10 default tiles
+# into clean rows (4, 4, 2) instead of leaving one column empty.
+TILES_PER_ROW = 4
 
 
 def render():
@@ -612,7 +746,11 @@ def render():
     with st.container(key="home_grid"):
         for row_start in range(0, len(selected), TILES_PER_ROW):
             row_keys = selected[row_start:row_start + TILES_PER_ROW]
-            cols = st.columns(TILES_PER_ROW, gap="small")
+            # A short final row uses exactly as many columns as it has
+            # tiles (not the full TILES_PER_ROW) so those cards stretch
+            # to fill the row's width instead of leaving empty columns
+            # trailing off to one side.
+            cols = st.columns(len(row_keys), gap="small")
             for col, key in zip(cols, row_keys):
                 with col:
                     TILE_RENDERERS[key]()
