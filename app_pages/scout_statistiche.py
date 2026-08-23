@@ -1012,14 +1012,17 @@ def _render_distribution(scoped: pd.DataFrame, scout: pd.DataFrame, palla_tipi_e
     with col_map:
         with st.container(border=True):
             st.markdown("**Game map** — volume of actions per set type")
+            barmode, barnorm = ui_helpers.bar_mode_toggle("game_map_bar_mode")
             fig1 = px.bar(
                 dist, x="player_name", y="Tot", color="palla_en",
                 category_orders={"player_name": ordine_giocatrici, "palla_en": palla_tipi_en},
                 color_discrete_map=PALLA_COLORS_EN,
                 labels={"player_name": "", "Tot": "Number of actions", "palla_en": "Set type"},
-                barmode="stack",
             )
-            fig1.update_layout(legend_title_text="Set type", height=520)
+            fig1.update_layout(
+                barmode=barmode, barnorm=barnorm, legend_title_text="Set type", height=520,
+                yaxis_tickformat=".0%" if barnorm else None,
+            )
             st.plotly_chart(fig1, width="stretch")
 
     with col_cum:
