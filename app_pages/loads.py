@@ -194,19 +194,102 @@ def _render_load_drilldown(period_rpe: pd.DataFrame):
     st.caption("Click a bar to see which players logged that duration and what RPE they gave it.")
 
 
+# Marker size (px) for a point no other player shares that day, and how
+# much bigger it gets per extra player nested around it -- see
+# _render_scatter's docstring for the nesting/ordering rule.
+_RING_BASE_SIZE = 14
+_RING_STEP = 7
+
+
+def _ring_sized_traces(day_df: pd.DataFrame, players_order: list[str], rank: dict, color_map: dict) -> list[go.Scatter]:
+    """One marker trace per roster player for a single day's points, sized
+    so players sharing the exact same (duration, RPE) point nest as
+    concentric rings instead of hiding each other: whoever comes earlier
+    in `players_order` gets a bigger marker (drawn first/behind, in trace
+    order below), whoever comes later gets a smaller one (drawn later, on
+    top) -- so the fixed role order, not the specific players involved,
+    decides which ring sits outside which every time."""
+    traces = []
+    for p in players_order:
+        sub = day_df[day_df["player_name"] == p]
+        if sub.empty:
+            traces.append(go.Scatter(x=[], y=[], mode="markers", name=p, showlegend=False))
+            continue
+        sizes = []
+        for _, row in sub.iterrows():
+            group = day_df[(day_df["Time"] == row["Time"]) & (day_df["Rpe"] == row["Rpe"])]
+            nested_inside = sum(1 for other in group["player_name"] if rank[other] > rank[p])
+            sizes.append(_RING_BASE_SIZE + nested_inside * _RING_STEP)
+        traces.append(go.Scatter(
+            x=sub["Time"], y=sub["Rpe"], mode="markers", name=p,
+            marker=dict(size=sizes, color=color_map[p], line=dict(width=1, color="rgba(0,0,0,0.45)")),
+            showlegend=False,
+        ))
+    return traces
+
+
 def _render_scatter(period_rpe: pd.DataFrame):
-    d = period_rpe.dropna(subset=["Rpe", "Time"])
+    """Same RPE-vs-duration cloud as before, but scrubbable day by day
+    (a Gapminder-style animation_frame slider + play button) instead of
+    one flat scatter for the whole period, so a coach can watch the
+    cloud move match by match rather than reading every day at once.
+    Two or more players logging the exact same (duration, RPE) pair on
+    the same day nest as concentric rings (see _ring_sized_traces)
+    instead of one marker hiding the other."""
+    d = period_rpe.dropna(subset=["Rpe", "Time", "Data"]).copy()
     if d.empty:
         st.info("No RPE data in this period.")
         return
 
-    fig = px.scatter(
-        d, x="Time", y="Rpe", color="player_name", opacity=0.65,
-        color_discrete_map=pc.color_map(d["player_name"].unique()),
-        labels={"Time": "Duration (min)", "Rpe": "RPE"},
+    players_order = pc.sort_by_role(d["player_name"].dropna().unique())
+    rank = {p: i for i, p in enumerate(players_order)}
+    color_map = pc.color_map(players_order)
+    dates = sorted(d["Data"].dt.date.unique())
+
+    fig = go.Figure(
+        data=_ring_sized_traces(d[d["Data"].dt.date == dates[0]], players_order, rank, color_map),
+        frames=[
+            go.Frame(
+                data=_ring_sized_traces(d[d["Data"].dt.date == day], players_order, rank, color_map),
+                name=day.isoformat(),
+            )
+            for day in dates
+        ],
     )
-    fig.update_layout(showlegend=False, height=260, margin=dict(l=0, r=10, t=10, b=10))
+    # Legend-only swatches (the real per-player traces above are
+    # showlegend=False, since re-adding all 15 to the legend on every
+    # frame would just repeat it) -- same trick as the Trend chart above.
+    for p in players_order:
+        fig.add_trace(go.Scatter(x=[None], y=[None], mode="markers", marker=dict(size=9, color=color_map[p]), name=p))
+
+    fig.update_layout(
+        xaxis=dict(title="Duration (min)", range=[0, d["Time"].max() * 1.1]),
+        yaxis=dict(title="RPE", range=[0, 10.5]),
+        height=420, margin=dict(l=10, r=10, t=10, b=10),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0, font=dict(size=10)),
+        updatemenus=[dict(
+            type="buttons", showactive=False, x=0, y=-0.24, xanchor="left", yanchor="top",
+            buttons=[dict(
+                label="▶ Play", method="animate",
+                args=[None, dict(frame=dict(duration=450, redraw=True), fromcurrent=True, transition=dict(duration=0))],
+            )],
+        )],
+        sliders=[dict(
+            active=0, x=0.1, y=-0.24, len=0.9, xanchor="left", yanchor="top",
+            currentvalue=dict(prefix="Match day: "),
+            steps=[
+                dict(method="animate", label=day.strftime("%d %b %y"), args=[
+                    [day.isoformat()], dict(mode="immediate", frame=dict(duration=0, redraw=True)),
+                ])
+                for day in dates
+            ],
+        )],
+    )
     st.plotly_chart(fig, width="stretch")
+    st.caption(
+        "Play or drag the slider to scrub through match days. Nested rings = more than one player logged the "
+        "exact same duration/RPE that day (outer ring = earlier in the roster order, innermost = latest)."
+    )
 
 
 def _render_individual_trend(rpe: pd.DataFrame, team_metrics: pd.DataFrame, start, end):
@@ -252,15 +335,13 @@ def _render_load(rpe: pd.DataFrame):
             _render_acwr_chart(team_metrics, start, end)
 
     period_rpe = filters.filter_by_date_col(rpe)
-    col_role, col_scatter = st.columns(2)
-    with col_role:
-        with st.container(border=True):
-            st.markdown("**RPE by duration** · click a bar to drill into players")
-            _render_load_drilldown(period_rpe)
-    with col_scatter:
-        with st.container(border=True):
-            st.markdown("**RPE vs. session duration**")
-            _render_scatter(period_rpe)
+    with st.container(border=True):
+        st.markdown("**RPE by duration** · click a bar to drill into players")
+        _render_load_drilldown(period_rpe)
+
+    with st.container(border=True):
+        st.markdown("**RPE vs. session duration** · scrub through match days")
+        _render_scatter(period_rpe)
 
     with st.container(border=True):
         st.markdown("**Individual trend vs. team average**")
