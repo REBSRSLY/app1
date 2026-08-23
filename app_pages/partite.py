@@ -55,32 +55,59 @@ MINOR_BOX_HEIGHT = 221
 
 def _render_serie_a_box(season: str, matches: list[dict]):
     """Serie A1's results and the season's final standings share one card
-    -- a switcher above it picks which one shows, both rendered at the
-    same fixed height (SERIE_A_BOX_HEIGHT) so toggling doesn't change the
-    box's footprint next to Playoff."""
-    view = st.segmented_control(
-        "Serie A1 view", ["Results", "Standings"], default="Results",
-        required=True, key="serie_a_view", label_visibility="collapsed",
-    )
-    if view == "Results":
+    -- a plain on/off toggle (no label) floats into the box's own header,
+    top-right where a record chip would sit, instead of a separate labeled
+    widget above the box. Both views render at the same fixed height
+    (SERIE_A_BOX_HEIGHT) so toggling doesn't change the box's footprint
+    next to Playoff."""
+    color = mc.COMPETITIONS["Serie A1"]["color"]
+    with st.container(key="serie_a_box"):
+        # Widget first so its value is known before the CSS below picks a
+        # track color from it directly -- simpler and more reliable than a
+        # CSS-only :has(input:checked) rule, which doesn't reliably
+        # recompute against this specific React-driven checkbox.
+        standings_view = st.toggle("Standings view", key="serie_a_standings_toggle", label_visibility="collapsed")
+        track_color = color if standings_view else f"{color}55"
         st.markdown(
-            cv.render_competition_box("Serie A1", matches, show_round=False, height_px=SERIE_A_BOX_HEIGHT),
+            f"""<style>
+            .st-key-serie_a_box {{ position: relative; }}
+            /* st.toggle renders as a styled stCheckbox (there's no separate
+               "stToggle" testid) -- its label has 3 children: a visually-
+               hidden span wrapping the real <input>, the track/knob pair
+               (first div, matched structurally since the emotion-hash
+               classes aren't stable to target directly), then the (here,
+               collapsed) text label. Floats into the box's own header,
+               top-right where a record chip would otherwise sit -- targets
+               the widget's own stElementContainer (keyed via the widget's
+               own `key`, not the checkbox itself) since Streamlit already
+               makes that container position:relative, which would else
+               intercept the checkbox's own absolute positioning before it
+               reaches the box. */
+            .st-key-serie_a_standings_toggle {{
+                position: absolute !important; top: 15px; right: 18px; z-index: 2;
+            }}
+            .st-key-serie_a_box [data-testid="stCheckbox"] label > div:first-of-type {{
+                background-color: {track_color} !important;
+            }}
+            </style>""",
             unsafe_allow_html=True,
         )
-    else:
-        st.markdown(
-            cv.render_standings_box(
-                mc.SEASON_STANDINGS.get(season, []), color=mc.COMPETITIONS["Serie A1"]["color"],
-                height_px=SERIE_A_BOX_HEIGHT,
-            ),
-            unsafe_allow_html=True,
-        )
-        # Doesn't move with the sidebar's period, unlike the results view --
-        # a league table needs every team's results, not just the matches
-        # this app has (Milano's own), so there's no correct way to
-        # recompute a mid-season snapshot from what's scoped here. This is
-        # the season's final table.
-        st.caption(f":material/info: Final {season} standings — not affected by the period filter above.")
+        if not standings_view:
+            st.markdown(
+                cv.render_competition_box("Serie A1", matches, show_round=False, height_px=SERIE_A_BOX_HEIGHT),
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                cv.render_standings_box(mc.SEASON_STANDINGS.get(season, []), color=color, height_px=SERIE_A_BOX_HEIGHT),
+                unsafe_allow_html=True,
+            )
+            # Doesn't move with the sidebar's period, unlike the results
+            # view -- a league table needs every team's results, not just
+            # the matches this app has (Milano's own), so there's no
+            # correct way to recompute a mid-season snapshot from what's
+            # scoped here. This is the season's final table.
+            st.caption(f":material/info: Final {season} standings — not affected by the period filter above.")
 
 
 def _render_by_competition(season: str, matches: list[dict]):
