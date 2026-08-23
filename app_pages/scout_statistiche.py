@@ -9,6 +9,7 @@ import filters
 import match_calendar as mc
 import player_colors as pc
 import players_grid as pg
+import ui_helpers
 from ui_helpers import close_polygon, dark_polar_layout, rgba_from_hex
 
 # Result -> color for the "Trend over time" bars, across the 6 possible
@@ -223,56 +224,63 @@ def _render_team_profile(scoped: pd.DataFrame, metric_label: str):
     st.caption(caption)
 
 
-def _render_team_outcome_mix(scoped: pd.DataFrame, fond_sel: str):
-    """Team-wide outcome mix for the selected fundamental -- the share of
-    every action landing in each outcome bucket (=/-/!/+/#, plus the
-    slash), not just the headline E% that collapses all of that into one
-    number. Follows the Trend chart's own fundamental picker rather than
-    being pinned to the serve, so both boxes always describe the same
-    fundamental."""
-    label = dl.FONDAMENTALE_LABELS.get(fond_sel, fond_sel)
-    team = scoped[
-        scoped["is_team"] & (scoped["fondamentale"] == fond_sel)
-        & (scoped["palla"] == "Totale") & (scoped["Tot"] > 0)
-    ]
-    if team.empty:
-        st.info(f"No {label.lower()} data in this scope.")
-        return
+_OUTCOME_ORDER = ["#", "+", "!", "/", "-", "="]
 
-    row = team.iloc[0]
-    legenda = dl.legenda_fondamentale(fond_sel)
+
+def _render_team_outcome_mix(scoped: pd.DataFrame):
+    """Team-wide outcome mix across every fundamental at once -- not
+    pinned to whichever one the Trend chart above happens to show, since
+    "are we cleaner on serve than on attack" needs every fundamental side
+    by side, not one at a time. Columns are the fundamentals; the
+    Grouped/Stacked/Share toggle reads the same mix as raw action counts,
+    stacked totals, or normalized shares. The outcome legend (=/-/!/+/#,
+    plus the slash) is shared by symbol across every column even though
+    what a symbol means differs by fundamental -- see the How-to-read
+    expander above for each one's own wording."""
+    barmode, barnorm = ui_helpers.bar_mode_toggle("team_outcome_mode")
+
     rows = []
-    for simbolo, nome, _ in legenda:
-        col = SYMBOL_TO_COL.get(simbolo)
-        if col is None:
+    for fond in dl.FONDAMENTALE_ORDER:
+        legenda = dl.legenda_fondamentale(fond)
+        if not legenda:
             continue
-        count = row.get(col, 0)
-        rows.append({"Outcome": f"{nome} ({simbolo})", "count": 0 if pd.isna(count) else count, "symbol": simbolo})
+        team = scoped[
+            scoped["is_team"] & (scoped["fondamentale"] == fond)
+            & (scoped["palla"] == "Totale") & (scoped["Tot"] > 0)
+        ]
+        if team.empty:
+            continue
+        row = team.iloc[0]
+        for simbolo, _, _ in legenda:
+            col = SYMBOL_TO_COL.get(simbolo)
+            if col is None:
+                continue
+            count = row.get(col, 0)
+            count = 0 if pd.isna(count) else count
+            if count <= 0:
+                continue
+            rows.append({"Fundamental": dl.FONDAMENTALE_LABELS.get(fond, fond), "Outcome": simbolo, "count": count})
     d = pd.DataFrame(rows)
-    if d.empty or d["count"].sum() == 0:
-        st.info(f"No {label.lower()} outcome data in this scope.")
+    if d.empty:
+        st.info("No outcome data in this scope.")
         return
 
-    total_n = int(d["count"].sum())
-    low = dl.is_low_sample(total_n)
-    color_map = {f"{nome} ({simbolo})": OUTCOME_COLORS.get(simbolo, "#888888") for simbolo, nome, _ in legenda}
-    fig = px.pie(d, names="Outcome", values="count", hole=0.5, color="Outcome", color_discrete_map=color_map)
-    fig.update_traces(textinfo="percent+label")
-    # The donut's own hole is otherwise dead space -- putting the action
-    # count there means the sample size behind every slice's percentage
-    # sits right at the chart's visual center, not buried in the caption
-    # below where it's easy to skip past. Red when it's too thin to trust
-    # (see MIN_RELIABLE_N), the same neutral white as everywhere else otherwise.
-    fig.add_annotation(
-        text=f"<b>{total_n}</b><br><span style='font-size:11px'>actions</span>",
-        showarrow=False, font=dict(size=20, color="#E45756" if low else "#ffffff"),
+    fund_order = [f for f in (dl.FONDAMENTALE_LABELS.get(f, f) for f in dl.FONDAMENTALE_ORDER) if f in d["Fundamental"].unique()]
+    outcome_order = [o for o in _OUTCOME_ORDER if o in d["Outcome"].unique()]
+
+    fig = px.bar(
+        d, x="Fundamental", y="count", color="Outcome",
+        category_orders={"Fundamental": fund_order, "Outcome": outcome_order},
+        color_discrete_map=OUTCOME_COLORS,
+        labels={"Fundamental": "", "count": "Actions", "Outcome": "Outcome"},
     )
-    fig.update_layout(height=320, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
+    fig.update_traces(hovertemplate="<b>%{x}</b> · %{fullData.name}: %{y}<extra></extra>")
+    fig.update_layout(
+        barmode=barmode, barnorm=barnorm, height=340, margin=dict(l=10, r=10, t=10, b=10),
+        yaxis_tickformat=".0%" if barnorm else None,
+    )
     st.plotly_chart(fig, width="stretch")
-    caption = f"Share of the team's total {label.lower()} actions landing in each outcome."
-    if low:
-        caption += f" Only {total_n} actions in this scope — shares are indicative, not reliable."
-    st.caption(caption)
+    st.caption("Outcome mix (=/-/!/+/# and the slash) for every fundamental with data in this scope.")
 
 
 def _render_team_trend(scout: pd.DataFrame, fond_sel: str):
@@ -386,8 +394,8 @@ def _render_team_profile_section(scoped: pd.DataFrame, scout: pd.DataFrame):
             _render_team_profile(scoped, metric_label)
     with col_mix:
         with st.container(border=True):
-            st.markdown(f"**Outcome mix** · {fond_label.lower()}, team")
-            _render_team_outcome_mix(scoped, fond_sel)
+            st.markdown("**Outcome mix** · team, every fundamental")
+            _render_team_outcome_mix(scoped)
 
 
 def _render_how_to_expander(fond_sel: str, fond_label: str):
@@ -413,54 +421,61 @@ def _render_how_to_expander(fond_sel: str, fond_label: str):
                 )
 
 
-def _render_outcome_distribution(base: pd.DataFrame, fond_sel: str, player_order: list[str]):
-    """100%-stacked bar of each player's outcome mix (error/poor/neutral/
-    good/perfect) for the selected fundamental -- two players can share
-    the same E% while one is far more consistent than the other, which
-    this shows and a single efficiency number can't."""
-    legenda = dl.legenda_fondamentale(fond_sel)
-    if not legenda:
+def _render_player_outcome_mix(scoped: pd.DataFrame, players: list[str]):
+    """Same idea as the team's Outcome mix box above, but for one player
+    across every fundamental -- picking a player up front instead of
+    pinning the whole box to whichever fundamental the section's own
+    selector happens to be on, since comparing one player's serve
+    cleanliness against her attack cleanliness needs both on screen at
+    once, not a separate look per fundamental."""
+    if not players:
+        st.info("No players available in this scope.")
         return
+    player_sel = st.selectbox("Player", players, key="player_outcome_player")
+    barmode, barnorm = ui_helpers.bar_mode_toggle("player_outcome_mode")
 
     rows = []
-    for _, r in base.iterrows():
-        if r["Tot"] <= 0:
+    for fond in dl.FONDAMENTALE_ORDER:
+        legenda = dl.legenda_fondamentale(fond)
+        if not legenda:
             continue
-        for rank, (simbolo, nome, _) in enumerate(legenda):
+        player_rows = scoped[
+            (~scoped["is_team"]) & (scoped["player_name"] == player_sel) & (scoped["fondamentale"] == fond)
+            & (scoped["palla"] == "Totale") & (scoped["Tot"] > 0)
+        ]
+        if player_rows.empty:
+            continue
+        r = player_rows.iloc[0]
+        for simbolo, _, _ in legenda:
             col = SYMBOL_TO_COL.get(simbolo)
-            if col is None or col not in base.columns:
+            if col is None:
                 continue
             count = r.get(col, 0)
             count = 0 if pd.isna(count) else count
-            rows.append({
-                "player_name": r["player_name"], "Outcome": f"{nome} ({simbolo})",
-                "share": count / r["Tot"], "rank": rank, "Tot": int(r["Tot"]),
-            })
+            if count <= 0:
+                continue
+            rows.append({"Fundamental": dl.FONDAMENTALE_LABELS.get(fond, fond), "Outcome": simbolo, "count": count})
     d = pd.DataFrame(rows)
     if d.empty:
+        st.info(f"No outcome data for {player_sel} in this scope.")
         return
 
-    order_labels = d.sort_values("rank")["Outcome"].drop_duplicates().tolist()
-    color_map = {f"{nome} ({simbolo})": OUTCOME_COLORS.get(simbolo, "#888888") for simbolo, nome, _ in legenda}
-    any_low = bool((d.drop_duplicates("player_name")["Tot"] < dl.MIN_RELIABLE_N).any())
+    fund_order = [f for f in (dl.FONDAMENTALE_LABELS.get(f, f) for f in dl.FONDAMENTALE_ORDER) if f in d["Fundamental"].unique()]
+    outcome_order = [o for o in _OUTCOME_ORDER if o in d["Outcome"].unique()]
 
     fig = px.bar(
-        d, x="share", y="player_name", color="Outcome", orientation="h",
-        category_orders={"player_name": player_order[::-1], "Outcome": order_labels},
-        color_discrete_map=color_map,
-        labels={"share": "Share of actions", "player_name": ""},
-        custom_data=["Tot"],
+        d, x="Fundamental", y="count", color="Outcome",
+        category_orders={"Fundamental": fund_order, "Outcome": outcome_order},
+        color_discrete_map=OUTCOME_COLORS,
+        labels={"Fundamental": "", "count": "Actions", "Outcome": "Outcome"},
     )
-    fig.update_traces(
-        hovertemplate="<b>%{y}</b> · %{fullData.name}<br>Share: %{x:.0%}<br>%{customdata[0]:d} actions total<extra></extra>"
-    )
+    fig.update_traces(hovertemplate="<b>%{x}</b> · %{fullData.name}: %{y}<extra></extra>")
     fig.update_layout(
-        barmode="stack", xaxis_tickformat=".0%", legend_title_text="Outcome",
-        height=max(220, 34 * len(player_order)), margin=dict(l=0, r=10, t=10, b=10),
+        barmode=barmode, barnorm=barnorm, height=320, margin=dict(l=10, r=10, t=10, b=10),
+        yaxis_tickformat=".0%" if barnorm else None,
     )
     st.plotly_chart(fig, width="stretch")
-    if any_low:
-        st.caption(f"Players with fewer than {dl.MIN_RELIABLE_N} total actions (hover a bar for the count) have a less reliable mix.")
+    st.caption(f"{player_sel}'s outcome mix (=/-/!/+/# and the slash) for every fundamental with data in this scope.")
 
 
 def _render_volume_efficiency(base: pd.DataFrame, perfetto_lbl: str):
@@ -549,8 +564,9 @@ def _render_general_stats(scoped: pd.DataFrame):
                 st.caption(f"Faded bars are built on fewer than {dl.MIN_RELIABLE_N} actions.")
 
     with st.container(border=True):
-        st.markdown(f"**Outcome mix per player** · {fond_label}")
-        _render_outcome_distribution(base[~base["is_team"]], fond_sel, players["player_name"].tolist())
+        st.markdown("**Outcome mix per player** · every fundamental")
+        all_players = pc.sort_by_role(scoped[~scoped["is_team"]]["player_name"].dropna().unique())
+        _render_player_outcome_mix(scoped, all_players)
 
     with st.container(border=True):
         st.markdown(f"**Volume vs. quality** · {fond_label}")

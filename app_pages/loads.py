@@ -6,8 +6,8 @@ import streamlit as st
 import data_loader as dl
 import filters
 import player_colors as pc
-import players_grid as pg
 import training_load
+import ui_helpers
 
 SECTIONS = ["Jumps", "RPE / Load"]
 
@@ -43,14 +43,23 @@ def _render_jumps(salti):
 
     with st.container(border=True):
         st.markdown("**Jumps per player** · daily")
+        barmode, barnorm = ui_helpers.bar_mode_toggle("jumps_bar_mode")
         daily = period.groupby(["Data", "player_name"], as_index=False)["SALTI"].sum()
         fig = px.bar(
-            daily, x="Data", y="SALTI", color="player_name", barmode="stack",
+            daily, x="Data", y="SALTI", color="player_name",
+            # Role order, not volume -- same player always lands in the
+            # same stacking/grouping position regardless of who jumped
+            # most that day, and Grouped mode clusters same-role players
+            # next to each other.
             category_orders={"player_name": pc.sort_by_role(daily["player_name"].unique())},
             color_discrete_map=pc.color_map(daily["player_name"].unique()),
             labels={"Data": "Date", "SALTI": "Jumps", "player_name": "Player"},
         )
-        fig.update_layout(legend_title_text="Player", height=320, margin=dict(l=10, r=10, t=10, b=10))
+        fig.update_layout(
+            barmode=barmode, barnorm=barnorm,
+            legend_title_text="Player", height=320, margin=dict(l=10, r=10, t=10, b=10),
+            yaxis_tickformat=".0%" if barnorm else None,
+        )
         st.plotly_chart(fig, width="stretch")
 
     with st.container(border=True):
@@ -128,21 +137,61 @@ def _render_heatmap(rpe: pd.DataFrame):
     st.plotly_chart(fig, width="stretch")
 
 
-def _render_role_box(period_rpe: pd.DataFrame):
-    d = period_rpe.dropna(subset=["Rpe", "RUOLO"]).copy()
+def _render_load_drilldown(period_rpe: pd.DataFrame):
+    """Click-to-drill-down bar chart: each bar is a session duration (the
+    load's length in minutes), height = the team's average RPE across
+    every player who logged a session that long. Clicking a bar drills
+    into which players logged that duration and what RPE each of them
+    gave it -- the average alone hides exactly the spread a coach would
+    want to check before trusting "a 100-minute session felt like a 7".
+    A breadcrumb rolls back up to the aggregate view."""
+    d = period_rpe.dropna(subset=["Rpe", "Time"]).copy()
     if d.empty:
         st.info("No RPE data in this period.")
         return
 
-    d["Role"] = d["RUOLO"].map(dl.ROLE_LABELS)
-    order = d.groupby("Role")["Rpe"].median().sort_values().index.tolist()
-    fig = px.box(
-        d, x="Rpe", y="Role", orientation="h", points="outliers",
-        category_orders={"Role": order}, color="Role", color_discrete_map=pg.ROLE_COLORS,
-        labels={"Rpe": "RPE", "Role": ""},
+    selected = st.session_state.get("load_drill_duration")
+
+    if selected is not None:
+        sub = d[d["Time"] == selected]
+        if st.button("‹ All durations", key="load_drill_back"):
+            st.session_state["load_drill_duration"] = None
+            st.rerun()
+        if sub.empty:
+            st.info("No data left for this duration in the current scope.")
+            return
+        per_player = sub.groupby("player_name", as_index=False)["Rpe"].mean().sort_values("Rpe", ascending=False)
+        fig = px.bar(
+            per_player, x="player_name", y="Rpe", color="player_name",
+            category_orders={"player_name": pc.sort_by_role(per_player["player_name"].unique())},
+            color_discrete_map=pc.color_map(per_player["player_name"].unique()),
+            labels={"player_name": "", "Rpe": "RPE"},
+        )
+        fig.update_layout(
+            showlegend=False, height=280, margin=dict(l=0, r=10, t=10, b=10), yaxis=dict(range=[0, 10]),
+        )
+        st.plotly_chart(fig, width="stretch")
+        st.caption(f"RPE each player gave a {selected:g}-minute session, this period.")
+        return
+
+    agg = d.groupby("Time", as_index=False)["Rpe"].mean().sort_values("Time")
+    fig = px.bar(agg, x="Time", y="Rpe", labels={"Time": "Duration (min)", "Rpe": "Avg RPE"})
+    fig.update_traces(marker_color="#4C78A8")
+    fig.update_layout(height=280, margin=dict(l=0, r=10, t=10, b=10), yaxis=dict(range=[0, 10]))
+    event = st.plotly_chart(
+        fig, width="stretch", on_select="rerun", selection_mode="points", key="load_drill_chart",
     )
-    fig.update_layout(showlegend=False, height=260, margin=dict(l=0, r=10, t=10, b=10))
-    st.plotly_chart(fig, width="stretch")
+    points = event.selection.points if event else []
+    # Streamlit keeps the chart's last selection in session_state even
+    # after we've already acted on it and the reader has clicked back --
+    # without this guard, the very next rerun would see that same stale
+    # selection and immediately re-drill into it, making "back" a no-op.
+    current_sel = tuple(p.get("point_index") for p in points)
+    if points and current_sel != st.session_state.get("load_drill_last_sel"):
+        st.session_state["load_drill_last_sel"] = current_sel
+        st.session_state["load_drill_duration"] = points[0]["x"]
+        st.rerun()
+    st.caption("Click a bar to see which players logged that duration and what RPE they gave it.")
 
 
 def _render_scatter(period_rpe: pd.DataFrame):
@@ -206,8 +255,8 @@ def _render_load(rpe: pd.DataFrame):
     col_role, col_scatter = st.columns(2)
     with col_role:
         with st.container(border=True):
-            st.markdown("**RPE distribution by role**")
-            _render_role_box(period_rpe)
+            st.markdown("**RPE by duration** · click a bar to drill into players")
+            _render_load_drilldown(period_rpe)
     with col_scatter:
         with st.container(border=True):
             st.markdown("**RPE vs. session duration**")

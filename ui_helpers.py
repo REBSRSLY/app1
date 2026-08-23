@@ -1,5 +1,25 @@
 """Small UI utilities shared across the app's sections."""
 
+import streamlit as st
+
+# Grouped/Stacked/Share bar-mode switcher (see bar_mode_toggle) -- shared
+# across every bar chart that offers it (Jumps per player, Outcome mix
+# team/per player) so the three options always read the same way.
+BAR_MODE_OPTIONS = ["Grouped", "Stacked", "Share"]
+
+
+def bar_mode_toggle(key: str, default: str = "Stacked") -> tuple[str, str | None]:
+    """Grouped/Stacked/Share segmented control for a stacked-capable bar
+    chart -- returns (barmode, barnorm) straight for fig.update_layout:
+    Grouped -> bars side by side ("group", no norm), Stacked -> raw
+    totals stacked ("stack", no norm), Share -> the same stack
+    normalized to 100% ("stack", "percent"), so the same data can be read
+    as absolute volume or as relative mix without two separate charts."""
+    mode = st.segmented_control("Mode", BAR_MODE_OPTIONS, default=default, required=True, key=key)
+    barmode = "group" if mode == "Grouped" else "stack"
+    barnorm = "percent" if mode == "Share" else None
+    return barmode, barnorm
+
 
 def close_polygon(r, theta):
     """Repeat the first point at the end so a go.Scatterpolar trace closes visually."""
