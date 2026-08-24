@@ -227,16 +227,18 @@ def render_sidebar_tools():
 
     # Label beside its own widget (a narrow label column + a wider widget
     # column, widget's own label collapsed) instead of Streamlit's default
-    # label-above-widget stacking -- for every picker in the sidebar,
-    # Season/Competition/Match included, so the whole panel reads as
-    # label:value rows rather than alternating caption/control lines.
-    col_lbl, col_w = st.columns([1, 2], vertical_alignment="center")
+    # label-above-widget stacking. Season/Competition share a [3, 4] split
+    # -- narrower and "Competition" wraps to 2 lines -- while Match gets
+    # its own much wider [1, 5] split: match labels ("24-04-06 ·
+    # Scandicci (andata)") are the longest strings in this whole sidebar,
+    # so that row needs most of the width to not truncate them.
+    col_lbl, col_w = st.columns([3, 4], vertical_alignment="center")
     with col_lbl:
         st.markdown("Season")
     with col_w:
         st.selectbox("Season", mc.SEASONS, key="flt_season", on_change=_on_season_change, label_visibility="collapsed")
 
-    col_lbl, col_w = st.columns([1, 2], vertical_alignment="center")
+    col_lbl, col_w = st.columns([3, 4], vertical_alignment="center")
     with col_lbl:
         st.markdown("Competition")
     with col_w:
@@ -247,7 +249,7 @@ def render_sidebar_tools():
 
     match_pick_options = [ALL_MATCHES] + [m["date"] for m in _matches_for_picker()]
     ensure_valid_selection("flt_match_pick", match_pick_options)
-    col_lbl, col_w = st.columns([1, 2], vertical_alignment="center")
+    col_lbl, col_w = st.columns([1, 5], vertical_alignment="center")
     with col_lbl:
         st.markdown("Match")
     with col_w:
@@ -257,8 +259,33 @@ def render_sidebar_tools():
             help="Jump the period to a single match day, instead of picking dates below.",
             label_visibility="collapsed",
         )
+    st.markdown(
+        """<style>
+        /* The Match dropdown's own popover menu defaults to the trigger's
+           width, which isn't enough for the longest match labels even
+           after widening the trigger itself above -- let the menu grow
+           past it instead of wrapping/truncating those options. A plain
+           div (not ul), and not nested under a [data-baseweb="popover"]
+           ancestor -- confirmed by inspecting the live DOM, not guessed. */
+        [data-testid="stSelectboxVirtualDropdown"] {
+            min-width: 280px !important;
+        }
+        </style>""",
+        unsafe_allow_html=True,
+    )
 
-    with st.container(border=True):
+    # Picking a specific match already sets the period to exactly that
+    # match's day (_apply_match_pick) -- the period box below would just
+    # be redundant (and confusing to edit) on top of that, so it's
+    # disabled and dimmed whenever a specific match is selected instead
+    # of "All matches".
+    match_locked = st.session_state.get("flt_match_pick", ALL_MATCHES) != ALL_MATCHES
+    with st.container(border=True, key="period_box"):
+        if match_locked:
+            st.markdown(
+                '<style>.st-key-period_box { opacity: 0.55; }</style>',
+                unsafe_allow_html=True,
+            )
         # The widgets' own min/max are the wider full-calendar-year bounds
         # (see _picker_bounds), not the season's real (narrower) range --
         # otherwise the popup's year dropdown can point at a year where the
@@ -270,16 +297,16 @@ def render_sidebar_tools():
         with col_w:
             st.date_input(
                 "Start", key="flt_start", min_value=picker_min, max_value=picker_max,
-                label_visibility="collapsed",
+                label_visibility="collapsed", disabled=match_locked,
             )
-        st.checkbox("Different end date", key="flt_has_end")
+        st.checkbox("Different end date", key="flt_has_end", disabled=match_locked)
         col_lbl, col_w = st.columns([1, 2], vertical_alignment="center")
         with col_lbl:
             st.markdown("End")
         with col_w:
             st.date_input(
                 "End", key="flt_end", min_value=picker_min, max_value=picker_max,
-                disabled=not st.session_state["flt_has_end"], label_visibility="collapsed",
+                disabled=match_locked or not st.session_state["flt_has_end"], label_visibility="collapsed",
             )
 
         # Two rows of two instead of one row of four -- "Full season" and
@@ -287,14 +314,14 @@ def render_sidebar_tools():
         # with 4 columns across.
         preset_row1 = st.columns(2)
         with preset_row1[0]:
-            st.button("Full season", key="flt_preset_full", on_click=_apply_preset, args=(None,), width="stretch")
+            st.button("Full season", key="flt_preset_full", on_click=_apply_preset, args=(None,), width="stretch", disabled=match_locked)
         preset_items = list(PRESETS.items())
         with preset_row1[1]:
             label, days = preset_items[0]
-            st.button(label.replace("Last ", ""), key=f"flt_preset_{days}", on_click=_apply_preset, args=(days,), width="stretch", help=label)
+            st.button(label.replace("Last ", ""), key=f"flt_preset_{days}", on_click=_apply_preset, args=(days,), width="stretch", help=label, disabled=match_locked)
         preset_row2 = st.columns(2)
         for col, (label, days) in zip(preset_row2, preset_items[1:]):
             with col:
-                st.button(label.replace("Last ", ""), key=f"flt_preset_{days}", on_click=_apply_preset, args=(days,), width="stretch", help=label)
+                st.button(label.replace("Last ", ""), key=f"flt_preset_{days}", on_click=_apply_preset, args=(days,), width="stretch", help=label, disabled=match_locked)
 
     st.caption(f":material/filter_alt: {caption()}")
