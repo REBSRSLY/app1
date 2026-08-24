@@ -118,6 +118,13 @@ def _matches_for_picker() -> list[dict]:
     return sorted(matches, key=lambda m: m["pdate"], reverse=True)
 
 
+def matches_full_season() -> list[dict]:
+    """Season matches filtered by competition only (not period) -- for
+    charts that intentionally span the whole season regardless of the
+    sidebar's date range (trends, match results, season point totals)."""
+    return _matches_for_picker()
+
+
 def matches_in_scope() -> list[dict]:
     """Season matches (with parsed `pdate`) filtered by the active period
     and competition, most recent first -- the shared source of truth for

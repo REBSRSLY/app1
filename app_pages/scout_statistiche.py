@@ -921,35 +921,39 @@ def _render_distribution(scoped: pd.DataFrame, scout: pd.DataFrame, palla_tipi_e
         pivot_tot = pivot_tot.reindex(index=ordine_giocatrici, columns=colonne_ordinate)
         pivot_metrica = pivot_metrica.reindex(index=ordine_giocatrici, columns=colonne_ordinate)
 
+        # Classic red/yellow/green everywhere in this heatmap -- no blue --
+        # with "green = good, red = bad" consistently across all four
+        # metrics: E_pct and the two 0-1 rate metrics whose direction
+        # depends on whether higher is good (#%) or bad (Err_pct) use
+        # RdYlGn forward or reversed accordingly; Ind (no fixed ceiling)
+        # gets the same forward scale re-ranged to whatever this scope's
+        # cells actually reach.
         if metrica_col == "E_pct":
             # Efficiency can be negative: diverging scale centered on 0.
-            heat_kwargs = dict(colorscale="RdBu", zmid=0, zmin=-0.5, zmax=0.5)
+            heat_kwargs = dict(colorscale="RdYlGn", zmid=0, zmin=-0.5, zmax=0.5)
         elif metrica_col == "Ind":
-            # Ind has no natural fixed ceiling (unlike the 0-1 rate metrics) --
-            # scale to whatever this scope's cells actually reach.
             ind_max = pivot_metrica.max(numeric_only=True).max()
             ind_max = float(ind_max) if pd.notna(ind_max) and ind_max > 0 else 1.0
-            heat_kwargs = dict(colorscale="Blues", zmin=0, zmax=ind_max)
+            heat_kwargs = dict(colorscale="RdYlGn", zmin=0, zmax=ind_max)
         elif metrica_col == "Err_pct":
-            # Higher error % is worse -- a "bad = more red" sequential scale,
-            # as opposed to Perfect_pct's "good = more green" below.
-            heat_kwargs = dict(colorscale="Reds", zmin=0, zmax=1)
+            # Higher error % is worse -- reversed so 0 (good) reads green
+            # and 1 (bad) reads red, as opposed to Perfect_pct's forward
+            # scale below where higher is good.
+            heat_kwargs = dict(colorscale="RdYlGn_r", zmin=0, zmax=1)
         else:
-            # % Point (#) is always >= 0: single-hue sequential scale.
-            heat_kwargs = dict(colorscale="Blues", zmin=0, zmax=1)
+            # % Point (#) is always >= 0 and higher is good: forward scale.
+            heat_kwargs = dict(colorscale="RdYlGn", zmin=0, zmax=1)
 
-        # Cell text: black on the paler part of whichever scale is active (E%
-        # near 0, or the other metrics near their low end) so it stays legible
-        # against a background color that can range from near-white to fully
-        # saturated; white everywhere else.
+        # Cell text: RdYlGn/RdYlGn_r are palest at the midpoint of their own
+        # [zmin, zmax] range (yellow), regardless of which end is red/green
+        # -- black text near that midpoint, white everywhere else (both the
+        # saturated red and saturated green ends need it).
         def _heat_text_color(value) -> str:
             if pd.isna(value):
                 return "#ffffff"
-            if metrica_col == "E_pct":
-                return "#000000" if -0.2 <= value <= 0.2 else "#ffffff"
-            if metrica_col == "Ind":
-                return "#000000" if 0 <= value <= heat_kwargs["zmax"] / 2 else "#ffffff"
-            return "#000000" if 0 <= value <= 0.5 else "#ffffff"
+            zmin, zmax = heat_kwargs["zmin"], heat_kwargs["zmax"]
+            mid = (zmin + zmax) / 2
+            return "#000000" if abs(value - mid) <= 0.2 * (zmax - zmin) else "#ffffff"
 
         # go.Heatmap's own texttemplate/textfont only take a single scalar
         # color for the whole trace -- per-cell colors aren't supported there,

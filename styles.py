@@ -158,7 +158,7 @@ CUSTOM_CSS = """
         .st-key-fund_row_how {
             margin-top: 26px;
         }
-        .st-key-home_low_recovery_box,
+        [class*="st-key-home_tile_snap_wellness_low_recovery"],
         [class*="st-key-wellness_card_"] {
             background: var(--surface) !important;
             border-radius: 10px;
