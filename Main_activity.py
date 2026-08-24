@@ -175,12 +175,15 @@ NAV_CSS = """
     }
     /* Slightly wider than Streamlit's 300px default -- the label:widget
        rows and the Match dropdown (long match names) both wanted a bit
-       more breathing room. !important needed since Streamlit sets this
-       inline (its own resizable-sidebar width state); the main content
-       area is a flex sibling, so it narrows to match automatically. */
+       more breathing room. 340px still wrapped "Match" onto 2 lines, so
+       nudged again to 370px (see also the Match row's own column ratio
+       in filters.py, widened alongside this). !important needed since
+       Streamlit sets this inline (its own resizable-sidebar width
+       state); the main content area is a flex sibling, so it narrows to
+       match automatically. */
     [data-testid="stSidebar"] {
-        width: 340px !important;
-        min-width: 340px !important;
+        width: 370px !important;
+        min-width: 370px !important;
     }
     /* Every st.markdown(<style>...) / components.html() call (this one,
        styles.py's, home.py's HERO_CSS) renders as its own zero-height

@@ -249,7 +249,7 @@ def render_sidebar_tools():
 
     match_pick_options = [ALL_MATCHES] + [m["date"] for m in _matches_for_picker()]
     ensure_valid_selection("flt_match_pick", match_pick_options)
-    col_lbl, col_w = st.columns([1, 5], vertical_alignment="center")
+    col_lbl, col_w = st.columns([1, 4], vertical_alignment="center")
     with col_lbl:
         st.markdown("Match")
     with col_w:
