@@ -35,6 +35,13 @@ _SYMBOL_TO_COL = {"=": "Err", "-": "Neg", "!": "Neutral", "+": "Pos", "#": "Perf
 _SCORE_POINTS = {"3-0": 3, "3-1": 3, "3-2": 2, "2-3": 1, "1-3": 0, "0-3": 0}
 _MONTH_NAMES = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
+# var(--accent) (Blu Vero, #1655a5) fails contrast against every card's
+# black --surface fill -- it's tuned for the app's own light/mesh chrome,
+# not text on a solid dark card. This is the same brighter blue already
+# used for the Efficiency trend line below, reused here for every other
+# stat number that sits directly on a card's black background.
+ACCENT_ON_DARK = "#29B6F6"
+
 # Every plotly tile's own chart draws at this height, and every tile's
 # bordered card (chart or text) is held to this same min-height via CSS
 # below -- one standard footprint for every card on the grid, chart or
@@ -129,7 +136,7 @@ def _tile_title(title_md: str, latest_date=None):
         return
     date_txt = latest_date.strftime("%d %b") if hasattr(latest_date, "strftime") else str(latest_date)
     st.markdown(
-        f'{title_md} <span style="font-size:10px;color:var(--muted);font-weight:400;">· {date_txt}</span>',
+        f'{title_md} <span style="font-size:12px;color:var(--muted);font-weight:400;">· {date_txt}</span>',
         unsafe_allow_html=True,
     )
 
@@ -199,7 +206,7 @@ def _render_hero(season: str) -> list[str]:
             st.markdown(
                 '<div style="font-family:var(--display);font-size:1.5rem;font-weight:700;'
                 'line-height:1.1;text-transform:uppercase;letter-spacing:0.01em;">Vero Volley Milano</div>'
-                f'<div style="color:var(--muted);font-size:0.78rem;margin-top:1px;">Technical Staff · A1 Women\'s · {filters.caption()}</div>',
+                f'<div style="color:var(--muted);font-size:0.92rem;margin-top:2px;">Technical Staff · A1 Women\'s · {filters.caption()}</div>',
                 unsafe_allow_html=True,
             )
 
@@ -255,8 +262,8 @@ def _tile_low_recovery(tile_key: str):
         st.markdown(
             f'<div style="display:flex;align-items:baseline;gap:8px;">'
             f'<span style="font-size:2rem;font-weight:800;color:{LOW_COLOR};line-height:1;">{len(below)}</span>'
-            f'<span style="font-size:11px;color:var(--muted);">below TQR {TQR_GREEN_MIN}</span></div>'
-            f'<div style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.45;">{names_html}</div>',
+            f'<span style="font-size:12.5px;color:var(--muted);">below TQR {TQR_GREEN_MIN}</span></div>'
+            f'<div style="font-size:12.5px;color:#d8d8d8;margin-top:4px;line-height:1.5;">{names_html}</div>',
             unsafe_allow_html=True,
         )
 
@@ -296,7 +303,7 @@ def _tile_team_tqr_gauge(tile_key: str):
         fig.update_layout(height=TILE_CHART_HEIGHT - 20, margin=dict(l=14, r=14, t=0, b=0), paper_bgcolor="rgba(0,0,0,0)")
         st.plotly_chart(fig, width="stretch")
         st.markdown(
-            f'<div style="text-align:center;font-size:11px;color:{color};font-weight:700;">{tqr_recovery_label(tqr)}</div>',
+            f'<div style="text-align:center;font-size:13px;color:{color};font-weight:700;">{tqr_recovery_label(tqr)}</div>',
             unsafe_allow_html=True,
         )
 
@@ -379,7 +386,7 @@ def _tile_league_position(tile_key: str):
             st.caption("No standings yet.")
             return
         st.markdown(
-            f'<div style="font-size:2.2rem;font-weight:800;color:var(--accent);line-height:1;'
+            f'<div style="font-size:2.2rem;font-weight:800;color:{ACCENT_ON_DARK};line-height:1;'
             f'margin-bottom:4px;">#{us["pos"]}</div>',
             unsafe_allow_html=True,
         )
@@ -389,12 +396,12 @@ def _tile_league_position(tile_key: str):
                 x=[us["pts"], other["pts"]], y=["Milano", other["team"]], orientation="h",
                 marker_color=["#1655a5", "#8a8a8a"],
                 text=[f"{us['pts']} pts", f"{other['pts']} pts"], textposition="outside",
-                textfont=dict(color="#f2f2f2", size=10),
+                textfont=dict(color="#f2f2f2", size=13),
             ))
             fig.update_layout(
-                height=TILE_CHART_HEIGHT - 60, margin=dict(l=8, r=40, t=0, b=0),
+                height=TILE_CHART_HEIGHT - 60, margin=dict(l=8, r=48, t=0, b=0),
                 xaxis=dict(visible=False, range=[0, max(us["pts"], other["pts"]) * 1.3]),
-                yaxis=dict(tickfont=dict(size=10)),
+                yaxis=dict(tickfont=dict(size=13)),
                 paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#f2f2f2",
             )
             st.plotly_chart(fig, width="stretch")
@@ -415,9 +422,9 @@ def _tile_recent_form(tile_key: str):
                 color = cv.RESULT_COLORS[mc.result_points(m)]
                 st.markdown(
                     f'<div style="text-align:center">'
-                    f'<div style="width:12px;height:12px;border-radius:50%;background:{color};margin:0 auto 3px;"></div>'
-                    f'<div style="font-size:9.5px;color:var(--muted);white-space:nowrap;">{cv.fmt_date(m["date"])}</div>'
-                    f'<div style="font-size:11px;font-weight:700;white-space:nowrap;">{m["score"]}</div>'
+                    f'<div style="width:12px;height:12px;border-radius:50%;background:{color};margin:0 auto 4px;"></div>'
+                    f'<div style="font-size:12px;color:#d8d8d8;white-space:nowrap;">{cv.fmt_date(m["date"])}</div>'
+                    f'<div style="font-size:13.5px;font-weight:700;white-space:nowrap;">{m["score"]}</div>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
@@ -494,9 +501,9 @@ def _tile_top_scorers(tile_key: str):
         rows_html = "".join(
             f'<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 2px;'
             f'{"border-bottom:1px solid var(--line);" if i < len(rows) - 1 else ""}">'
-            f'<span style="font-size:0.95rem;">{medals[i]}</span>'
-            f'<span style="flex:1;padding-left:6px;font-weight:700;font-size:0.86rem;">{r.Index}</span>'
-            f'<span style="color:var(--accent);font-weight:700;font-size:0.86rem;">{int(r.points)} pts</span>'
+            f'<span style="font-size:1.05rem;">{medals[i]}</span>'
+            f'<span style="flex:1;padding-left:6px;font-weight:700;font-size:0.95rem;">{r.Index}</span>'
+            f'<span style="color:{ACCENT_ON_DARK};font-weight:700;font-size:0.95rem;">{int(r.points)} pts</span>'
             f'</div>'
             for i, r in enumerate(rows)
         )
@@ -527,9 +534,9 @@ def _render_top_efficiency(fondamentale: str, latest: dict):
     rows_html = "".join(
         f'<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 2px;'
         f'{"border-bottom:1px solid var(--line);" if i < len(rows) - 1 else ""}">'
-        f'<span style="font-size:0.95rem;">{medals[i]}</span>'
-        f'<span style="flex:1;padding-left:6px;font-weight:700;font-size:0.86rem;">{r.player_name}</span>'
-        f'<span style="color:var(--accent);font-weight:700;font-size:0.86rem;">{r.E_pct * 100:.0f}%</span>'
+        f'<span style="font-size:1.05rem;">{medals[i]}</span>'
+        f'<span style="flex:1;padding-left:6px;font-weight:700;font-size:0.95rem;">{r.player_name}</span>'
+        f'<span style="color:{ACCENT_ON_DARK};font-weight:700;font-size:0.95rem;">{r.E_pct * 100:.0f}%</span>'
         f'</div>'
         for i, r in enumerate(rows)
     )
@@ -697,7 +704,7 @@ def _render_efficiency_trend(fondamentale: str):
         st.markdown(
             f'<div style="display:flex;align-items:baseline;gap:8px;padding-top:10px;">'
             f'<span style="font-size:2rem;font-weight:800;color:#29B6F6;line-height:1;">{row["E_pct"] * 100:.0f}%</span>'
-            f'<span style="font-size:11px;color:var(--muted);">only 1 match so far ({mc.match_label(row["match"])})</span></div>',
+            f'<span style="font-size:12.5px;color:var(--muted);">only 1 match so far ({mc.match_label(row["match"])})</span></div>',
             unsafe_allow_html=True,
         )
         return
@@ -844,7 +851,12 @@ def _mini_zone_court(attack: pd.DataFrame, count_col: str, colorscale: str):
         color = "rgba(255,255,255,0.08)" if value is None else pcolors.sample_colorscale(colorscale, [t])[0].replace("rgb", "rgba").replace(")", ",0.75)")
         fig.add_shape(type="rect", x0=x0, y0=6, x1=x1, y1=9, fillcolor=color, line=dict(color="rgba(255,255,255,0.5)", width=1))
         text = "—" if value is None else f"{value * 100:.0f}%"
-        fig.add_annotation(x=(x0 + x1) / 2, y=7.5, showarrow=False, font=dict(color="#ffffff", size=13), text=f"<b>{zone}</b><br>{text}")
+        # Greens/Reds are pale near t=0, saturated near t=1 -- white text
+        # on a pale fill is nearly invisible, so switch to black there
+        # (the "no data" case keeps white since its own fill stays a
+        # near-transparent overlay on the plot's own dark background).
+        text_color = "#ffffff" if value is None or t > 0.35 else "#000000"
+        fig.add_annotation(x=(x0 + x1) / 2, y=7.5, showarrow=False, font=dict(color=text_color, size=13), text=f"<b>{zone}</b><br>{text}")
     fig.update_xaxes(visible=False, range=[-0.2, 9.2])
     fig.update_yaxes(visible=False, range=[5.7, 9.3], scaleanchor="x")
     fig.update_layout(height=TILE_CHART_HEIGHT - 10, margin=dict(l=10, r=10, t=0, b=0), plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
