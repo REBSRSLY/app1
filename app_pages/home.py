@@ -15,6 +15,7 @@ import training_load
 from ui_helpers import (
     GOOD_COLOR,
     LOW_COLOR,
+    TQR_AMBER_MIN,
     TQR_GREEN_MIN,
     TQR_MAX,
     TQR_MIN,
@@ -246,8 +247,14 @@ def _tile_low_recovery(tile_key: str):
         last_date = wellness["Data"].max()
         _tile_title("**Low recovery**", last_date)
         last_day = wellness[wellness["Data"] == last_date].sort_values("Tqr")
-        below = last_day[last_day["Tqr"] < TQR_GREEN_MIN]
-        if below.empty:
+        # Split at the same red/amber boundary the gauges and y-axis ticks
+        # use everywhere else (TQR_AMBER_MIN), rounded the same way
+        # tqr_zone_color does -- a player right on the line reads the same
+        # color here as she would on her own gauge.
+        rounded = last_day["Tqr"].round()
+        red = last_day[rounded < TQR_AMBER_MIN]
+        yellow = last_day[(rounded >= TQR_AMBER_MIN) & (rounded < TQR_GREEN_MIN)]
+        if red.empty and yellow.empty:
             st.markdown(
                 f'<div style="display:flex;align-items:center;gap:8px;padding-top:6px;">'
                 f'<span style="font-size:1.4rem;">✅</span>'
@@ -255,15 +262,24 @@ def _tile_low_recovery(tile_key: str):
                 unsafe_allow_html=True,
             )
             return
-        # Full roster of names, not a "+N more" truncation -- wraps across
-        # as many lines as it needs, since the card no longer has to hug a
-        # single-line height.
-        names_html = ", ".join(below["player_name"].tolist())
+
+        def _group_html(group: pd.DataFrame, label: str, color: str, top_margin: str) -> str:
+            if group.empty:
+                return ""
+            # Full roster of names, not a "+N more" truncation -- wraps
+            # across as many lines as it needs, since the card no longer
+            # has to hug a single-line height.
+            names_html = ", ".join(group["player_name"].tolist())
+            return (
+                f'<div style="display:flex;align-items:baseline;gap:8px;margin-top:{top_margin};">'
+                f'<span style="font-size:1.6rem;font-weight:800;color:{color};line-height:1;">{len(group)}</span>'
+                f'<span style="font-size:12px;color:var(--muted);">{label}</span></div>'
+                f'<div style="font-size:12px;color:{color};margin-top:2px;line-height:1.4;">{names_html}</div>'
+            )
+
         st.markdown(
-            f'<div style="display:flex;align-items:baseline;gap:8px;">'
-            f'<span style="font-size:2rem;font-weight:800;color:{LOW_COLOR};line-height:1;">{len(below)}</span>'
-            f'<span style="font-size:12.5px;color:var(--muted);">below TQR {TQR_GREEN_MIN}</span></div>'
-            f'<div style="font-size:12.5px;color:#d8d8d8;margin-top:4px;line-height:1.5;">{names_html}</div>',
+            _group_html(red, f"below TQR {TQR_AMBER_MIN}", LOW_COLOR, "0")
+            + _group_html(yellow, f"TQR {TQR_AMBER_MIN}–{TQR_GREEN_MIN}", WARN_COLOR, "8px"),
             unsafe_allow_html=True,
         )
 
@@ -345,6 +361,24 @@ def _tile_team_tqr_trend(tile_key: str):
         st.plotly_chart(fig, width="stretch")
 
 
+# Same 4 bands as the ACWR gauge's own steps below (0-0.8/0.8-1.3/1.3-1.5/
+# 1.5+), spelled out in words -- the ACWR equivalent of ui_helpers'
+# tqr_recovery_label/tqr_zone_color, which only cover TQR.
+_ACWR_BANDS = [
+    (0.8, "Undertraining", WARN_COLOR),
+    (1.3, "Optimal load", GOOD_COLOR),
+    (1.5, "Caution zone", WARN_COLOR),
+    (float("inf"), "High injury risk", LOW_COLOR),
+]
+
+
+def _acwr_label_color(acwr: float) -> tuple[str, str]:
+    for upper, label, color in _ACWR_BANDS:
+        if acwr < upper:
+            return label, color
+    return _ACWR_BANDS[-1][1], _ACWR_BANDS[-1][2]
+
+
 def _tile_readiness(tile_key: str):
     with st.container(border=True, key=_tile_box_key(tile_key)):
         rpe = dl.load_wellness_data()["rpe"]
@@ -374,6 +408,11 @@ def _tile_readiness(tile_key: str):
         ))
         fig.update_layout(height=TILE_CHART_HEIGHT - 20, margin=dict(l=14, r=14, t=0, b=0), paper_bgcolor="rgba(0,0,0,0)")
         st.plotly_chart(fig, width="stretch")
+        label, color = _acwr_label_color(acwr)
+        st.markdown(
+            f'<div style="text-align:center;font-size:13px;color:{color};font-weight:700;">{label}</div>',
+            unsafe_allow_html=True,
+        )
 
 
 def _tile_league_position(tile_key: str):
