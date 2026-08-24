@@ -177,11 +177,27 @@ NAV_CSS = """
        rows and the Match dropdown (long match names) both wanted a bit
        more breathing room. 340px still wrapped "Match" onto 2 lines, so
        nudged again to 370px (see also the Match row's own column ratio
-       in filters.py, widened alongside this). !important needed since
-       Streamlit sets this inline (its own resizable-sidebar width
-       state); the main content area is a flex sibling, so it narrows to
-       match automatically. */
-    [data-testid="stSidebar"] {
+       in filters.py, widened alongside this).
+
+       Scoped to [aria-expanded="true"] only -- an earlier version of
+       this rule applied unconditionally and broke collapsing: Streamlit
+       animates the collapse via its own transform, calculated from
+       whatever width IT thinks the sidebar is; forcing width/min-width
+       to 370px regardless of expanded state left a mismatch (it slid by
+       the old amount, not 370px), stranding a visible dark sliver where
+       the sidebar used to be instead of the main content reclaiming
+       that space. Only touching the expanded state leaves Streamlit's
+       own collapse behavior completely alone.
+
+       Deliberately does NOT add a matching [aria-expanded="false"]
+       override for the collapsed state -- tried that too, and it fought
+       Streamlit's own emotion-generated collapse rule (which animates
+       min-width/max-width/transform together) in a way that left it
+       stuck rendering at this rule's 370px on some collapse paths,
+       worse than doing nothing. Leaving the collapsed state completely
+       alone lets Streamlit's own (correct, when left unmolested)
+       min-width/max-width/transform transition run untouched. */
+    [data-testid="stSidebar"][aria-expanded="true"] {
         width: 370px !important;
         min-width: 370px !important;
     }
