@@ -625,26 +625,27 @@ def _zone_text_color(value, cfg: dict) -> str:
     return "#000000" if (value - cfg["cmin"]) <= 0.35 * span else "#ffffff"
 
 
-ZONE_TABLE_RENAME = {
-    "player_name": "Player", "Tot": "Attacks", "E_pct": "E%",
-    "Err_pct": "=", "Slash_pct": "/", "Neg_pct": "-", "Neutral_pct": "!", "Pos_pct": "+", "Perfect_pct": "#",
-}
-ZONE_TABLE_PERCENT_COLS = ["E%", "=", "/", "-", "!", "+", "#"]
-
-
-def _render_zone_efficiency_court(attack_totale: pd.DataFrame, metric_col: str = "E_pct") -> dict:
-    """Chart 4: each zone filled by a single color for the selected metric,
-    with a real gradient colorbar (rather than the flat color patches from
-    the old "Court zones" section) to read the shade against. Returns
-    zone_stats -- the per-zone tables render separately (see
-    _render_zone_efficiency_tables), in the column next to this one."""
-    cfg = dict(ZONE_METRIC_CONFIG[metric_col])
+def _compute_zone_stats(attack_totale: pd.DataFrame, metric_col: str) -> dict:
+    """Per-zone (P4/P3/P2) volume-weighted average of `metric_col` plus raw
+    attack count -- shared by the efficiency court's own coloring and the
+    zone outcome-mix boxes' side stats, so both always agree on the exact
+    same numbers regardless of which one renders first."""
     zone_stats = {}
     for zone, roles_in_zone in ZONE_ROLES.items():
         sub = attack_totale[attack_totale["Role"].isin(roles_in_zone) & (attack_totale["Tot"] > 0)]
         tot = sub["Tot"].sum()
         value = (sub[metric_col] * sub["Tot"]).sum() / tot if tot > 0 else None
         zone_stats[zone] = {"tot": int(tot), "value": value, "players": sub.sort_values("Tot", ascending=False)}
+    return zone_stats
+
+
+def _render_zone_efficiency_court(attack_totale: pd.DataFrame, metric_col: str, zone_stats: dict):
+    """Chart 4: each zone filled by a single color for the selected metric,
+    with a real gradient colorbar (rather than the flat color patches from
+    the old "Court zones" section) to read the shade against. `zone_stats`
+    comes from _compute_zone_stats -- computed once by the caller and
+    shared with the zone outcome-mix boxes beside this."""
+    cfg = dict(ZONE_METRIC_CONFIG[metric_col])
 
     if metric_col == "Ind":
         # Ind has no natural fixed ceiling (unlike the 0-1 rate metrics) --
@@ -699,38 +700,16 @@ def _render_zone_efficiency_court(attack_totale: pd.DataFrame, metric_col: str =
 
     fig.update_xaxes(visible=False, range=[-0.3, 9.3])
     fig.update_yaxes(visible=False, range=[-0.3, 9.3], scaleanchor="x")
-    fig.update_layout(height=680, margin=dict(l=10, r=10, t=10, b=70), plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+    fig.update_layout(height=440, margin=dict(l=10, r=10, t=10, b=60), plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
     st.plotly_chart(fig, width="stretch")
     if any_low:
         st.caption(f"A paler zone had fewer than {dl.MIN_RELIABLE_N} attacks in this scope — read its color with caution.")
 
-    return zone_stats
 
-
-def _render_zone_efficiency_tables(zone_stats: dict):
-    """The P4/P3/P2 detail tables for the efficiency court above, stacked
-    vertically (rather than 3-abreast) so they fit their own column next to
-    the court, fully readable without scrolling."""
-    for zone in ["P4", "P3", "P2"]:
-        with st.container(border=True):
-            st.markdown(f"**{zone}** · {' / '.join(ZONE_ROLES[zone])}")
-            top = zone_stats[zone]["players"][["player_name", "Tot", "E_pct", "Err_pct", "Slash_pct", "Neg_pct", "Neutral_pct", "Pos_pct", "Perfect_pct"]].head(5)
-            if top.empty:
-                st.caption("No attacks in this scope.")
-            else:
-                st.dataframe(
-                    top.rename(columns=ZONE_TABLE_RENAME),
-                    hide_index=True, width="stretch",
-                    column_config={c: st.column_config.NumberColumn(format="percent") for c in ZONE_TABLE_PERCENT_COLS},
-                )
-
-
-def _render_zone_settype_court(attack_by_type: pd.DataFrame) -> dict:
+def _render_zone_settype_court(attack_by_type: pd.DataFrame):
     """Chart 5: same court, but each zone is split into proportional
     stripes by set type (same colors as the rest of the app's set-type
-    charts) instead of a single efficiency color. Returns zone_mix -- the
-    per-zone tables render separately (see _render_zone_settype_tables), in
-    the column next to this one."""
+    charts) instead of a single efficiency color."""
     zone_mix = {}
     for zone, roles_in_zone in ZONE_ROLES.items():
         sub = attack_by_type[attack_by_type["Role"].isin(roles_in_zone) & (attack_by_type["Tot"] > 0)]
@@ -766,7 +745,7 @@ def _render_zone_settype_court(attack_by_type: pd.DataFrame) -> dict:
 
     fig.update_xaxes(visible=False, range=[-0.3, 9.3])
     fig.update_yaxes(visible=False, range=[-0.3, 9.3], scaleanchor="x")
-    fig.update_layout(height=680, margin=dict(l=10, r=10, t=10, b=10), plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+    fig.update_layout(height=440, margin=dict(l=10, r=10, t=10, b=10), plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
     st.plotly_chart(fig, width="stretch")
 
     legend_html = "&nbsp;&nbsp;".join(
@@ -776,97 +755,154 @@ def _render_zone_settype_court(attack_by_type: pd.DataFrame) -> dict:
         for p in RAW_PALLA_ORDER[1:]
     )
     st.markdown(legend_html, unsafe_allow_html=True)
-    return zone_mix
 
 
-def _render_zone_settype_tables(zone_mix: dict):
-    """The P4/P3/P2 detail tables for the set-type court above, stacked
-    vertically (rather than 3-abreast) so they fit their own column next to
-    the court, fully readable without scrolling."""
+def _render_outcome_mix_row(sub_totale: pd.DataFrame, fond_sel: str, height: int = 60):
+    """Single 100%-stacked horizontal bar of `sub_totale`'s combined
+    outcome mix (=, -, !, +, #, /) for `fond_sel` -- a compact companion to
+    a headline value + count pair beside it, not a standalone analysis
+    chart (see Team Profile's own Outcome mix box for that)."""
+    legenda = dl.legenda_fondamentale(fond_sel)
+    rows = []
+    for simbolo, _, _ in legenda:
+        col = SYMBOL_TO_COL.get(simbolo)
+        if col is None or col not in sub_totale.columns:
+            continue
+        count = sub_totale[col].fillna(0).sum()
+        if count <= 0:
+            continue
+        rows.append({"Outcome": simbolo, "count": count, "y": ""})
+    d = pd.DataFrame(rows)
+    if d.empty:
+        st.caption("No outcome data.")
+        return
+    outcome_order = [o for o in _OUTCOME_ORDER if o in d["Outcome"].unique()]
+    fig = px.bar(
+        d, x="count", y="y", color="Outcome", orientation="h",
+        category_orders={"Outcome": outcome_order},
+        color_discrete_map=OUTCOME_COLORS,
+        labels={"count": "", "y": ""},
+    )
+    fig.update_traces(hovertemplate="%{fullData.name}: %{x}<extra></extra>")
+    fig.update_layout(
+        barmode="stack", barnorm="percent", showlegend=False,
+        height=height, margin=dict(l=0, r=10, t=4, b=22),
+        xaxis=dict(ticksuffix="%"), yaxis=dict(showticklabels=False),
+    )
+    st.plotly_chart(fig, width="stretch")
+
+
+def _render_zone_outcome_boxes(attack_totale: pd.DataFrame, zone_stats: dict, fond_sel: str, cfg: dict):
+    """The right-hand column's 3 boxes (P4/P3/P2), replacing the old
+    per-zone detail tables: each zone's own outcome mix as one stacked
+    bar, with its headline metric value and attack count -- the same
+    numbers `zone_stats` already carries -- laid out beside it rather
+    than in a table column."""
     for zone in ["P4", "P3", "P2"]:
         with st.container(border=True):
             st.markdown(f"**{zone}** · {' / '.join(ZONE_ROLES[zone])}")
-            shares = zone_mix[zone]["shares"]
-            if not shares:
-                st.caption("No attacks in this scope.")
+            stats = zone_stats[zone]
+            if stats["value"] is None:
+                value_txt = "—"
+            elif cfg["is_pct"]:
+                value_txt = f"{stats['value'] * 100:.0f}%"
             else:
-                tbl = pd.DataFrame({
-                    "Set type": [dl.PALLA_LABELS[p] for p in shares.keys()],
-                    "Share": list(shares.values()),
-                }).sort_values("Share", ascending=False)
-                st.dataframe(
-                    tbl, hide_index=True, width="stretch",
-                    column_config={"Share": st.column_config.NumberColumn(format="percent")},
+                value_txt = f"{stats['value']:.0f}"
+            col_bar, col_stats = st.columns([3, 1])
+            with col_bar:
+                sub = attack_totale[attack_totale["Role"].isin(ZONE_ROLES[zone]) & (attack_totale["Tot"] > 0)]
+                _render_outcome_mix_row(sub, fond_sel)
+            with col_stats:
+                st.markdown(
+                    f'<div style="padding-top:6px;">'
+                    f'<div style="font-size:11px;color:var(--muted);">{cfg["label"]}</div>'
+                    f'<div style="font-size:1.3rem;font-weight:800;line-height:1.1;">{value_txt}</div>'
+                    f'<div style="font-size:11px;color:var(--muted);margin-top:8px;"># actions</div>'
+                    f'<div style="font-size:1.05rem;font-weight:700;">{stats["tot"]}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
                 )
 
 
+def _render_setter_box(setters_alzata: pd.DataFrame):
+    with st.container(border=True):
+        st.markdown("**Setter** · Alzata")
+        if setters_alzata.empty:
+            st.caption("No setting data in this scope.")
+            return
+        _render_outcome_mix_row(setters_alzata, "Alzata", height=70)
+        st.caption(f"{int(setters_alzata['Tot'].sum())} sets across {setters_alzata['player_name'].nunique()} setter(s).")
+
+
 def _render_zone_distribution(scoped: pd.DataFrame, fond_sel: str):
-    """Charts 4 & 5 (merged behind a toggle): where the setters' sets end
-    up (P4/P3/P2), either colored by efficiency or by set-type mix, for
+    """Charts 4 & 5 (behind a top-right toggle switch, not a labeled
+    segmented control below the title): where the setters' sets end up
+    (P4/P3/P2), either colored by efficiency or by set-type mix, for
     whichever of the 4 "with palla" fundamentals is selected above (not
     hardcoded to Attacco -- Att dopo Ricez/Contrattacco/Muro all carry the
     same zone/set-type breakdown). Orro and Prandi -- the setters -- aren't
-    attackers assigned to a zone here; their own setting numbers get a
-    table beside the court instead, always from Alzata regardless of which
-    fundamental is selected, since that's the setters' own actions rather
-    than one of the 4 zone-attributed ones."""
+    attackers assigned to a zone here; their own setting numbers get their
+    own box instead, always from Alzata regardless of which fundamental is
+    selected, since that's the setters' own actions rather than one of the
+    4 zone-attributed ones.
+
+    Left column: the court (Setting distribution) + the Setter box, both
+    shrunk from the old 680px-tall court so title, switch, metric picker,
+    court and legend all fit one screen. Right column: one outcome-mix box
+    per zone (P4/P3/P2), replacing the old per-zone detail tables --
+    mode-independent (always outcome mix), unlike the tables that used to
+    switch with the left toggle."""
     names = dl.load_player_names()
     roles = dl.load_player_roles()
     name_to_role = {names[code]: dl.ROLE_LABELS.get(r, r) for code, r in roles.items() if code in names}
 
     attack = scoped[(scoped["fondamentale"] == fond_sel) & (~scoped["is_team"])].copy()
     attack["Role"] = attack["player_name"].map(name_to_role)
+    attack_totale = attack[attack["palla"] == "Totale"]
 
     setters_alzata = scoped[
         (scoped["fondamentale"] == "Alzata") & (scoped["palla"] == "Totale")
         & (scoped["player_name"].isin(SETTER_SURNAMES)) & (scoped["Tot"] > 0)
     ]
 
-    # Court column narrower than before (was [2, 1]) -- the court itself
-    # renders taller to compensate, and the P4/P3/P2 tables move into the
-    # other column, stacked above the setters' table, so the whole thing
-    # reads top-to-bottom without needing to scroll sideways or down past
-    # the court to find them.
-    col_court, col_table = st.columns([1, 1])
+    col_court, col_zones = st.columns([1, 1])
     with col_court:
-        with st.container(border=True):
-            st.markdown("**Setting distribution**")
-            mode = st.segmented_control(
-                "View", ["Efficiency by zone", "Set type by zone"], default="Efficiency by zone",
-                required=True, key="zone_mode",
+        with st.container(key="zone_dist_box", border=True):
+            # Widget first so its value is known before the CSS below picks
+            # a track color from it directly -- same technique as the
+            # Matches page's Serie A1 results/standings switcher.
+            settype_view = st.toggle("Set type by zone", key="zone_mode_toggle", label_visibility="collapsed")
+            track_color = "#1655a5" if settype_view else "#1655a555"
+            st.markdown(
+                f"""<style>
+                .st-key-zone_dist_box {{ position: relative; }}
+                .st-key-zone_mode_toggle {{
+                    position: absolute !important; top: 14px; right: 16px; z-index: 2;
+                    transform: scale(1.5); transform-origin: top right;
+                }}
+                .st-key-zone_dist_box [data-testid="stCheckbox"] label > div:first-of-type {{
+                    background-color: {track_color} !important;
+                }}
+                </style>""",
+                unsafe_allow_html=True,
             )
-            metric_col = "E_pct"
-            # Only "Efficiency by zone" needs a metric to color the court by
-            # -- "Set type by zone" is always the set-type mix, shown via its
-            # own legend instead (see _render_zone_settype_court).
-            if mode == "Efficiency by zone":
-                metric_label = st.segmented_control(
-                    "Effectiveness metric", list(ZONE_METRIC_OPTIONS.keys()),
-                    default="E%", required=True, key="zone_metrica",
-                )
-                metric_col = ZONE_METRIC_OPTIONS[metric_label]
-            if mode == "Efficiency by zone":
-                zone_stats = _render_zone_efficiency_court(attack[attack["palla"] == "Totale"], metric_col)
+            st.markdown("**Setting distribution**")
+            # Always shown (not just in the efficiency view anymore) -- the
+            # right column's zone boxes need it too, regardless of which
+            # court view is active on the left.
+            metric_label = st.segmented_control(
+                "Effectiveness metric", list(ZONE_METRIC_OPTIONS.keys()),
+                default="E%", required=True, key="zone_metrica",
+            )
+            metric_col = ZONE_METRIC_OPTIONS[metric_label]
+            zone_stats = _compute_zone_stats(attack_totale, metric_col)
+            if not settype_view:
+                _render_zone_efficiency_court(attack_totale, metric_col, zone_stats)
             else:
-                zone_mix = _render_zone_settype_court(attack[attack["palla"] != "Totale"])
-    with col_table:
-        if mode == "Efficiency by zone":
-            _render_zone_efficiency_tables(zone_stats)
-        else:
-            _render_zone_settype_tables(zone_mix)
-
-        with st.container(border=True):
-            st.markdown("**Setter**")
-            if setters_alzata.empty:
-                st.caption("No setting data in this scope.")
-            else:
-                tbl = setters_alzata[["player_name", "Tot", "E_pct", "Err_pct", "Slash_pct", "Neg_pct", "Neutral_pct", "Pos_pct", "Perfect_pct"]].rename(
-                    columns={**ZONE_TABLE_RENAME, "Tot": "Sets"}
-                )
-                st.dataframe(
-                    tbl, hide_index=True, width="stretch",
-                    column_config={c: st.column_config.NumberColumn(format="percent") for c in ZONE_TABLE_PERCENT_COLS},
-                )
+                _render_zone_settype_court(attack[attack["palla"] != "Totale"])
+        _render_setter_box(setters_alzata)
+    with col_zones:
+        _render_zone_outcome_boxes(attack_totale, zone_stats, fond_sel, ZONE_METRIC_CONFIG[metric_col])
 
 
 def _render_distribution(scoped: pd.DataFrame, scout: pd.DataFrame, palla_tipi_en: list[str]):
