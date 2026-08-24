@@ -173,6 +173,15 @@ NAV_CSS = """
     [data-testid="stSidebarContent"] {
         overflow-y: hidden !important;
     }
+    /* Slightly wider than Streamlit's 300px default -- the label:widget
+       rows and the Match dropdown (long match names) both wanted a bit
+       more breathing room. !important needed since Streamlit sets this
+       inline (its own resizable-sidebar width state); the main content
+       area is a flex sibling, so it narrows to match automatically. */
+    [data-testid="stSidebar"] {
+        width: 340px !important;
+        min-width: 340px !important;
+    }
     /* Every st.markdown(<style>...) / components.html() call (this one,
        styles.py's, home.py's HERO_CSS) renders as its own zero-height
        stElementContainer -- but Streamlit's vertical gap is a flex `gap`
