@@ -883,8 +883,19 @@ def _render_zone_outcome_boxes(
     count sitting right next to her own row (see
     _add_player_stat_annotations), not one combined stat above the whole
     chart."""
+    st.markdown(
+        """<style>
+        /* Streamlit's own bordered-container padding (~1rem all round)
+           still leaves a visible gap under the chart even after the
+           chart's own bottom margin is trimmed to a few px -- shrink just
+           the container's own bottom padding so the border sits right up
+           against the x-axis tick labels instead. */
+        [class*="st-key-zone_box_"] { padding-bottom: 2px !important; }
+        </style>""",
+        unsafe_allow_html=True,
+    )
     for zone in ["P4", "P3", "P2"]:
-        with st.container(border=True):
+        with st.container(border=True, key=f"zone_box_{zone}"):
             st.markdown(f"**{zone}** · {' / '.join(ZONE_ROLES[zone])}")
             zone_players = attack_totale[attack_totale["Role"].isin(ZONE_ROLES[zone]) & (attack_totale["Tot"] > 0)]
             player_stats = (
