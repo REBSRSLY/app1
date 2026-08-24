@@ -891,11 +891,23 @@ def _render_zone_outcome_boxes(
            the container's own bottom padding so the border sits right up
            against the x-axis tick labels instead. */
         [class*="st-key-zone_box_"] { padding-bottom: 2px !important; }
+        /* The real culprit behind what LOOKED like P3/P4 not shrinking:
+           it isn't each box's own bottom padding (identical everywhere,
+           see above) -- this column is a flex container with its own
+           15px row `gap` between successive blocks (confirmed via
+           getComputedStyle, not a per-child margin -- the
+           stElementContainer margin-bottom override tried first here
+           did nothing, since that's not the mechanism actually in play).
+           P2 is last, so it has no such gap trailing it; P4 and P3 each
+           have one before the next box, which read as "extra space
+           inside P4/P3" even though it's actually between boxes. */
+        .st-key-zone_outcome_col { gap: 2px !important; }
         </style>""",
         unsafe_allow_html=True,
     )
+    zone_col = st.container(key="zone_outcome_col")
     for zone in ["P4", "P3", "P2"]:
-        with st.container(border=True, key=f"zone_box_{zone}"):
+        with zone_col, st.container(border=True, key=f"zone_box_{zone}"):
             st.markdown(f"**{zone}** · {' / '.join(ZONE_ROLES[zone])}")
             zone_players = attack_totale[attack_totale["Role"].isin(ZONE_ROLES[zone]) & (attack_totale["Tot"] > 0)]
             player_stats = (
