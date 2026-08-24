@@ -141,6 +141,17 @@ TEAM_PROFILE_METRICS = {
     "=%": ("Err_pct", "Error %", True),
     "#%": ("Perfect_pct", "% Point / Perfect", True),
 }
+# Flat bar color per non-diverging metric (E% gets its own diverging
+# scale instead, see _render_team_profile) -- =%/#% reuse the exact same
+# colors OUTCOME_COLORS already gives their own symbol (=, #) everywhere
+# else in the app, rather than a generic accent blue unrelated to what
+# the metric means. Ind has no single symbol of its own; "+" green fits
+# since higher Ind is better, same direction as #%'s "good" green.
+TEAM_PROFILE_COLORS = {
+    "Ind": OUTCOME_COLORS["+"],
+    "Err_pct": OUTCOME_COLORS["="],
+    "Perfect_pct": OUTCOME_COLORS["#"],
+}
 
 
 def _render_team_profile(scoped: pd.DataFrame, metric_label: str):
@@ -167,11 +178,13 @@ def _render_team_profile(scoped: pd.DataFrame, metric_label: str):
     if metric_col == "E_pct":
         # Only E% is a diverging (can-go-negative) measure -- the others
         # are plain 0-and-up rates/counts, so a single flat color reads
-        # better there than a gradient with no natural zero to diverge from.
+        # better there than a gradient with no natural zero to diverge
+        # from. Classic red/yellow/green, same family as everywhere else
+        # in the app (Heatmap, court metrics) -- not blue.
         fig = px.bar(
             team, x=metric_col, y="Fundamental", orientation="h",
             category_orders={"Fundamental": order_labels},
-            color=metric_col, color_continuous_scale="RdBu", color_continuous_midpoint=0,
+            color=metric_col, color_continuous_scale="RdYlGn", color_continuous_midpoint=0,
             labels={metric_col: axis_label, "Fundamental": ""},
             custom_data=["FullName", "Tot"], text="Tot",
         )
@@ -181,7 +194,7 @@ def _render_team_profile(scoped: pd.DataFrame, metric_label: str):
             team, x=metric_col, y="Fundamental", orientation="h",
             category_orders={"Fundamental": order_labels},
             labels={metric_col: axis_label, "Fundamental": ""},
-            color_discrete_sequence=["#1655a5"],
+            color_discrete_sequence=[TEAM_PROFILE_COLORS[metric_col]],
             custom_data=["FullName", "Tot"], text="Tot",
         )
     # Opacity list must align with `team`'s own row order (what the trace's
@@ -1031,8 +1044,15 @@ def _render_distribution(scoped: pd.DataFrame, scout: pd.DataFrame, palla_tipi_e
             /* Trims the default gap between the metric picker and the
                heatmap chart below it (and, as a side effect, the smaller
                title-to-picker gap above it too -- both read as wasted
-               space, not just the one under the buttons). */
-            .st-key-heatmap_box { gap: 4px !important; }
+               space, not just the one under the buttons). Also sets the
+               opaque background explicitly: the auto "**Title**
+               first-child" rule (styles.py) doesn't match here since this
+               very style block, not the title, is the box's first child. */
+            .st-key-heatmap_box {
+                gap: 4px !important;
+                background: var(--surface);
+                border-radius: 10px;
+            }
             </style>""",
             unsafe_allow_html=True,
         )
