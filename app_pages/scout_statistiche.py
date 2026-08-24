@@ -86,16 +86,16 @@ SECTIONS = ["Team Profile", "Player Profiles", "Game distribution", "Scout Sheet
 
 # Which front-row zone each role attacks from -- we don't have real
 # per-attack court coordinates, so this fixed assumption (given by the
-# coaching staff) stands in for it. Setters aren't attackers here: their
-# own "Alzata" numbers get a side table instead (see
-# _render_zone_distribution) rather than being folded into P2.
+# coaching staff) stands in for it. Setters aren't attackers here and
+# aren't folded into P2 either -- they're excluded from this section
+# entirely (their own "Alzata" numbers belong to a different
+# fundamental, not one of the 4 zone-attributed ones this chart covers).
 ZONE_ROLES = {
     "P4": ["Outside Hitter"],
     "P3": ["Middle Blocker"],
     "P2": ["Opposite"],
 }
 ZONE_X = {"P4": (0, 3), "P3": (3, 6), "P2": (6, 9)}
-SETTER_SURNAMES = ["Orro", "Prandi"]
 
 
 def _in_scope_dates() -> set[str]:
@@ -764,11 +764,37 @@ def _render_zone_settype_court(attack_by_type: pd.DataFrame):
         st.markdown(f'<div style="padding-top:170px;">{legend_html}</div>', unsafe_allow_html=True)
 
 
-def _render_outcome_mix_by_player(sub_totale: pd.DataFrame, fond_sel: str, height: int | None = None):
+def _player_stat_text(player: str, player_stats: dict, cfg: dict) -> str:
+    stat = player_stats.get(player)
+    if not stat or stat["value"] is None:
+        val_txt = "—"
+    elif cfg["is_pct"]:
+        val_txt = f"{stat['value'] * 100:.0f}%"
+    else:
+        val_txt = f"{stat['value']:.0f}"
+    tot_txt = stat["tot"] if stat else "—"
+    return f"{cfg['label']} {val_txt} · {tot_txt}"
+
+
+def _add_player_stat_annotations(fig: go.Figure, player_order: list[str], player_stats: dict, cfg: dict):
+    """One text annotation per row, just past the 100% mark -- each
+    player's own headline metric value and action count sitting right
+    next to her own bar instead of a single combined stat above the
+    whole chart."""
+    for player in player_order:
+        fig.add_annotation(
+            x=104, y=player, xref="x", yref="y", xanchor="left", yanchor="middle",
+            text=_player_stat_text(player, player_stats, cfg), showarrow=False,
+            font=dict(size=11, color="#d8d8d8"), align="left",
+        )
+
+
+def _render_outcome_mix_by_player(sub_totale: pd.DataFrame, fond_sel: str, player_stats: dict, cfg: dict, height: int | None = None):
     """One 100%-stacked horizontal bar per player -- same outcome legend
     (=, -, !, +, #, /) as Team Profile's own Outcome mix box, but keeps
     each player's own mix distinct instead of collapsing everyone into a
-    single combined bar."""
+    single combined bar. Each row's own headline metric value + action
+    count (`player_stats`) sits just past the bar's own 100% mark."""
     legenda = dl.legenda_fondamentale(fond_sel)
     cols = [c for s, _, _ in legenda if (c := SYMBOL_TO_COL.get(s)) in sub_totale.columns]
     if sub_totale.empty or not cols:
@@ -791,7 +817,7 @@ def _render_outcome_mix_by_player(sub_totale: pd.DataFrame, fond_sel: str, heigh
     outcome_order = [o for o in _OUTCOME_ORDER if o in d["Outcome"].unique()]
     player_order = [p for p in players if p in d["Player"].unique()]
     if height is None:
-        height = max(70, 34 * len(player_order) + 30)
+        height = max(70, 34 * len(player_order) + 20)
     fig = px.bar(
         d, x="count", y="Player", color="Outcome", orientation="h",
         category_orders={"Outcome": outcome_order, "Player": player_order},
@@ -799,19 +825,22 @@ def _render_outcome_mix_by_player(sub_totale: pd.DataFrame, fond_sel: str, heigh
         labels={"count": "", "Player": ""},
     )
     fig.update_traces(hovertemplate="<b>%{y}</b> · %{fullData.name}: %{x}<extra></extra>")
+    _add_player_stat_annotations(fig, player_order, player_stats, cfg)
     fig.update_layout(
         barmode="stack", barnorm="percent", showlegend=False,
-        height=height, margin=dict(l=0, r=10, t=4, b=22),
-        xaxis=dict(ticksuffix="%"), yaxis=dict(categoryorder="array", categoryarray=player_order[::-1], tickfont=dict(size=11)),
+        height=height, margin=dict(l=0, r=10, t=4, b=4),
+        xaxis=dict(range=[0, 148], tickvals=[0, 20, 40, 60, 80, 100], ticksuffix="%"),
+        yaxis=dict(categoryorder="array", categoryarray=player_order[::-1], tickfont=dict(size=11)),
     )
     st.plotly_chart(fig, width="stretch")
 
 
-def _render_settype_mix_by_player(sub_by_type: pd.DataFrame, height: int | None = None):
+def _render_settype_mix_by_player(sub_by_type: pd.DataFrame, player_stats: dict, cfg: dict, height: int | None = None):
     """One 100%-stacked horizontal bar per player, showing that player's
     own set-type mix (High/Medium/Quick/Shoot/Other) -- the per-player
     equivalent of the court's own set-type stripes, shown when the left
-    toggle is in Set type by zone."""
+    toggle is in Set type by zone. Same per-row stat annotation as the
+    outcome-mix version above."""
     if sub_by_type.empty:
         st.caption("No set-type data.")
         return
@@ -824,7 +853,7 @@ def _render_settype_mix_by_player(sub_by_type: pd.DataFrame, height: int | None 
     players = sub_by_type.groupby("player_name")["Tot"].sum().sort_values(ascending=False).index.tolist()
     palla_order = [dl.PALLA_LABELS[p] for p in RAW_PALLA_ORDER[1:] if p in d["palla"].unique()]
     if height is None:
-        height = max(70, 34 * len(players) + 30)
+        height = max(70, 34 * len(players) + 20)
     fig = px.bar(
         d, x="Tot", y="player_name", color="palla_en", orientation="h",
         category_orders={"palla_en": palla_order, "player_name": players},
@@ -832,80 +861,59 @@ def _render_settype_mix_by_player(sub_by_type: pd.DataFrame, height: int | None 
         labels={"Tot": "", "player_name": "", "palla_en": ""},
     )
     fig.update_traces(hovertemplate="<b>%{y}</b> · %{fullData.name}: %{x}<extra></extra>")
+    _add_player_stat_annotations(fig, players, player_stats, cfg)
     fig.update_layout(
         barmode="stack", barnorm="percent", showlegend=False,
-        height=height, margin=dict(l=0, r=10, t=4, b=22),
-        xaxis=dict(ticksuffix="%"), yaxis=dict(categoryorder="array", categoryarray=players[::-1], tickfont=dict(size=11)),
+        height=height, margin=dict(l=0, r=10, t=4, b=4),
+        xaxis=dict(range=[0, 148], tickvals=[0, 20, 40, 60, 80, 100], ticksuffix="%"),
+        yaxis=dict(categoryorder="array", categoryarray=players[::-1], tickfont=dict(size=11)),
     )
     st.plotly_chart(fig, width="stretch")
 
 
 def _render_zone_outcome_boxes(
-    attack_totale: pd.DataFrame, attack_by_type: pd.DataFrame, zone_stats: dict,
-    fond_sel: str, cfg: dict, settype_view: bool,
+    attack_totale: pd.DataFrame, attack_by_type: pd.DataFrame,
+    fond_sel: str, metric_col: str, cfg: dict, settype_view: bool,
 ):
     """The right-hand column's 3 boxes (P4/P3/P2), replacing the old
     per-zone detail tables: each zone's own players, each with their own
     bar -- outcome mix normally, or set-type mix when the left toggle is
-    in Set type by zone -- plus the zone's headline metric value and
-    attack count (from `zone_stats`, shared with the court's own
-    coloring) side by side above the chart."""
+    in Set type by zone -- and her own headline metric value + action
+    count sitting right next to her own row (see
+    _add_player_stat_annotations), not one combined stat above the whole
+    chart."""
     for zone in ["P4", "P3", "P2"]:
         with st.container(border=True):
             st.markdown(f"**{zone}** · {' / '.join(ZONE_ROLES[zone])}")
-            stats = zone_stats[zone]
-            if stats["value"] is None:
-                value_txt = "—"
-            elif cfg["is_pct"]:
-                value_txt = f"{stats['value'] * 100:.0f}%"
-            else:
-                value_txt = f"{stats['value']:.0f}"
-            st.markdown(
-                f'<div style="display:flex;gap:22px;margin:2px 0 6px;">'
-                f'<div><span style="font-size:11px;color:var(--muted);">{cfg["label"]}</span>'
-                f'&nbsp;<b style="font-size:1.05rem;">{value_txt}</b></div>'
-                f'<div><span style="font-size:11px;color:var(--muted);"># actions</span>'
-                f'&nbsp;<b style="font-size:1.05rem;">{stats["tot"]}</b></div>'
-                f'</div>',
-                unsafe_allow_html=True,
+            zone_players = attack_totale[attack_totale["Role"].isin(ZONE_ROLES[zone]) & (attack_totale["Tot"] > 0)]
+            player_stats = (
+                zone_players.set_index("player_name")[[metric_col, "Tot"]]
+                .rename(columns={metric_col: "value", "Tot": "tot"})
+                .to_dict("index")
             )
             if not settype_view:
-                sub = attack_totale[attack_totale["Role"].isin(ZONE_ROLES[zone]) & (attack_totale["Tot"] > 0)]
-                _render_outcome_mix_by_player(sub, fond_sel)
+                _render_outcome_mix_by_player(zone_players, fond_sel, player_stats, cfg)
             else:
                 sub_type = attack_by_type[attack_by_type["Role"].isin(ZONE_ROLES[zone]) & (attack_by_type["Tot"] > 0)]
-                _render_settype_mix_by_player(sub_type)
-
-
-def _render_setter_box(setters_alzata: pd.DataFrame):
-    with st.container(border=True):
-        st.markdown("**Setter** · Alzata")
-        if setters_alzata.empty:
-            st.caption("No setting data in this scope.")
-            return
-        _render_outcome_mix_by_player(setters_alzata, "Alzata")
-        st.caption(f"{int(setters_alzata['Tot'].sum())} sets across {setters_alzata['player_name'].nunique()} setter(s).")
+                _render_settype_mix_by_player(sub_type, player_stats, cfg)
 
 
 def _render_zone_distribution(scoped: pd.DataFrame, fond_sel: str):
     """Charts 4 & 5 (behind a top-right toggle switch, not a labeled
-    segmented control below the title): where the setters' sets end up
+    segmented control below the title): where the attacks end up
     (P4/P3/P2), either colored by efficiency or by set-type mix, for
     whichever of the 4 "with palla" fundamentals is selected above (not
     hardcoded to Attacco -- Att dopo Ricez/Contrattacco/Muro all carry the
-    same zone/set-type breakdown). Orro and Prandi -- the setters -- aren't
-    attackers assigned to a zone here; their own setting numbers get their
-    own box instead, always from Alzata regardless of which fundamental is
-    selected, since that's the setters' own actions rather than one of the
-    4 zone-attributed ones.
+    same zone/set-type breakdown).
 
-    Left column: the court (Setting distribution) + the Setter box, both
-    shrunk from the old 680px-tall court so title, switch, metric picker,
-    court and legend all fit one screen. Right column: one box per zone
-    (P4/P3/P2), replacing the old per-zone detail tables -- each player's
-    own bar, switching content with the left toggle same as the court
-    does (outcome mix in the Efficiency view, set-type mix in Set type
-    by zone)."""
+    Left column: the court (Setting distribution), shrunk from the old
+    680px-tall version so title, switch, metric picker, court and legend
+    all fit one screen. Right column: one box per zone (P4/P3/P2),
+    replacing the old per-zone detail tables -- each player's own bar,
+    switching content with the left toggle same as the court does
+    (outcome mix in the Efficiency view, set-type mix in Set type by
+    zone), her own headline metric value + action count sitting right
+    next to her own row."""
     names = dl.load_player_names()
     roles = dl.load_player_roles()
     name_to_role = {names[code]: dl.ROLE_LABELS.get(r, r) for code, r in roles.items() if code in names}
@@ -914,11 +922,6 @@ def _render_zone_distribution(scoped: pd.DataFrame, fond_sel: str):
     attack["Role"] = attack["player_name"].map(name_to_role)
     attack_totale = attack[attack["palla"] == "Totale"]
     attack_by_type = attack[attack["palla"] != "Totale"]
-
-    setters_alzata = scoped[
-        (scoped["fondamentale"] == "Alzata") & (scoped["palla"] == "Totale")
-        & (scoped["player_name"].isin(SETTER_SURNAMES)) & (scoped["Tot"] > 0)
-    ]
 
     col_court, col_zones = st.columns([1, 1])
     with col_court:
@@ -959,10 +962,9 @@ def _render_zone_distribution(scoped: pd.DataFrame, fond_sel: str):
                 _render_zone_efficiency_court(attack_totale, metric_col, zone_stats)
             else:
                 _render_zone_settype_court(attack_by_type)
-        _render_setter_box(setters_alzata)
     with col_zones:
         _render_zone_outcome_boxes(
-            attack_totale, attack_by_type, zone_stats, fond_sel, ZONE_METRIC_CONFIG[metric_col], settype_view,
+            attack_totale, attack_by_type, fond_sel, metric_col, ZONE_METRIC_CONFIG[metric_col], settype_view,
         )
 
 
