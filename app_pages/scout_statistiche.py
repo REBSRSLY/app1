@@ -683,16 +683,17 @@ def _render_zone_efficiency_court(attack_totale: pd.DataFrame, metric_col: str, 
 
     # Dummy invisible trace, only to host a real gradient colorbar (the
     # zones themselves are plain shapes, which have no colorbar of their
-    # own) -- horizontal, below the court, out of the way of the narrower
-    # column this chart now renders in.
+    # own) -- vertical, to the side of the court (same treatment as the
+    # Set type by zone view's own legend) rather than a horizontal bar
+    # underneath it.
     fig.add_trace(go.Scatter(
         x=[None], y=[None], mode="markers",
         marker=dict(
             colorscale=cfg["colorscale"], cmin=cfg["cmin"], cmax=cfg["cmax"], showscale=True, color=[0], size=0.1,
             colorbar=dict(
-                title=dict(text=cfg["label"], side="top"), orientation="h",
+                title=dict(text=cfg["label"], side="top"), orientation="v",
                 tickformat=".0%" if cfg["is_pct"] else None,
-                thickness=15, len=0.9, x=0.5, xanchor="center", y=-0.1, yanchor="top",
+                thickness=15, len=0.75, x=1.02, xanchor="left", y=0.5, yanchor="middle",
             ),
         ),
         showlegend=False, hoverinfo="skip",
@@ -700,7 +701,7 @@ def _render_zone_efficiency_court(attack_totale: pd.DataFrame, metric_col: str, 
 
     fig.update_xaxes(visible=False, range=[-0.3, 9.3])
     fig.update_yaxes(visible=False, range=[-0.3, 9.3], scaleanchor="x")
-    fig.update_layout(height=440, margin=dict(l=10, r=10, t=10, b=60), plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+    fig.update_layout(height=440, margin=dict(l=10, r=70, t=10, b=10), plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
     st.plotly_chart(fig, width="stretch")
     if any_low:
         st.caption(f"A paler zone had fewer than {dl.MIN_RELIABLE_N} attacks in this scope — read its color with caution.")
