@@ -709,7 +709,9 @@ def _render_zone_efficiency_court(attack_totale: pd.DataFrame, metric_col: str, 
 def _render_zone_settype_court(attack_by_type: pd.DataFrame):
     """Chart 5: same court, but each zone is split into proportional
     stripes by set type (same colors as the rest of the app's set-type
-    charts) instead of a single efficiency color."""
+    charts) instead of a single efficiency color. Legend runs down a
+    narrow column beside the court, vertically, instead of a horizontal
+    row of swatches underneath it."""
     zone_mix = {}
     for zone, roles_in_zone in ZONE_ROLES.items():
         sub = attack_by_type[attack_by_type["Role"].isin(roles_in_zone) & (attack_by_type["Tot"] > 0)]
@@ -746,58 +748,108 @@ def _render_zone_settype_court(attack_by_type: pd.DataFrame):
     fig.update_xaxes(visible=False, range=[-0.3, 9.3])
     fig.update_yaxes(visible=False, range=[-0.3, 9.3], scaleanchor="x")
     fig.update_layout(height=440, margin=dict(l=10, r=10, t=10, b=10), plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
-    st.plotly_chart(fig, width="stretch")
 
-    legend_html = "&nbsp;&nbsp;".join(
-        f'<span style="display:inline-block;width:10px;height:10px;background:{PALLA_COLORS[p]};'
-        f'border-radius:2px;margin-right:4px;"></span>'
-        f'<span style="color:{PALLA_COLORS[p]};">{dl.PALLA_LABELS[p]}</span>'
-        for p in RAW_PALLA_ORDER[1:]
-    )
-    st.markdown(legend_html, unsafe_allow_html=True)
+    col_chart, col_legend = st.columns([5, 1])
+    with col_chart:
+        st.plotly_chart(fig, width="stretch")
+    with col_legend:
+        legend_html = "".join(
+            f'<div style="display:flex;align-items:center;gap:6px;margin:14px 0;">'
+            f'<span style="display:inline-block;width:10px;height:10px;border-radius:2px;'
+            f'background:{PALLA_COLORS[p]};flex-shrink:0;"></span>'
+            f'<span style="color:{PALLA_COLORS[p]};font-size:12.5px;">{dl.PALLA_LABELS[p]}</span>'
+            f'</div>'
+            for p in RAW_PALLA_ORDER[1:]
+        )
+        st.markdown(f'<div style="padding-top:170px;">{legend_html}</div>', unsafe_allow_html=True)
 
 
-def _render_outcome_mix_row(sub_totale: pd.DataFrame, fond_sel: str, height: int = 60):
-    """Single 100%-stacked horizontal bar of `sub_totale`'s combined
-    outcome mix (=, -, !, +, #, /) for `fond_sel` -- a compact companion to
-    a headline value + count pair beside it, not a standalone analysis
-    chart (see Team Profile's own Outcome mix box for that)."""
+def _render_outcome_mix_by_player(sub_totale: pd.DataFrame, fond_sel: str, height: int | None = None):
+    """One 100%-stacked horizontal bar per player -- same outcome legend
+    (=, -, !, +, #, /) as Team Profile's own Outcome mix box, but keeps
+    each player's own mix distinct instead of collapsing everyone into a
+    single combined bar."""
     legenda = dl.legenda_fondamentale(fond_sel)
+    cols = [c for s, _, _ in legenda if (c := SYMBOL_TO_COL.get(s)) in sub_totale.columns]
+    if sub_totale.empty or not cols:
+        st.caption("No outcome data.")
+        return
+    agg = sub_totale.groupby("player_name")[cols].sum(numeric_only=True)
+    players = sub_totale.groupby("player_name")["Tot"].sum().sort_values(ascending=False).index.tolist()
     rows = []
     for simbolo, _, _ in legenda:
         col = SYMBOL_TO_COL.get(simbolo)
-        if col is None or col not in sub_totale.columns:
+        if col not in agg.columns:
             continue
-        count = sub_totale[col].fillna(0).sum()
-        if count <= 0:
-            continue
-        rows.append({"Outcome": simbolo, "count": count, "y": ""})
+        for player, count in agg[col].items():
+            if count and count > 0:
+                rows.append({"Outcome": simbolo, "count": count, "Player": player})
     d = pd.DataFrame(rows)
     if d.empty:
         st.caption("No outcome data.")
         return
     outcome_order = [o for o in _OUTCOME_ORDER if o in d["Outcome"].unique()]
+    player_order = [p for p in players if p in d["Player"].unique()]
+    if height is None:
+        height = max(70, 34 * len(player_order) + 30)
     fig = px.bar(
-        d, x="count", y="y", color="Outcome", orientation="h",
-        category_orders={"Outcome": outcome_order},
+        d, x="count", y="Player", color="Outcome", orientation="h",
+        category_orders={"Outcome": outcome_order, "Player": player_order},
         color_discrete_map=OUTCOME_COLORS,
-        labels={"count": "", "y": ""},
+        labels={"count": "", "Player": ""},
     )
-    fig.update_traces(hovertemplate="%{fullData.name}: %{x}<extra></extra>")
+    fig.update_traces(hovertemplate="<b>%{y}</b> · %{fullData.name}: %{x}<extra></extra>")
     fig.update_layout(
         barmode="stack", barnorm="percent", showlegend=False,
         height=height, margin=dict(l=0, r=10, t=4, b=22),
-        xaxis=dict(ticksuffix="%"), yaxis=dict(showticklabels=False),
+        xaxis=dict(ticksuffix="%"), yaxis=dict(categoryorder="array", categoryarray=player_order[::-1], tickfont=dict(size=11)),
     )
     st.plotly_chart(fig, width="stretch")
 
 
-def _render_zone_outcome_boxes(attack_totale: pd.DataFrame, zone_stats: dict, fond_sel: str, cfg: dict):
+def _render_settype_mix_by_player(sub_by_type: pd.DataFrame, height: int | None = None):
+    """One 100%-stacked horizontal bar per player, showing that player's
+    own set-type mix (High/Medium/Quick/Shoot/Other) -- the per-player
+    equivalent of the court's own set-type stripes, shown when the left
+    toggle is in Set type by zone."""
+    if sub_by_type.empty:
+        st.caption("No set-type data.")
+        return
+    d = sub_by_type.groupby(["player_name", "palla"], observed=True)["Tot"].sum().reset_index()
+    d = d[d["Tot"] > 0]
+    if d.empty:
+        st.caption("No set-type data.")
+        return
+    d["palla_en"] = d["palla"].map(dl.PALLA_LABELS)
+    players = sub_by_type.groupby("player_name")["Tot"].sum().sort_values(ascending=False).index.tolist()
+    palla_order = [dl.PALLA_LABELS[p] for p in RAW_PALLA_ORDER[1:] if p in d["palla"].unique()]
+    if height is None:
+        height = max(70, 34 * len(players) + 30)
+    fig = px.bar(
+        d, x="Tot", y="player_name", color="palla_en", orientation="h",
+        category_orders={"palla_en": palla_order, "player_name": players},
+        color_discrete_map=PALLA_COLORS_EN,
+        labels={"Tot": "", "player_name": "", "palla_en": ""},
+    )
+    fig.update_traces(hovertemplate="<b>%{y}</b> · %{fullData.name}: %{x}<extra></extra>")
+    fig.update_layout(
+        barmode="stack", barnorm="percent", showlegend=False,
+        height=height, margin=dict(l=0, r=10, t=4, b=22),
+        xaxis=dict(ticksuffix="%"), yaxis=dict(categoryorder="array", categoryarray=players[::-1], tickfont=dict(size=11)),
+    )
+    st.plotly_chart(fig, width="stretch")
+
+
+def _render_zone_outcome_boxes(
+    attack_totale: pd.DataFrame, attack_by_type: pd.DataFrame, zone_stats: dict,
+    fond_sel: str, cfg: dict, settype_view: bool,
+):
     """The right-hand column's 3 boxes (P4/P3/P2), replacing the old
-    per-zone detail tables: each zone's own outcome mix as one stacked
-    bar, with its headline metric value and attack count -- the same
-    numbers `zone_stats` already carries -- laid out beside it rather
-    than in a table column."""
+    per-zone detail tables: each zone's own players, each with their own
+    bar -- outcome mix normally, or set-type mix when the left toggle is
+    in Set type by zone -- plus the zone's headline metric value and
+    attack count (from `zone_stats`, shared with the court's own
+    coloring) side by side above the chart."""
     for zone in ["P4", "P3", "P2"]:
         with st.container(border=True):
             st.markdown(f"**{zone}** · {' / '.join(ZONE_ROLES[zone])}")
@@ -808,20 +860,21 @@ def _render_zone_outcome_boxes(attack_totale: pd.DataFrame, zone_stats: dict, fo
                 value_txt = f"{stats['value'] * 100:.0f}%"
             else:
                 value_txt = f"{stats['value']:.0f}"
-            col_bar, col_stats = st.columns([3, 1])
-            with col_bar:
+            st.markdown(
+                f'<div style="display:flex;gap:22px;margin:2px 0 6px;">'
+                f'<div><span style="font-size:11px;color:var(--muted);">{cfg["label"]}</span>'
+                f'&nbsp;<b style="font-size:1.05rem;">{value_txt}</b></div>'
+                f'<div><span style="font-size:11px;color:var(--muted);"># actions</span>'
+                f'&nbsp;<b style="font-size:1.05rem;">{stats["tot"]}</b></div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+            if not settype_view:
                 sub = attack_totale[attack_totale["Role"].isin(ZONE_ROLES[zone]) & (attack_totale["Tot"] > 0)]
-                _render_outcome_mix_row(sub, fond_sel)
-            with col_stats:
-                st.markdown(
-                    f'<div style="padding-top:6px;">'
-                    f'<div style="font-size:11px;color:var(--muted);">{cfg["label"]}</div>'
-                    f'<div style="font-size:1.3rem;font-weight:800;line-height:1.1;">{value_txt}</div>'
-                    f'<div style="font-size:11px;color:var(--muted);margin-top:8px;"># actions</div>'
-                    f'<div style="font-size:1.05rem;font-weight:700;">{stats["tot"]}</div>'
-                    f'</div>',
-                    unsafe_allow_html=True,
-                )
+                _render_outcome_mix_by_player(sub, fond_sel)
+            else:
+                sub_type = attack_by_type[attack_by_type["Role"].isin(ZONE_ROLES[zone]) & (attack_by_type["Tot"] > 0)]
+                _render_settype_mix_by_player(sub_type)
 
 
 def _render_setter_box(setters_alzata: pd.DataFrame):
@@ -830,7 +883,7 @@ def _render_setter_box(setters_alzata: pd.DataFrame):
         if setters_alzata.empty:
             st.caption("No setting data in this scope.")
             return
-        _render_outcome_mix_row(setters_alzata, "Alzata", height=70)
+        _render_outcome_mix_by_player(setters_alzata, "Alzata")
         st.caption(f"{int(setters_alzata['Tot'].sum())} sets across {setters_alzata['player_name'].nunique()} setter(s).")
 
 
@@ -848,10 +901,11 @@ def _render_zone_distribution(scoped: pd.DataFrame, fond_sel: str):
 
     Left column: the court (Setting distribution) + the Setter box, both
     shrunk from the old 680px-tall court so title, switch, metric picker,
-    court and legend all fit one screen. Right column: one outcome-mix box
-    per zone (P4/P3/P2), replacing the old per-zone detail tables --
-    mode-independent (always outcome mix), unlike the tables that used to
-    switch with the left toggle."""
+    court and legend all fit one screen. Right column: one box per zone
+    (P4/P3/P2), replacing the old per-zone detail tables -- each player's
+    own bar, switching content with the left toggle same as the court
+    does (outcome mix in the Efficiency view, set-type mix in Set type
+    by zone)."""
     names = dl.load_player_names()
     roles = dl.load_player_roles()
     name_to_role = {names[code]: dl.ROLE_LABELS.get(r, r) for code, r in roles.items() if code in names}
@@ -859,6 +913,7 @@ def _render_zone_distribution(scoped: pd.DataFrame, fond_sel: str):
     attack = scoped[(scoped["fondamentale"] == fond_sel) & (~scoped["is_team"])].copy()
     attack["Role"] = attack["player_name"].map(name_to_role)
     attack_totale = attack[attack["palla"] == "Totale"]
+    attack_by_type = attack[attack["palla"] != "Totale"]
 
     setters_alzata = scoped[
         (scoped["fondamentale"] == "Alzata") & (scoped["palla"] == "Totale")
@@ -875,7 +930,11 @@ def _render_zone_distribution(scoped: pd.DataFrame, fond_sel: str):
             track_color = "#1655a5" if settype_view else "#1655a555"
             st.markdown(
                 f"""<style>
-                .st-key-zone_dist_box {{ position: relative; }}
+                .st-key-zone_dist_box {{
+                    position: relative;
+                    background: var(--surface);
+                    border-radius: 10px;
+                }}
                 .st-key-zone_mode_toggle {{
                     position: absolute !important; top: 14px; right: 16px; z-index: 2;
                     transform: scale(1.5); transform-origin: top right;
@@ -899,10 +958,12 @@ def _render_zone_distribution(scoped: pd.DataFrame, fond_sel: str):
             if not settype_view:
                 _render_zone_efficiency_court(attack_totale, metric_col, zone_stats)
             else:
-                _render_zone_settype_court(attack[attack["palla"] != "Totale"])
+                _render_zone_settype_court(attack_by_type)
         _render_setter_box(setters_alzata)
     with col_zones:
-        _render_zone_outcome_boxes(attack_totale, zone_stats, fond_sel, ZONE_METRIC_CONFIG[metric_col])
+        _render_zone_outcome_boxes(
+            attack_totale, attack_by_type, zone_stats, fond_sel, ZONE_METRIC_CONFIG[metric_col], settype_view,
+        )
 
 
 def _render_distribution(scoped: pd.DataFrame, scout: pd.DataFrame, palla_tipi_en: list[str]):
