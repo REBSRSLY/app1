@@ -272,6 +272,37 @@ def formula_fondamentale(fondamentale: str) -> dict:
     return FORMULE.get(fondamentale, {})
 
 
+# Same 6 formulas as FORMULE's own "e_pct" strings above, written as code
+# instead of a display string -- lets a caller recompute E% from summed
+# raw counts (e.g. aggregating several matches' team rows into one
+# "last 7 days" total) instead of only reading the pre-computed per-row
+# E_pct column, which can't be summed or averaged across rows directly.
+_E_PCT_WEIGHTS = {
+    "Battuta": {"Perfect": 1, "Err": -1},
+    "Ricezione": {"Perfect": 1, "Pos": 1, "Slash": -1, "Err": -1},
+    "Attacco": {"Perfect": 1, "Slash": -1, "Err": -1},
+    "Muro": {"Perfect": 1, "Pos": 1, "Neutral": 1, "Slash": -1, "Err": -1},
+    "Difesa": {"Perfect": 1, "Pos": 1, "Neutral": 1},
+    "Free ball": {"Perfect": 1, "Pos": 1, "Slash": -1, "Err": -1},
+    "Alzata": {"Perfect": 1, "Pos": 1, "Slash": -1, "Err": -1},
+}
+_E_PCT_WEIGHTS["Att dopo Ricez"] = _E_PCT_WEIGHTS["Attacco"]
+_E_PCT_WEIGHTS["Contrattacco"] = _E_PCT_WEIGHTS["Attacco"]
+
+
+def e_pct_from_counts(fondamentale: str, counts: dict) -> float | None:
+    """E% recomputed from aggregated raw counts (keys: Tot plus any of
+    Err/Slash/Neg/Neutral/Pos/Perfect) using the same weights as FORMULE's
+    own "e_pct" formula strings -- needed whenever counts from several
+    rows/matches are summed first, since E_pct itself can't be summed or
+    plainly averaged across rows of different volume."""
+    tot = counts.get("Tot", 0)
+    weights = _E_PCT_WEIGHTS.get(fondamentale)
+    if not tot or weights is None:
+        return None
+    return sum(counts.get(col, 0) * w for col, w in weights.items()) / tot
+
+
 def perfetto_label(fondamentale: str) -> str:
     """Name of the best outcome (symbol '#') for the given fundamental."""
     return GLOSSARIO.get(fondamentale, {}).get("perfetto", "Perfect")
