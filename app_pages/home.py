@@ -40,40 +40,44 @@ _MONTH_NAMES = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep
 # below -- one standard footprint for every card on the grid, chart or
 # not, instead of each tile picking its own (previously 62-150px).
 TILE_CHART_HEIGHT = 132
-TILE_CARD_MIN_HEIGHT = 216
+# Tall enough that even the longest two-line titles (a "**Title** ·
+# subtitle · dd Mon" snapshot title wrapping in a narrow quarter-width
+# column) fit without pushing that card past every other one's height --
+# min-height on every card (not just the tall ones) is what makes the
+# whole row line up edge to edge.
+TILE_CARD_MIN_HEIGHT = 228
 
-# Every card the Home dashboard can show, keyed for the Customize popover's
-# checkboxes -- "default": True is what a first-time visitor sees; nothing
-# here is hardcoded into the page layout anymore, render() just draws
-# whichever keys are currently checked, in this catalog's order, wrapped
-# into rows. Grouped by source page for the popover's own sections; that
-# grouping isn't shown on the page itself (titles alone carry enough
-# context for a card this small).
-TILE_CATALOG = [
-    ("wellness_low_recovery", "Low recovery", "Wellness", True),
-    ("wellness_team_tqr_gauge", "Team TQR", "Wellness", True),
-    ("wellness_team_tqr_trend", "Team TQR trend", "Wellness", False),
-    ("wellness_individual_tqr", "Individual TQR trends", "Wellness", False),
-    ("loads_readiness", "Team readiness (ACWR)", "Loads", True),
-    ("loads_acwr_chart", "ACWR & weekly load", "Loads", True),
-    ("loads_jumps", "Jumps per player", "Loads", False),
-    ("loads_rpe_scatter", "RPE vs. session duration", "Loads", False),
-    ("matches_league_position", "League position", "Matches", True),
-    ("matches_recent_form", "Recent form", "Matches", True),
-    ("matches_score_patterns", "Score patterns", "Matches", True),
-    ("matches_per_month", "Matches per month", "Matches", False),
-    ("scout_top_scorers", "Top scorers", "Scout & Stats", True),
-    ("scout_top_efficiency", "Top efficiency", "Scout & Stats", False),
-    ("scout_team_shape", "Team shape radar", "Scout & Stats", True),
-    ("scout_serve_outcome", "Serve outcome mix", "Scout & Stats", True),
-    ("scout_attack_outcome", "Attack outcome mix", "Scout & Stats", False),
-    ("scout_efficiency_trend_attack", "Efficiency trend · Attack", "Scout & Stats", False),
-    ("scout_efficiency_trend_serve", "Efficiency trend · Serve", "Scout & Stats", False),
-    ("scout_setting_points", "Setting distribution · points", "Scout & Stats", False),
-    ("scout_setting_errors", "Setting distribution · errors", "Scout & Stats", False),
-    ("scout_team_profile_bar", "Team profile · E% bar", "Scout & Stats", False),
+# The 12 tiles that always show, pinned in this exact 3-row/4-column
+# order -- not user-configurable, per an explicit request for a stable
+# "core" dashboard instead of everything being toggleable. Everything
+# else lives in OPTIONAL_CATALOG below, toggled through the Customize
+# popover same as before.
+FIXED_TILES = [
+    "matches_league_position", "matches_recent_form", "scout_top_scorers", "scout_setting_points",
+    "scout_top_efficiency_attack", "scout_attack_outcome", "scout_efficiency_trend_attack", "scout_setting_errors",
+    "loads_readiness", "loads_acwr_chart", "wellness_low_recovery", "wellness_team_tqr_gauge",
 ]
-TILE_LABELS = {key: label for key, label, _page, _default in TILE_CATALOG}
+
+# Every OTHER card Home can show, keyed for the Customize popover's
+# checkboxes -- unchecked by default, since the 12 fixed tiles above are
+# already the "always visible" core; these are opt-in extras. Grouped by
+# source page for the popover's own sections; that grouping isn't shown
+# on the page itself (titles alone carry enough context for a card this
+# small).
+OPTIONAL_CATALOG = [
+    ("wellness_team_tqr_trend", "Team TQR trend", "Wellness"),
+    ("wellness_individual_tqr", "Individual TQR trends", "Wellness"),
+    ("loads_jumps", "Jumps per player", "Loads"),
+    ("loads_rpe_scatter", "RPE vs. session duration", "Loads"),
+    ("matches_score_patterns", "Score patterns", "Matches"),
+    ("matches_per_month", "Matches per month", "Matches"),
+    ("scout_top_efficiency_serve", "Top efficiency · Serve", "Scout & Stats"),
+    ("scout_top_efficiency_receive", "Top efficiency · Receive", "Scout & Stats"),
+    ("scout_team_shape", "Team shape radar", "Scout & Stats"),
+    ("scout_serve_outcome", "Serve outcome mix", "Scout & Stats"),
+    ("scout_efficiency_trend_serve", "Efficiency trend · Serve", "Scout & Stats"),
+    ("scout_team_profile_bar", "Team profile · E% bar", "Scout & Stats"),
+]
 
 # Every tile is either a "trend" (season-wide, ignores the sidebar's period
 # entirely -- trend lines, per-day/per-month charts, match results, season
@@ -96,7 +100,9 @@ TILE_SCOPE = {
     "matches_score_patterns": "trend",
     "matches_per_month": "trend",
     "scout_top_scorers": "trend",
-    "scout_top_efficiency": "snapshot",
+    "scout_top_efficiency_attack": "snapshot",
+    "scout_top_efficiency_serve": "snapshot",
+    "scout_top_efficiency_receive": "snapshot",
     "scout_team_shape": "snapshot",
     "scout_serve_outcome": "snapshot",
     "scout_attack_outcome": "snapshot",
@@ -174,12 +180,12 @@ HERO_CSS = f"""
 
 
 def _render_hero(season: str) -> list[str]:
-    """Returns the tile keys currently checked in the Customize popover --
-    built straight from this run's checkboxes (rather than read back from
-    st.session_state under a different key) so render() always sees this
-    run's actual selection immediately, not whatever was true before this
-    rerun. Every tile on the page -- not just a handful of "extras" -- is
-    listed here now, so the whole dashboard is user-configurable."""
+    """Returns the OPTIONAL tile keys currently checked in the Customize
+    popover -- built straight from this run's checkboxes (rather than read
+    back from st.session_state under a different key) so render() always
+    sees this run's actual selection immediately, not whatever was true
+    before this rerun. The 12 FIXED_TILES aren't listed here at all --
+    they always render, unconditionally, in render()."""
     with st.container(key="css_hero"):
         st.markdown(HERO_CSS, unsafe_allow_html=True)
     selected: list[str] = []
@@ -198,18 +204,18 @@ def _render_hero(season: str) -> list[str]:
             )
 
         with col_customize, st.container(key="home_customize_box"), st.popover("Customize", icon=":material/tune:", width="stretch"):
-            st.markdown("**Choose what shows on Home**")
+            st.markdown("**Add extra cards**")
             st.caption(
-                "Home ignores the sidebar's period on purpose: cards with a "
+                "The 12 cards on the dashboard are fixed. These are opt-in extras -- "
+                "cards with a "
                 f'<span style="color:{GOOD_COLOR};">green</span> border always span the whole season; '
                 f'cards with a <span style="color:{WARN_COLOR};">yellow</span> border show only the single '
-                "latest available day or match (its date sits next to the title). "
-                "Every card here is optional; toggle any of them on or off, grouped by where it comes from.",
+                "latest available day or match (its date sits next to the title).",
                 unsafe_allow_html=True,
             )
-            by_page: dict[str, list[tuple[str, str, bool]]] = {}
-            for key, label, page, default in TILE_CATALOG:
-                by_page.setdefault(page, []).append((key, label, default))
+            by_page: dict[str, list[tuple[str, str]]] = {}
+            for key, label, page in OPTIONAL_CATALOG:
+                by_page.setdefault(page, []).append((key, label))
             for i, (page, items) in enumerate(by_page.items()):
                 border = "border-top:1px solid var(--line);padding-top:8px;" if i > 0 else ""
                 st.markdown(
@@ -217,8 +223,8 @@ def _render_hero(season: str) -> list[str]:
                     f'letter-spacing:0.06em;font-weight:700;margin-top:8px;{border}">{page}</div>',
                     unsafe_allow_html=True,
                 )
-                for key, label, default in items:
-                    if st.checkbox(label, value=default, key=f"home_tile_{key}"):
+                for key, label in items:
+                    if st.checkbox(label, value=False, key=f"home_tile_{key}"):
                         selected.append(key)
     return selected
 
@@ -497,44 +503,60 @@ def _tile_top_scorers(tile_key: str):
         st.markdown(rows_html, unsafe_allow_html=True)
 
 
-def _tile_top_efficiency(tile_key: str):
-    """Complements Top scorers (season volume) with a quality leaderboard
-    for the latest match only -- best Attack E% among players who've
-    actually had enough touches that match (dl.MIN_RELIABLE_N) to trust
-    the number, so a 1-for-1 outlier can't top the list."""
+def _render_top_efficiency(fondamentale: str, latest: dict):
+    """Quality leaderboard for the latest match only -- best E% for
+    `fondamentale` among players who've actually had enough touches that
+    match (dl.MIN_RELIABLE_N) to trust the number, so a 1-for-1 outlier
+    can't top the list."""
+    scout = dl.load_scout_data()
+    base = scout[
+        (scout["match"] == latest["date"]) & (~scout["is_team"])
+        & (scout["fondamentale"] == fondamentale) & (scout["palla"] == "Totale") & (scout["Tot"] > 0)
+    ]
+    if base.empty:
+        st.caption("No data for this match.")
+        return
+    agg = base.set_index("player_name")[["E_pct", "Tot"]]
+    agg = agg[agg["Tot"] >= dl.MIN_RELIABLE_N]
+    if agg.empty:
+        st.caption("Not enough volume in this match.")
+        return
+    ranked = agg.sort_values("E_pct", ascending=False).head(3)
+    medals = ["🥇", "🥈", "🥉"]
+    rows = list(ranked.reset_index().itertuples())
+    rows_html = "".join(
+        f'<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 2px;'
+        f'{"border-bottom:1px solid var(--line);" if i < len(rows) - 1 else ""}">'
+        f'<span style="font-size:0.95rem;">{medals[i]}</span>'
+        f'<span style="flex:1;padding-left:6px;font-weight:700;font-size:0.86rem;">{r.player_name}</span>'
+        f'<span style="color:var(--accent);font-weight:700;font-size:0.86rem;">{r.E_pct * 100:.0f}%</span>'
+        f'</div>'
+        for i, r in enumerate(rows)
+    )
+    st.markdown(rows_html, unsafe_allow_html=True)
+
+
+def _tile_top_efficiency(tile_key: str, title: str, fondamentale: str):
     with st.container(border=True, key=_tile_box_key(tile_key)):
         latest = _latest_match()
         if latest is None:
-            _tile_title("**Top efficiency** · Attack")
+            _tile_title(title)
             st.caption("No matches yet.")
             return
-        _tile_title("**Top efficiency** · Attack", latest["pdate"])
-        scout = dl.load_scout_data()
-        base = scout[
-            (scout["match"] == latest["date"]) & (~scout["is_team"])
-            & (scout["fondamentale"] == "Attacco") & (scout["palla"] == "Totale") & (scout["Tot"] > 0)
-        ]
-        if base.empty:
-            st.caption("No attack data for this match.")
-            return
-        agg = base.set_index("player_name")[["E_pct", "Tot"]]
-        agg = agg[agg["Tot"] >= dl.MIN_RELIABLE_N]
-        if agg.empty:
-            st.caption("Not enough volume in this match.")
-            return
-        ranked = agg.sort_values("E_pct", ascending=False).head(3)
-        medals = ["🥇", "🥈", "🥉"]
-        rows = list(ranked.reset_index().itertuples())
-        rows_html = "".join(
-            f'<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 2px;'
-            f'{"border-bottom:1px solid var(--line);" if i < len(rows) - 1 else ""}">'
-            f'<span style="font-size:0.95rem;">{medals[i]}</span>'
-            f'<span style="flex:1;padding-left:6px;font-weight:700;font-size:0.86rem;">{r.player_name}</span>'
-            f'<span style="color:var(--accent);font-weight:700;font-size:0.86rem;">{r.E_pct * 100:.0f}%</span>'
-            f'</div>'
-            for i, r in enumerate(rows)
-        )
-        st.markdown(rows_html, unsafe_allow_html=True)
+        _tile_title(title, latest["pdate"])
+        _render_top_efficiency(fondamentale, latest)
+
+
+def _tile_top_efficiency_attack(tile_key: str):
+    _tile_top_efficiency(tile_key, "**Top efficiency** · Attack", "Attacco")
+
+
+def _tile_top_efficiency_serve(tile_key: str):
+    _tile_top_efficiency(tile_key, "**Top efficiency** · Serve", "Battuta")
+
+
+def _tile_top_efficiency_receive(tile_key: str):
+    _tile_top_efficiency(tile_key, "**Top efficiency** · Receive", "Ricezione")
 
 
 def _tile_team_shape(tile_key: str):
@@ -835,10 +857,10 @@ def _tile_setting_points(tile_key: str):
     with st.container(border=True, key=_tile_box_key(tile_key)):
         latest = _latest_match()
         if latest is None:
-            _tile_title("**Setting** · points (P4/P3/P2)")
+            _tile_title("**Distribution** · points (P4/P3/P2)")
             st.caption("No matches yet.")
             return
-        _tile_title("**Setting** · points (P4/P3/P2)", latest["pdate"])
+        _tile_title("**Distribution** · points (P4/P3/P2)", latest["pdate"])
         attack = _home_attack_by_role(dl.load_scout_data(), {latest["date"]})
         _mini_zone_court(attack, "Perfect", "Greens")
 
@@ -847,10 +869,10 @@ def _tile_setting_errors(tile_key: str):
     with st.container(border=True, key=_tile_box_key(tile_key)):
         latest = _latest_match()
         if latest is None:
-            _tile_title("**Setting** · errors (P4/P3/P2)")
+            _tile_title("**Distribution** · errors (P4/P3/P2)")
             st.caption("No matches yet.")
             return
-        _tile_title("**Setting** · errors (P4/P3/P2)", latest["pdate"])
+        _tile_title("**Distribution** · errors (P4/P3/P2)", latest["pdate"])
         attack = _home_attack_by_role(dl.load_scout_data(), {latest["date"]})
         _mini_zone_court(attack, "Err", "Reds")
 
@@ -906,7 +928,9 @@ TILE_RENDERERS = {
     "matches_score_patterns": _tile_score_patterns,
     "matches_per_month": _tile_matches_per_month,
     "scout_top_scorers": _tile_top_scorers,
-    "scout_top_efficiency": _tile_top_efficiency,
+    "scout_top_efficiency_attack": _tile_top_efficiency_attack,
+    "scout_top_efficiency_serve": _tile_top_efficiency_serve,
+    "scout_top_efficiency_receive": _tile_top_efficiency_receive,
     "scout_team_shape": _tile_team_shape,
     "scout_serve_outcome": _tile_serve_outcome,
     "scout_attack_outcome": _tile_attack_outcome,
@@ -918,18 +942,19 @@ TILE_RENDERERS = {
 }
 
 # 4 (not 5) -- gives each card more room now that several draw a real
-# chart rather than a thin sparkline, and divides the 10 default tiles
-# into clean rows (4, 4, 2) instead of leaving one column empty.
+# chart rather than a thin sparkline, and divides the 12 fixed tiles into
+# exactly 3 clean rows with no leftover column.
 TILES_PER_ROW = 4
 
 
 def render():
     season = filters.season()
     selected = _render_hero(season)
+    all_keys = FIXED_TILES + selected
 
     with st.container(key="home_grid"):
-        for row_start in range(0, len(selected), TILES_PER_ROW):
-            row_keys = selected[row_start:row_start + TILES_PER_ROW]
+        for row_start in range(0, len(all_keys), TILES_PER_ROW):
+            row_keys = all_keys[row_start:row_start + TILES_PER_ROW]
             # A short final row uses exactly as many columns as it has
             # tiles (not the full TILES_PER_ROW) so those cards stretch
             # to fill the row's width instead of leaving empty columns
