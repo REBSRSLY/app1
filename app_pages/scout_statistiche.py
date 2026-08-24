@@ -1157,6 +1157,11 @@ def _render_distribution(scoped: pd.DataFrame, scout: pd.DataFrame, palla_tipi_e
             yaxis=dict(categoryorder="array", categoryarray=ordine_giocatrici[::-1]),
             height=max(420, 50 * len(pivot_metrica.index)),
             annotations=annotations,
+            # Without this, Plotly's default top margin (~100px, sized for
+            # a title this chart doesn't have) left a big blank band above
+            # the first row, under the modebar -- 30px is enough for the
+            # metric colorbar's own title text right above the plot.
+            margin=dict(t=30),
         )
         st.plotly_chart(fig_heat, width="stretch")
         caption = f"In each cell: total number of actions and {metrica_display.lower()}. Rows ordered by role."
