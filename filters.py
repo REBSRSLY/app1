@@ -225,35 +225,75 @@ def render_sidebar_tools():
         st.markdown('<div class="brand-subtitle">Technical Staff · A1 Women\'s</div>', unsafe_allow_html=True)
     st.markdown('<div class="brand-stripe"></div>', unsafe_allow_html=True)
 
-    st.selectbox("Season", mc.SEASONS, key="flt_season", on_change=_on_season_change)
-    st.selectbox("Competition", [ALL_COMPETITIONS] + mc.COMPETITION_ORDER, key="flt_competition")
+    # Label beside its own widget (a narrow label column + a wider widget
+    # column, widget's own label collapsed) instead of Streamlit's default
+    # label-above-widget stacking -- for every picker in the sidebar,
+    # Season/Competition/Match included, so the whole panel reads as
+    # label:value rows rather than alternating caption/control lines.
+    col_lbl, col_w = st.columns([1, 2], vertical_alignment="center")
+    with col_lbl:
+        st.markdown("Season")
+    with col_w:
+        st.selectbox("Season", mc.SEASONS, key="flt_season", on_change=_on_season_change, label_visibility="collapsed")
+
+    col_lbl, col_w = st.columns([1, 2], vertical_alignment="center")
+    with col_lbl:
+        st.markdown("Competition")
+    with col_w:
+        st.selectbox(
+            "Competition", [ALL_COMPETITIONS] + mc.COMPETITION_ORDER, key="flt_competition",
+            label_visibility="collapsed",
+        )
 
     match_pick_options = [ALL_MATCHES] + [m["date"] for m in _matches_for_picker()]
     ensure_valid_selection("flt_match_pick", match_pick_options)
-    st.selectbox(
-        "Match", match_pick_options, key="flt_match_pick", on_change=_apply_match_pick,
-        format_func=lambda d: d if d == ALL_MATCHES else mc.match_label(d),
-        help="Jump the period to a single match day, instead of picking dates below.",
-    )
+    col_lbl, col_w = st.columns([1, 2], vertical_alignment="center")
+    with col_lbl:
+        st.markdown("Match")
+    with col_w:
+        st.selectbox(
+            "Match", match_pick_options, key="flt_match_pick", on_change=_apply_match_pick,
+            format_func=lambda d: d if d == ALL_MATCHES else mc.match_label(d),
+            help="Jump the period to a single match day, instead of picking dates below.",
+            label_visibility="collapsed",
+        )
 
-    st.markdown("**Period**")
     with st.container(border=True):
         # The widgets' own min/max are the wider full-calendar-year bounds
         # (see _picker_bounds), not the season's real (narrower) range --
         # otherwise the popup's year dropdown can point at a year where the
         # currently-shown month has no valid day left in it at all.
         picker_min, picker_max = _picker_bounds(season())
-        st.date_input("Start", key="flt_start", min_value=picker_min, max_value=picker_max)
+        col_lbl, col_w = st.columns([1, 2], vertical_alignment="center")
+        with col_lbl:
+            st.markdown("Start")
+        with col_w:
+            st.date_input(
+                "Start", key="flt_start", min_value=picker_min, max_value=picker_max,
+                label_visibility="collapsed",
+            )
         st.checkbox("Different end date", key="flt_has_end")
-        st.date_input(
-            "End", key="flt_end", min_value=picker_min, max_value=picker_max,
-            disabled=not st.session_state["flt_has_end"],
-        )
+        col_lbl, col_w = st.columns([1, 2], vertical_alignment="center")
+        with col_lbl:
+            st.markdown("End")
+        with col_w:
+            st.date_input(
+                "End", key="flt_end", min_value=picker_min, max_value=picker_max,
+                disabled=not st.session_state["flt_has_end"], label_visibility="collapsed",
+            )
 
-        preset_cols = st.columns(len(PRESETS) + 1)
-        with preset_cols[0]:
+        # Two rows of two instead of one row of four -- "Full season" and
+        # "14 days" were getting clipped/wrapped at the sidebar's width
+        # with 4 columns across.
+        preset_row1 = st.columns(2)
+        with preset_row1[0]:
             st.button("Full season", key="flt_preset_full", on_click=_apply_preset, args=(None,), width="stretch")
-        for col, (label, days) in zip(preset_cols[1:], PRESETS.items()):
+        preset_items = list(PRESETS.items())
+        with preset_row1[1]:
+            label, days = preset_items[0]
+            st.button(label.replace("Last ", ""), key=f"flt_preset_{days}", on_click=_apply_preset, args=(days,), width="stretch", help=label)
+        preset_row2 = st.columns(2)
+        for col, (label, days) in zip(preset_row2, preset_items[1:]):
             with col:
                 st.button(label.replace("Last ", ""), key=f"flt_preset_{days}", on_click=_apply_preset, args=(days,), width="stretch", help=label)
 
