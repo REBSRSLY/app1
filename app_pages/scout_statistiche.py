@@ -60,7 +60,7 @@ SYMBOL_TO_COL = {"=": "Err", "-": "Neg", "!": "Neutral", "+": "Pos", "#": "Perfe
 # fundamental-breakdown chart in the app follows).
 RAW_PALLA_ORDER = ["Totale", "Alta", "Media", "Veloce", "Tesa", "Other"]
 RAW_COLUMN_RENAME = {
-    "P": "P", "Set": "Set", "Ind": "Ind", "E_pct": "E%", "Tot": "Tot",
+    "Ind": "Ind", "E_pct": "E%", "Tot": "Tot",
     "Err": "=", "Err_pct": "= %", "Err_BP": "= BP", "Err_pC": "= pC",
     "Slash": "/", "Slash_pct": "/ %", "Slash_BP": "/ BP", "Slash_pC": "/ pC",
     "Neg": "-", "Neg_pct": "- %",
@@ -69,11 +69,13 @@ RAW_COLUMN_RENAME = {
     "Perfect": "#", "Perfect_pct": "# %", "Perfect_BP": "# BP", "Perfect_pC": "# pC",
 }
 RAW_PERCENT_COLUMNS = ["E%", "= %", "/ %", "- %", "! %", "+ %", "# %"]
-# Column groups the raw sheet is chunked into, a thin spacer column
-# rendered between each -- mirrors the shaded column groupings of the
-# original Data Volley export.
+# Column groups the raw sheet is chunked into -- a thicker left border
+# on each group's first column marks the boundary (see _render_raw_sheet)
+# instead of a spacer column between them. Mirrors the shaded column
+# groupings of the original Data Volley export; P/Set (raw scout-sheet
+# bookkeeping columns, not stats) are dropped entirely, not just hidden.
 RAW_COLUMN_GROUPS = [
-    ["P", "Set", "Ind", "E_pct", "Tot"],
+    ["Ind", "E_pct", "Tot"],
     ["Err", "Err_pct", "Err_BP", "Err_pC"],
     ["Slash", "Slash_pct", "Slash_BP", "Slash_pC"],
     ["Neg", "Neg_pct"],
@@ -1276,31 +1278,64 @@ def _render_raw_sheet(scout: pd.DataFrame):
     block = raw.sort_values(["palla", "_team_rank"], kind="stable").reset_index(drop=True)
     with st.container(border=True):
         st.markdown(f"**{dl.FONDAMENTALE_LABELS[fond_sel]}**")
-        table = pd.DataFrame({"Set type": block["Set type"], "Player": block["Player"]})
-        column_config = {}
-        for gi, group in enumerate(RAW_COLUMN_GROUPS):
-            if gi > 0:
-                spacer = " " * gi
-                table[spacer] = ""
-                column_config[spacer] = st.column_config.Column(label="", width="small", disabled=True)
-            for col in group:
-                label = RAW_COLUMN_RENAME[col]
-                table[label] = block[col]
-                if label in RAW_PERCENT_COLUMNS:
-                    column_config[label] = st.column_config.NumberColumn(label, format="percent")
-                else:
-                    column_config[label] = st.column_config.NumberColumn(label, format="%d")
 
-        # Each row's text colored by the athlete's assigned color (same
-        # hue as every other chart in the app); the team row instead
-        # gets black text on a white background so it stands out as
-        # "not a player".
-        row_styles = [
-            "color:#000000;background-color:#ffffff;" if is_team else f"color:{pc.color_for(player)};"
-            for is_team, player in zip(block["is_team"], block["Player"])
-        ]
-        styled = table.style.apply(lambda row: [row_styles[row.name]] * len(row), axis=1)
-        st.dataframe(styled, hide_index=True, width="stretch", column_config=column_config)
+        # A hand-built HTML table instead of st.dataframe: glide-data-grid
+        # (what st.dataframe renders through) has no per-column border
+        # styling, only whole-column width/format -- a thicker left border
+        # marking each outcome group's boundary needs real CSS control,
+        # which only a plain <table> gives us. The spacer columns the old
+        # grid version used instead are gone (group boundary is now a
+        # border, not a blank column eating up width).
+        header_cells = ['<th class="rs-fixed">Set type</th>', '<th class="rs-fixed">Player</th>']
+        col_defs = []  # (source_col, label, is_pct, group_start)
+        for group in RAW_COLUMN_GROUPS:
+            for i, col in enumerate(group):
+                label = RAW_COLUMN_RENAME[col]
+                col_defs.append((col, label, label in RAW_PERCENT_COLUMNS, i == 0))
+        for col, label, _is_pct, group_start in col_defs:
+            cls = "rs-group-start" if group_start else ""
+            header_cells.append(f'<th class="{cls}">{label}</th>')
+
+        body_rows = []
+        for _, row in block.iterrows():
+            row_style = (
+                "color:#000000;background-color:#ffffff;" if row["is_team"]
+                else f"color:{pc.color_for(row['Player'])};"
+            )
+            cells = [
+                f'<td class="rs-fixed" style="{row_style}">{row["Set type"]}</td>',
+                f'<td class="rs-fixed" style="{row_style}">{row["Player"]}</td>',
+            ]
+            for col, _label, is_pct, group_start in col_defs:
+                value = row[col]
+                if pd.isna(value):
+                    text = "—"
+                elif is_pct:
+                    text = f"{value * 100:.0f}%"
+                else:
+                    text = f"{int(value)}"
+                cls = "rs-group-start" if group_start else ""
+                cells.append(f'<td class="{cls}" style="{row_style}">{text}</td>')
+            body_rows.append(f"<tr>{''.join(cells)}</tr>")
+
+        table_html = f"""
+        <div style="overflow-x:auto;">
+        <style>
+            .rs-table {{ border-collapse: collapse; font-size: 12.5px; white-space: nowrap; }}
+            .rs-table th, .rs-table td {{ padding: 4px 8px; border: 1px solid var(--line); text-align: right; }}
+            .rs-table th {{ color: var(--muted); font-weight: 700; text-align: right; }}
+            .rs-table th.rs-fixed, .rs-table td.rs-fixed {{ text-align: left; }}
+            /* The thicker separator replacing the old spacer columns --
+               one per outcome group, on that group's first column. */
+            .rs-table th.rs-group-start, .rs-table td.rs-group-start {{ border-left: 3px solid rgba(255,255,255,0.35); }}
+        </style>
+        <table class="rs-table">
+            <thead><tr>{''.join(header_cells)}</tr></thead>
+            <tbody>{''.join(body_rows)}</tbody>
+        </table>
+        </div>
+        """
+        st.markdown(table_html, unsafe_allow_html=True)
 
 
 def render():
