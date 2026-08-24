@@ -891,6 +891,10 @@ def _render_zone_outcome_boxes(
            the container's own bottom padding so the border sits right up
            against the x-axis tick labels instead. */
         [class*="st-key-zone_box_"] { padding-bottom: 2px !important; }
+        /* P2 is the last box in the column, with no trailing inter-box
+           gap after it (see below), so it reads as slightly too cramped
+           next to P4/P3 -- a few px more breathing room, just for it. */
+        [class*="st-key-zone_box_P2"] { padding-bottom: 8px !important; }
         /* The real culprit behind what LOOKED like P3/P4 not shrinking:
            it isn't each box's own bottom padding (identical everywhere,
            see above) -- this column is a flex container with its own
@@ -1021,7 +1025,17 @@ def _render_distribution(scoped: pd.DataFrame, scout: pd.DataFrame, palla_tipi_e
     # the Game map / Cumulative actions pair below both.
     _render_zone_distribution(scoped, fond_sel2)
 
-    with st.container(border=True):
+    with st.container(border=True, key="heatmap_box"):
+        st.markdown(
+            """<style>
+            /* Trims the default gap between the metric picker and the
+               heatmap chart below it (and, as a side effect, the smaller
+               title-to-picker gap above it too -- both read as wasted
+               space, not just the one under the buttons). */
+            .st-key-heatmap_box { gap: 4px !important; }
+            </style>""",
+            unsafe_allow_html=True,
+        )
         st.markdown("**Heatmap** · Volume and effectiveness per player and set type")
         metrica_label = st.segmented_control(
             "Effectiveness metric", list(TEAM_PROFILE_METRICS.keys()),
@@ -1125,10 +1139,10 @@ def _render_distribution(scoped: pd.DataFrame, scout: pd.DataFrame, palla_tipi_e
             annotations=annotations,
         )
         st.plotly_chart(fig_heat, width="stretch")
-    caption = f"In each cell: total number of actions and {metrica_display.lower()}. Rows ordered by role."
-    if any_low:
-        caption += f" * = fewer than {dl.MIN_RELIABLE_N} actions, read with caution."
-    st.caption(caption)
+        caption = f"In each cell: total number of actions and {metrica_display.lower()}. Rows ordered by role."
+        if any_low:
+            caption += f" * = fewer than {dl.MIN_RELIABLE_N} actions, read with caution."
+        st.caption(caption)
 
     col_map, col_cum = st.columns(2)
     with col_map:
