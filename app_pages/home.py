@@ -1,5 +1,4 @@
 from collections import Counter
-from datetime import date
 
 import pandas as pd
 import plotly.colors as pcolors
@@ -42,48 +41,6 @@ _MONTH_NAMES = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep
 # not, instead of each tile picking its own (previously 62-150px).
 TILE_CHART_HEIGHT = 132
 TILE_CARD_MIN_HEIGHT = 216
-
-# Home always shows a fixed trailing 7-day window ending at the most
-# recent day actually present in the data -- not the sidebar's period
-# (Home is meant to answer "what happened this week" regardless of
-# whatever range another page left the sidebar on), and not the real
-# wall-clock date (this app works from one frozen historical season, so
-# "today" has to mean "the latest day this dataset actually has").
-HOME_WINDOW_DAYS = 7
-
-
-def _home_period(season: str) -> tuple[date, date]:
-    # Not cached here -- load_wellness_data()/matches_for_season() are
-    # already cached at the source, so this stays cheap, and a second
-    # cache layer keyed only on `season` risks serving a stale window
-    # after new data lands via Data Entry within the same session.
-    data = dl.load_wellness_data()
-    candidates = [df["Data"].max() for df in data.values() if not df.empty]
-    season_matches = mc.matches_for_season(season)
-    if season_matches:
-        candidates.append(pd.Timestamp(max(m["pdate"] for m in season_matches)))
-    today = max(candidates) if candidates else pd.Timestamp.today().normalize()
-    end = today.date()
-    start = end - pd.Timedelta(days=HOME_WINDOW_DAYS - 1)
-    return start, end
-
-
-def _home_window(df: pd.DataFrame, start, end) -> pd.DataFrame:
-    """`df` (must have a `Data` datetime column) restricted to Home's
-    fixed 7-day window."""
-    return df[(df["Data"].dt.date >= start) & (df["Data"].dt.date <= end)]
-
-
-def _home_matches(season: str, start, end) -> list[dict]:
-    """Home's own equivalent of filters.matches_in_scope() -- same
-    season/competition awareness, but the period is always the fixed
-    7-day window above rather than the sidebar's."""
-    matches = [m for m in mc.matches_for_season(season) if start <= m["pdate"] <= end]
-    comp = filters.competition()
-    if comp != filters.ALL_COMPETITIONS:
-        matches = [m for m in matches if m["competition"] == comp]
-    return sorted(matches, key=lambda m: m["pdate"], reverse=True)
-
 
 # Every card the Home dashboard can show, keyed for the Customize popover's
 # checkboxes -- "default": True is what a first-time visitor sees; nothing
@@ -173,21 +130,18 @@ def _render_hero(season: str) -> list[str]:
         with col_crest:
             st.image(pg.CREST_PATH, width=52)
         with col_title:
-            start, end = _home_period(season)
             st.markdown(
                 '<div style="font-family:var(--display);font-size:1.5rem;font-weight:700;'
                 'line-height:1.1;text-transform:uppercase;letter-spacing:0.01em;">Vero Volley Milano</div>'
-                f'<div style="color:var(--muted);font-size:0.78rem;margin-top:1px;">Technical Staff · A1 Women\'s · Season {season} · '
-                f'Last {HOME_WINDOW_DAYS} days ({start.strftime("%d %b")}–{end.strftime("%d %b")})</div>',
+                f'<div style="color:var(--muted);font-size:0.78rem;margin-top:1px;">Technical Staff · A1 Women\'s · {filters.caption()}</div>',
                 unsafe_allow_html=True,
             )
 
         with col_customize, st.container(key="home_customize_box"), st.popover("Customize", icon=":material/tune:", width="stretch"):
             st.markdown("**Choose what shows on Home**")
             st.caption(
-                f"Every card below always shows the last {HOME_WINDOW_DAYS} days of data (not the sidebar's "
-                "period) -- only season and competition follow the sidebar. Every card here is optional; toggle "
-                "any of them on or off, grouped by where it comes from."
+                "Pick a season, competition and period in the sidebar -- every card below reads from it. "
+                "Every card here is optional; toggle any of them on or off, grouped by where it comes from."
             )
             by_page: dict[str, list[tuple[str, str, bool]]] = {}
             for key, label, page, default in TILE_CATALOG:
@@ -208,8 +162,7 @@ def _render_hero(season: str) -> list[str]:
 def _tile_low_recovery():
     with st.container(border=True, key="home_low_recovery_box"):
         st.markdown("**Low recovery**")
-        start, end = _home_period(filters.season())
-        wellness = _home_window(dl.load_wellness_data()["wellness"], start, end)
+        wellness = filters.filter_by_date_col(dl.load_wellness_data()["wellness"])
         if wellness.empty:
             st.caption("No data in range.")
             return
@@ -245,11 +198,10 @@ def _tile_team_tqr_gauge():
     the meaning."""
     with st.container(border=True):
         st.markdown("**Team TQR**")
-        start, end = _home_period(filters.season())
-        wellness = _home_window(dl.load_wellness_data()["wellness"], start, end)
+        wellness = filters.filter_by_date_col(dl.load_wellness_data()["wellness"])
         d = wellness.dropna(subset=["Tqr"])
         if d.empty:
-            st.caption("No data in range.")
+            st.caption("No data in this scope.")
             return
         last_date = d["Data"].max()
         tqr = float(d.loc[d["Data"] == last_date, "Tqr"].mean())
@@ -279,20 +231,19 @@ def _tile_team_tqr_gauge():
 
 def _tile_team_tqr_trend():
     """Mini version of the Wellness page's own Team TQR trend, over
-    Home's fixed 7-day window: mean line with a faint +/- std band
+    the sidebar's selected period: mean line with a faint +/- std band
     around it, y-axis ticks colored by the same 3-zone scale as every
     other TQR display in the app -- no separate threshold line needed,
     the ticks already carry that."""
     with st.container(border=True):
         st.markdown("**Team TQR** trend")
-        start, end = _home_period(filters.season())
-        wellness = _home_window(dl.load_wellness_data()["wellness"], start, end)
+        wellness = filters.filter_by_date_col(dl.load_wellness_data()["wellness"])
         daily = (
             wellness.groupby("Data")["Tqr"].agg(["mean", "std"]).reset_index()
             .dropna(subset=["mean"]).sort_values("Data")
         )
         if daily.empty:
-            st.caption("No data in range.")
+            st.caption("No data in this scope.")
             return
         daily["std"] = daily["std"].fillna(0)
         upper = (daily["mean"] + daily["std"]).clip(upper=TQR_MAX)
@@ -323,10 +274,10 @@ def _tile_readiness():
         if team_metrics.empty:
             st.caption("Not enough training history yet.")
             return
-        _, home_end = _home_period(filters.season())
-        in_range = team_metrics.index[team_metrics.index <= pd.Timestamp(home_end)]
+        _, period_end = filters.period()
+        in_range = team_metrics.index[team_metrics.index <= pd.Timestamp(period_end)]
         if in_range.empty:
-            st.caption("No data at or before this window.")
+            st.caption("No data at or before this period.")
             return
         ref_date = in_range.max()
         acwr = float(team_metrics.loc[ref_date, "acwr"])
@@ -382,14 +333,12 @@ def _tile_league_position():
 
 
 def _tile_recent_form():
-    season = filters.season()
-    start, end = _home_period(season)
-    in_window = _home_matches(season, start, end)
+    in_window = filters.matches_in_scope()
     serie_a1 = sorted((m for m in in_window if m["competition"] == "Serie A1"), key=lambda m: m["pdate"])
     with st.container(border=True):
         st.markdown("**Recent form** · Serie A1")
         if not serie_a1:
-            st.caption("No Serie A1 matches in this window.")
+            st.caption("No Serie A1 matches in this scope.")
             return
         recent = serie_a1[-3:]
         cols = st.columns(len(recent) + 1)
@@ -417,11 +366,9 @@ def _tile_recent_form():
 def _tile_score_patterns():
     with st.container(border=True):
         st.markdown("**Score patterns**")
-        season = filters.season()
-        start, end = _home_period(season)
-        matches = _home_matches(season, start, end)
+        matches = filters.matches_in_scope()
         if not matches:
-            st.caption("No matches in this window.")
+            st.caption("No matches in this scope.")
             return
         counts = Counter(m["score"] for m in matches)
         scores = sorted(counts.keys(), key=lambda s: _SCORE_POINTS.get(s, 0))
@@ -435,10 +382,11 @@ def _tile_score_patterns():
 
 def _tile_matches_per_month():
     """The one tile that stays season-wide on purpose: "per month" only
-    means something across a whole season -- squeezed into Home's own
-    7-day window it would show at most one bar, which defeats the point
-    of the chart. Labeled "(season-wide)" in the Customize list so this
-    exception is visible, not silently inconsistent with every other tile."""
+    means something across a whole season -- squeezed into the sidebar's
+    selected period it could show at most a bar or two, which defeats the
+    point of the chart. Labeled "(season-wide)" in the Customize list so
+    this exception is visible, not silently inconsistent with every other
+    tile."""
     with st.container(border=True):
         st.markdown("**Matches per month** · season")
         season_matches = mc.matches_for_season(filters.season())
@@ -463,16 +411,14 @@ def _tile_matches_per_month():
 def _tile_top_scorers():
     with st.container(border=True):
         st.markdown("**Top scorers** in scope")
-        season = filters.season()
-        start, end = _home_period(season)
-        in_window = {m["date"] for m in _home_matches(season, start, end)}
+        in_window = {m["date"] for m in filters.matches_in_scope()}
         scout = dl.load_scout_data()
         base = scout[scout["match"].isin(in_window) & (~scout["is_team"]) & (scout["palla"] == "Totale")]
         points = base[base["fondamentale"].isin(dl.POINT_FONDAMENTALI)].groupby("player_code")["Perfect"].sum()
         appearances = base.groupby("player_code")["match"].nunique()
         stats = pd.DataFrame({"points": points, "appearances": appearances}).fillna(0)
         if stats.empty:
-            st.caption("No stats in this window.")
+            st.caption("No stats in this scope.")
             return
         stats["points"] = stats["points"].astype(int)
         stats["player_name"] = stats.index.map(dl.load_player_names())
@@ -501,16 +447,14 @@ def _tile_top_efficiency():
     which would let the same player fill more than one medal spot)."""
     with st.container(border=True):
         st.markdown("**Top efficiency** · Attack")
-        season = filters.season()
-        start, end = _home_period(season)
-        in_window = {m["date"] for m in _home_matches(season, start, end)}
+        in_window = {m["date"] for m in filters.matches_in_scope()}
         scout = dl.load_scout_data()
         base = scout[
             scout["match"].isin(in_window) & (~scout["is_team"])
             & (scout["fondamentale"] == "Attacco") & (scout["palla"] == "Totale") & (scout["Tot"] > 0)
         ]
         if base.empty:
-            st.caption("No data in this window.")
+            st.caption("No data in this scope.")
             return
         agg = base.groupby("player_name").apply(
             lambda g: pd.Series({"E_pct": (g["E_pct"] * g["Tot"]).sum() / g["Tot"].sum(), "Tot": g["Tot"].sum()}),
@@ -518,7 +462,7 @@ def _tile_top_efficiency():
         )
         agg = agg[agg["Tot"] >= dl.MIN_RELIABLE_N]
         if agg.empty:
-            st.caption("Not enough volume in this window.")
+            st.caption("Not enough volume in this scope.")
             return
         ranked = agg.sort_values("E_pct", ascending=False).head(3)
         medals = ["🥇", "🥈", "🥉"]
@@ -538,9 +482,7 @@ def _tile_top_efficiency():
 def _tile_team_shape():
     with st.container(border=True):
         st.markdown("**Team shape** · E%")
-        season = filters.season()
-        start, end = _home_period(season)
-        in_window = {m["date"] for m in _home_matches(season, start, end)}
+        in_window = {m["date"] for m in filters.matches_in_scope()}
         scout = dl.load_scout_data()
         d = scout[
             scout["match"].isin(in_window) & scout["is_team"]
@@ -588,9 +530,10 @@ def _tile_team_shape():
 
 def _home_scout_team_agg(scout: pd.DataFrame, fondamentale: str, match_dates: set[str]) -> dict | None:
     """Sums raw outcome counts for the team's rows of `fondamentale`
-    across every match sheet in `match_dates` (Home's fixed 7-day window)
-    -- the pre-computed season-total row these tiles used to read is
-    exactly that, a season total, which can't respect "last 7 days only"."""
+    across every match sheet in `match_dates` (the sidebar's selected
+    scope) -- the pre-computed season-total row these tiles used to read
+    is exactly that, a season total, which can't respect a narrower
+    period."""
     d = scout[
         scout["match"].isin(match_dates) & scout["is_team"]
         & (scout["fondamentale"] == fondamentale) & (scout["palla"] == "Totale")
@@ -602,19 +545,17 @@ def _home_scout_team_agg(scout: pd.DataFrame, fondamentale: str, match_dates: se
 
 
 def _outcome_mix_bar(fondamentale: str):
-    """Slim single 100%-stacked horizontal bar of this window's outcome
+    """Slim single 100%-stacked horizontal bar of this scope's outcome
     mix -- a compact, small-multiple-friendly stand-in for the full
     Scout & Stats outcome-mix chart, which needs far more room than a
     Home tile has. A bar reads the mix (length = share) more reliably
     than the donut this used to be (angle is harder to compare than
     length), and stacks the same colors used everywhere else in the app."""
-    season = filters.season()
-    start, end = _home_period(season)
-    match_dates = {m["date"] for m in _home_matches(season, start, end)}
+    match_dates = {m["date"] for m in filters.matches_in_scope()}
     scout = dl.load_scout_data()
     counts = _home_scout_team_agg(scout, fondamentale, match_dates)
     if counts is None:
-        st.caption("No data in this window.")
+        st.caption("No data in this scope.")
         return
     legenda = dl.legenda_fondamentale(fondamentale)
     rows = []
@@ -655,16 +596,14 @@ def _tile_attack_outcome():
 
 
 def _render_efficiency_trend(fondamentale: str):
-    season = filters.season()
-    start, end = _home_period(season)
-    match_dates = {m["date"] for m in _home_matches(season, start, end)}
+    match_dates = {m["date"] for m in filters.matches_in_scope()}
     scout = dl.load_scout_data()
     d = scout[
         scout["match"].isin(match_dates) & (scout["fondamentale"] == fondamentale)
         & scout["is_team"] & (scout["palla"] == "Totale") & (scout["match"] != dl.SEASON_LABEL)
     ].copy()
     if d.empty:
-        st.caption("No data in this window.")
+        st.caption("No data in this scope.")
         return
     d["pdate"] = pd.to_datetime(d["match"].apply(mc.parsed_date))
     d = d.sort_values("pdate")
@@ -672,12 +611,12 @@ def _render_efficiency_trend(fondamentale: str):
         # A "trend" line with a single point degenerates into an
         # unreadable Plotly axis (it zooms to sub-second ticks around
         # that one x-value) -- a plain single-match readout is honest
-        # about there only being one match in this 7-day window.
+        # about there only being one match in this scope.
         row = d.iloc[0]
         st.markdown(
             f'<div style="display:flex;align-items:baseline;gap:8px;padding-top:10px;">'
             f'<span style="font-size:2rem;font-weight:800;color:#29B6F6;line-height:1;">{row["E_pct"] * 100:.0f}%</span>'
-            f'<span style="font-size:11px;color:var(--muted);">only 1 match in this window ({mc.match_label(row["match"])})</span></div>',
+            f'<span style="font-size:11px;color:var(--muted);">only 1 match in this scope ({mc.match_label(row["match"])})</span></div>',
             unsafe_allow_html=True,
         )
         return
@@ -707,11 +646,10 @@ def _tile_efficiency_trend_serve():
 def _tile_individual_tqr():
     with st.container(border=True):
         st.markdown("**Individual TQR** trend")
-        start, end = _home_period(filters.season())
-        wellness = _home_window(dl.load_wellness_data()["wellness"], start, end)
+        wellness = filters.filter_by_date_col(dl.load_wellness_data()["wellness"])
         daily = wellness.dropna(subset=["Tqr"]).groupby(["Data", "player_name"], as_index=False)["Tqr"].mean().sort_values("Data")
         if daily.empty:
-            st.caption("No wellness data in this window.")
+            st.caption("No wellness data in this scope.")
             return
         fig = px.line(
             daily, x="Data", y="Tqr", color="player_name",
@@ -729,13 +667,13 @@ def _tile_loads_acwr_chart():
     with st.container(border=True):
         st.markdown("**ACWR** & weekly load")
         rpe = dl.load_wellness_data()["rpe"]
-        start, end = _home_period(filters.season())
+        start, end = filters.period()
         team_metrics = training_load.metrics_frame(rpe)
         d = team_metrics.loc[
             (team_metrics.index >= pd.Timestamp(start)) & (team_metrics.index <= pd.Timestamp(end))
         ].dropna(subset=["acwr"])
         if d.empty:
-            st.caption("Not enough training history (needs 28+ days before this window).")
+            st.caption("Not enough training history (needs 28+ days before this period).")
             return
         top = max(2.5, float(d["acwr"].max()) + 0.2)
         fig = go.Figure()
@@ -753,10 +691,9 @@ def _tile_loads_acwr_chart():
 def _tile_loads_jumps():
     with st.container(border=True):
         st.markdown("**Jumps** · per player")
-        start, end = _home_period(filters.season())
-        salti = _home_window(dl.load_wellness_data()["salti"], start, end).dropna(subset=["SALTI"])
+        salti = filters.filter_by_date_col(dl.load_wellness_data()["salti"]).dropna(subset=["SALTI"])
         if salti.empty:
-            st.caption("No jump data in this window.")
+            st.caption("No jump data in this scope.")
             return
         daily = salti.groupby(["Data", "player_name"], as_index=False)["SALTI"].sum()
         fig = px.bar(
@@ -771,10 +708,9 @@ def _tile_loads_jumps():
 def _tile_loads_rpe_scatter():
     with st.container(border=True):
         st.markdown("**RPE** vs. duration")
-        start, end = _home_period(filters.season())
-        rpe = _home_window(dl.load_wellness_data()["rpe"], start, end).dropna(subset=["Rpe", "Time"])
+        rpe = filters.filter_by_date_col(dl.load_wellness_data()["rpe"]).dropna(subset=["Rpe", "Time"])
         if rpe.empty:
-            st.caption("No RPE data in this window.")
+            st.caption("No RPE data in this scope.")
             return
         fig = px.scatter(
             rpe, x="Time", y="Rpe", color="player_name", opacity=0.65,
@@ -833,15 +769,13 @@ def _mini_zone_court(attack: pd.DataFrame, count_col: str, colorscale: str):
     fig.update_layout(height=TILE_CHART_HEIGHT - 10, margin=dict(l=10, r=10, t=0, b=0), plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
     st.plotly_chart(fig, width="stretch")
     if not any_data:
-        st.caption("No attacks in this window.")
+        st.caption("No attacks in this scope.")
 
 
 def _tile_setting_points():
     with st.container(border=True):
         st.markdown("**Setting** · points (P4/P3/P2)")
-        season = filters.season()
-        start, end = _home_period(season)
-        match_dates = {m["date"] for m in _home_matches(season, start, end)}
+        match_dates = {m["date"] for m in filters.matches_in_scope()}
         attack = _home_attack_by_role(dl.load_scout_data(), match_dates)
         _mini_zone_court(attack, "Perfect", "Greens")
 
@@ -849,9 +783,7 @@ def _tile_setting_points():
 def _tile_setting_errors():
     with st.container(border=True):
         st.markdown("**Setting** · errors (P4/P3/P2)")
-        season = filters.season()
-        start, end = _home_period(season)
-        match_dates = {m["date"] for m in _home_matches(season, start, end)}
+        match_dates = {m["date"] for m in filters.matches_in_scope()}
         attack = _home_attack_by_role(dl.load_scout_data(), match_dates)
         _mini_zone_court(attack, "Err", "Reds")
 
@@ -859,9 +791,7 @@ def _tile_setting_errors():
 def _tile_team_profile_bar():
     with st.container(border=True):
         st.markdown("**Team profile** · E% bar")
-        season = filters.season()
-        start, end = _home_period(season)
-        match_dates = {m["date"] for m in _home_matches(season, start, end)}
+        match_dates = {m["date"] for m in filters.matches_in_scope()}
         scout = dl.load_scout_data()
         rows = []
         for fond in dl.FONDAMENTALE_ORDER:
@@ -873,7 +803,7 @@ def _tile_team_profile_bar():
                 continue
             rows.append({"Fundamental": dl.FONDAMENTALE_ABBR[fond], "E_pct": e_pct})
         if not rows:
-            st.caption("No season data in this window.")
+            st.caption("No season data in this scope.")
             return
         team = pd.DataFrame(rows)
         order_labels = team["Fundamental"].tolist()
