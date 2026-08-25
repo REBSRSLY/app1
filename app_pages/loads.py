@@ -94,11 +94,17 @@ def _render_how_to_expander():
             "week across the trailing 4 weeks, divided so it stays on the same weekly scale "
             "as the acute load."
         )
+        st.markdown("**Team ACWR** = `acute / chronic` — how this week's work compares to the trailing 4-week average:")
         st.markdown(
-            "**Team ACWR** = `acute / chronic` — 0.8–1.3 is the sweet spot (green band on the "
-            "chart), above 1.5 flags a sudden spike (red band), below 0.8 a de-trained "
-            f"drop-off. Needs {training_load.CHRONIC_DAYS}+ days of prior history before it can be computed at all."
+            "- **<0.8 (Detraining)** – for more than two weeks outside of taper, you're probably "
+            "losing fitness. Add volume back gradually — don't try to make up the gap in one week.\n"
+            "- **0.8–1.3 (Sweet spot)** – proceed with your planned week and consider a small "
+            "(5–10%) progression.\n"
+            "- **1.3–1.5 (Caution)** – hold steady the following week. Don't add more load.\n"
+            "- **>1.5 (High injury risk)** – treat the next 7 days as recovery. Drop intensity, "
+            "cut long-run length 20–30%, replace one workout with an easy run, and prioritize sleep."
         )
+        st.markdown(f"Needs {training_load.CHRONIC_DAYS}+ days of prior history before it can be computed at all.")
 
 
 def _render_acwr_chart(team_metrics: pd.DataFrame, start, end):

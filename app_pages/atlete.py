@@ -492,10 +492,10 @@ def _player_metrics(surname: str) -> pd.DataFrame:
 # means in the two words the gauge has room for. Ordered low-to-high so
 # the first matching upper bound wins.
 ACWR_ZONES = [
-    (0.8, WARN_COLOR, "Undertrained"),
-    (1.3, GOOD_COLOR, "Optimal recovery"),
-    (1.5, WARN_COLOR, "Load creeping up"),
-    (float("inf"), LOW_COLOR, "Injury-risk spike"),
+    (0.8, WARN_COLOR, "Detraining"),
+    (1.3, GOOD_COLOR, "Sweet spot"),
+    (1.5, WARN_COLOR, "Caution"),
+    (float("inf"), LOW_COLOR, "High injury risk"),
 ]
 
 

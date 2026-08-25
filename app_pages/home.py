@@ -365,9 +365,9 @@ def _tile_team_tqr_trend(tile_key: str):
 # 1.5+), spelled out in words -- the ACWR equivalent of ui_helpers'
 # tqr_recovery_label/tqr_zone_color, which only cover TQR.
 _ACWR_BANDS = [
-    (0.8, "Undertraining", WARN_COLOR),
-    (1.3, "Optimal load", GOOD_COLOR),
-    (1.5, "Caution zone", WARN_COLOR),
+    (0.8, "Detraining", WARN_COLOR),
+    (1.3, "Sweet spot", GOOD_COLOR),
+    (1.5, "Caution", WARN_COLOR),
     (float("inf"), "High injury risk", LOW_COLOR),
 ]
 
