@@ -37,7 +37,7 @@ BASE_CARD_CSS = """
     [class*="st-key-playercard_"] button {
         width: 100%;
         min-width: 0;
-        height: 159px !important;
+        height: 149px !important;
         margin: 0 auto;
         font-weight: 700;
         color: #ffffff !important;
