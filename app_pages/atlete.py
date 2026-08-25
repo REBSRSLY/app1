@@ -261,18 +261,19 @@ def _ordered_fundamentals(present: set) -> list[str]:
     return [f for f in dl.FONDAMENTALE_ORDER if f in present]
 
 
-def _recency_opacity(d: pd.DataFrame) -> pd.Series:
+def _recency_ramp(d: pd.DataFrame) -> pd.Series:
     """0.25 (oldest match in this fundamental) ramping up to 1.0 (most
     recent) -- "match" sorts correctly as a plain string since it's a
-    fixed-width YY-MM-DD sheet name.
+    fixed-width YY-MM-DD sheet name. Drives marker SIZE in the efficiency
+    scatter, so older matches draw as smaller dots.
 
     Fully vectorised (rank + transform), deliberately not
     groupby().apply(): that form is deprecated in current pandas, and on
     a newer pandas than this repo pins it returned a shape that assigned
     back as NaN, which Plotly then rejected outright ("invalid element"
-    for marker.opacity) rather than just drawing something odd. The
+    for marker.size) rather than just drawing something odd. The
     fillna/clip at the end keeps that class of failure impossible --
-    marker.opacity only ever sees a real float in [0.25, 1]."""
+    the ramp only ever returns a real float in [0.25, 1]."""
     rank = d.groupby("fondamentale", observed=True)["match"].rank(method="dense")
     n = rank.groupby(d["fondamentale"], observed=True).transform("max")
     # Single-match fundamentals have no range to ramp across: full opacity.
@@ -366,11 +367,13 @@ def _performance_range(recent: pd.DataFrame, value_col: str, title: str, color: 
 
     d["Fundamental"] = d["fondamentale"].map(dl.FONDAMENTALE_ABBR)
     d["FullName"] = d["fondamentale"].map(dl.FONDAMENTALE_LABELS)
-    d["opacity"] = _recency_opacity(d)
-    # Dot size follows that match's own action count: a match E% built on
-    # 2 attacks is mostly noise next to one built on 20, and this is the
-    # only per-match signal in the chart that says so at a glance.
-    d["size"] = 5 + 9 * dl.reliability_alpha(d["Tot"], floor=0.0)
+    # Dot size follows recency: older matches draw smaller, the most
+    # recent ones largest, so the eye lands on "now" first.
+    d["size"] = 5 + 9 * _recency_ramp(d)
+    # Opacity follows that match's own action count: a match E% built on
+    # 2 attacks is mostly noise next to one built on 20, and fading it
+    # down is the signal that says so at a glance.
+    d["opacity"] = dl.reliability_alpha(d["Tot"], floor=0.25)
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(
@@ -434,12 +437,6 @@ def _render_performance(surname: str, color: str):
         _performance_range(recent, "E_pct", "Efficiency E%", color, is_percent=True, x_range=[-1, 1], order_labels=order_labels)
     with col_ind:
         _performance_bar(recent, "Ind", "Index", color, x_range=[0, 100], order_labels=order_labels)
-    low_n = recent.loc[recent["Tot"] > 0].groupby("fondamentale", observed=True)["Tot"].sum()
-    if (low_n < dl.MIN_RELIABLE_N).any():
-        st.caption(
-            f"Small dots (left) and faded bars (right) are built on fewer than {dl.MIN_RELIABLE_N} actions "
-            "in this period — treat those fundamentals as indicative, not reliable."
-        )
 
 
 def _render_tqr_gauge(tqr: float, day, color: str):
