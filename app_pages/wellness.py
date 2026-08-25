@@ -84,14 +84,28 @@ def _player_role_map() -> dict[str, str]:
     return {names[code]: dl.ROLE_LABELS.get(r, r) for code, r in roles.items() if code in names}
 
 
-def _render_player_radar(p_period, use_icons=False, height=None, show_header=True, key=None):
+def _hex_to_rgba(hex_color: str, alpha: float) -> str:
+    """player_colors.PLAYER_COLORS is plain #RRGGBB; the radar's faint
+    fill/line traces need an rgba() string instead."""
+    h = hex_color.lstrip("#")
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    return f"rgba({r},{g},{b},{alpha})"
+
+
+def _render_player_radar(p_period, use_icons=False, height=None, show_header=True, key=None, player_color=None):
     """Same enriched radar as the Players page overview: a faint mean
     shape, a shaded +/-1 std dev band around it, and a solid outline for
     the most recent day in range layered on top -- instead of one flat
     shape, this shows both the period's overall picture and how the latest
     check-in compares to it. Renders the chart itself (and, unless the
     caller builds its own header, a colored TQR header above it); returns
-    the average TQR, or None if there's no data."""
+    the average TQR, or None if there's no data.
+
+    `player_color` (hex, e.g. from player_colors.color_for) draws the
+    shape in that player's own color -- the same hue used for her name
+    everywhere else in the app -- instead of the TQR-based red/yellow/
+    green ramp. The TQR header text, when shown, still uses the TQR color
+    either way: it's reporting a score, not identifying a player."""
     if p_period.empty:
         return None
 
@@ -112,10 +126,15 @@ def _render_player_radar(p_period, use_icons=False, height=None, show_header=Tru
     last_values = [6 - last_day[p].mean() for p in NEGATIVE_PARAMS]
 
     tqr_avg = p_period["Tqr"].mean()
-    t = max(0.0, min(1.0, (tqr_avg - 6) / (20 - 6)))
-    color = pcolors.sample_colorscale("RdYlGn", [t])[0]
-    fill_faint = color.replace("rgb", "rgba").replace(")", ",0.18)")
-    line_faint = color.replace("rgb", "rgba").replace(")", ",0.7)")
+    if player_color is not None:
+        color = player_color
+        fill_faint = _hex_to_rgba(player_color, 0.18)
+        line_faint = _hex_to_rgba(player_color, 0.7)
+    else:
+        t = max(0.0, min(1.0, (tqr_avg - 6) / (20 - 6)))
+        color = pcolors.sample_colorscale("RdYlGn", [t])[0]
+        fill_faint = color.replace("rgb", "rgba").replace(")", ",0.18)")
+        line_faint = color.replace("rgb", "rgba").replace(")", ",0.7)")
 
     if show_header:
         tqr_color = tqr_zone_color(tqr_avg)
@@ -384,7 +403,7 @@ def render():
             player_sel = st.selectbox("Player", all_players, key="wellness_player")
             p_period = period[period["player_name"] == player_sel]
 
-            tqr_avg = _render_player_radar(p_period)
+            tqr_avg = _render_player_radar(p_period, player_color=pc.color_for(player_sel))
             if tqr_avg is None:
                 st.info("No data for this player in this date range.")
     with col_ind_trend:
@@ -418,7 +437,7 @@ def render():
                     )
                     result = _render_player_radar(
                         p_period, use_icons=True, height=195, key=f"radar_{player['surname']}",
-                        show_header=False,
+                        show_header=False, player_color=name_color,
                     )
                     if result is None:
                         st.caption("No data")
