@@ -37,7 +37,7 @@ BASE_CARD_CSS = """
     [class*="st-key-playercard_"] button {
         width: 100%;
         min-width: 0;
-        height: 150px !important;
+        height: 159px !important;
         margin: 0 auto;
         font-weight: 700;
         color: #ffffff !important;
@@ -55,12 +55,12 @@ BASE_CARD_CSS = """
         transform: rotate(180deg);
         text-align: left !important;
         white-space: nowrap;
-        font-size: 13px;
+        font-size: 11.5px;
         letter-spacing: 0.02em;
         line-height: 1;
     }
     [class*="st-key-playercard_"] button p strong {
-        font-size: 13px;
+        font-size: 11.5px;
     }
     [class*="st-key-playercard_"] button div[data-testid="stMarkdownContainer"] {
         position: relative;
@@ -114,11 +114,11 @@ BASE_CARD_CSS = """
        here, so the browser downsamples a 254px image instead of blowing
        up a 64px one (see _render_overview). */
     .st-key-player_overview_box [data-testid="stImage"] img {
-        width: 64px !important;
-        height: 64px !important;
+        width: 51px !important;
+        height: 51px !important;
         object-fit: contain;
     }
-    .overview-name { font-family: var(--display); font-size: 1.3rem; font-weight: 700; letter-spacing: 0.01em; }
+    .overview-name { font-family: var(--display); font-size: 1.1rem; font-weight: 700; letter-spacing: 0.01em; }
     /* Crest card sits in the Libero row's spare 4th slot. The rule above
        pins that row to flex-start (so role boxes never stretch to the
        overview panel), which also stopped this card from filling the
@@ -201,7 +201,7 @@ def _player_card_css() -> str:
             f'}} '
             f'[class*="st-key-playercard_{p["surname"]}"] button::after {{ '
             f'content: "{number_content}"; position: absolute; top: 4px; left: 0; right: 0; '
-            f'text-align: center; font-size: 1.75rem; font-weight: 800; '
+            f'text-align: center; font-size: 1.3rem; font-weight: 800; '
             f'color: rgba(255,255,255,0.92); text-shadow: 0 1px 4px rgba(0,0,0,0.6); '
             f'z-index: 0; line-height: 1; pointer-events: none; }}'
         )
@@ -285,7 +285,7 @@ def _recency_opacity(d: pd.DataFrame) -> pd.Series:
 # same pixels: same height, same margins, and (passed in) the same
 # category array. Anything differing here shifts one chart's rows
 # relative to the other's, which is what made them look misaligned.
-PERF_CHART_HEIGHT = 210
+PERF_CHART_HEIGHT = 168
 PERF_CHART_MARGIN = dict(l=0, r=10, t=25, b=10)
 
 
@@ -470,7 +470,7 @@ def _render_tqr_gauge(tqr: float, day, color: str):
             ],
         ),
     ))
-    fig.update_layout(height=150, margin=dict(l=20, r=20, t=10, b=0), paper_bgcolor="rgba(0,0,0,0)")
+    fig.update_layout(height=120, margin=dict(l=20, r=20, t=10, b=0), paper_bgcolor="rgba(0,0,0,0)")
     st.plotly_chart(fig, width="stretch")
 
     zone_color, zone_label = tqr_zone_color(tqr), tqr_recovery_label(tqr)
@@ -542,7 +542,7 @@ def _render_player_readiness(surname: str, color: str):
             ],
         ),
     ))
-    fig.update_layout(height=150, margin=dict(l=20, r=20, t=10, b=0), paper_bgcolor="rgba(0,0,0,0)")
+    fig.update_layout(height=120, margin=dict(l=20, r=20, t=10, b=0), paper_bgcolor="rgba(0,0,0,0)")
     st.plotly_chart(fig, width="stretch")
 
     zone_color, zone_label = _acwr_zone(acwr)
@@ -584,7 +584,7 @@ def _render_player_acwr(surname: str, color: str):
         yaxis=dict(title="Daily load (TL)"),
         yaxis2=dict(title="ACWR", overlaying="y", side="right", range=[0, top]),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0, font=dict(size=10)),
-        height=230, margin=dict(l=10, r=10, t=30, b=10),
+        height=184, margin=dict(l=10, r=10, t=30, b=10),
     )
     st.plotly_chart(fig, width="stretch")
 
@@ -603,7 +603,7 @@ def _render_player_jumps(surname: str, color: str):
         hovertemplate="%{x|%d %b %Y}<br>%{y:.0f} jumps<extra></extra>",
     ))
     fig.update_layout(
-        height=200, margin=dict(l=10, r=10, t=10, b=10),
+        height=160, margin=dict(l=10, r=10, t=10, b=10),
         yaxis=dict(title="Jumps"), xaxis=dict(title=None),
     )
     st.plotly_chart(fig, width="stretch")
@@ -678,7 +678,7 @@ def _render_wellness_radar(surname: str, color: str):
     ))
     fig.update_layout(**dark_polar_layout([1, 5]))
     fig.update_layout(
-        height=185, margin=dict(l=45, r=45, t=18, b=18),
+        height=148, margin=dict(l=45, r=45, t=18, b=18),
         polar=dict(
             radialaxis=dict(showticklabels=False, showline=False),
             angularaxis=dict(tickfont=dict(size=20)),
@@ -743,9 +743,21 @@ def _render_overview(surname: str):
 
 
 def render():
-    st.markdown(BASE_CARD_CSS, unsafe_allow_html=True)
-    st.markdown(_role_border_css(), unsafe_allow_html=True)
-    st.markdown(_player_card_css(), unsafe_allow_html=True)
+    # One st.markdown() call, not three: each is its own zero-height
+    # stElementContainer, but Streamlit's vertical gap is a flex `gap` on
+    # their shared parent, which reserves a full gap-slot per child
+    # regardless of height -- three separate calls meant three stacked
+    # gaps of pure dead space between the top nav and the page's first
+    # real content. Keyed + display:none (same technique as
+    # Main_activity.py's own .st-key-css_nav) closes the one remaining
+    # gap-slot too -- the CSS inside still applies either way, since
+    # that doesn't depend on the container being visible.
+    hide_self = (
+        '<style>.st-key-css_atlete, '
+        'div[data-testid="stLayoutWrapper"]:has(> .st-key-css_atlete) { display: none; }</style>'
+    )
+    with st.container(key="css_atlete"):
+        st.markdown(hide_self + BASE_CARD_CSS + _role_border_css() + _player_card_css(), unsafe_allow_html=True)
 
     st.session_state.setdefault("selected_player", "Orro")
     selected = st.session_state["selected_player"]
@@ -758,9 +770,10 @@ def render():
     for p in pg.ALL_PLAYERS:
         groups.setdefault(p["role"], []).append(p)
 
-    # Narrow now that the cards are vertical name strips -- the detail
-    # panel gets the rest, since it carries every chart on this page.
-    col_grid, col_overview = st.columns([1, 3])
+    # Narrower still than before -- smaller jersey numbers and shorter
+    # cards free up width the detail panel can use instead, since it
+    # carries every chart on this page.
+    col_grid, col_overview = st.columns([1, 3.8])
 
     with col_grid:
         # Row 1: Setter + Opposite side by side, in separate boxes (2 cards
