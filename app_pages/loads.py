@@ -74,6 +74,15 @@ def _render_how_to_expander():
     live only in training_load.py where nobody using the app can see them."""
     with st.expander("How to read \"RPE / Load\"", icon=":material/menu_book:"):
         st.markdown("**RPE** — the athlete's own 1–10 rating of how hard a session felt.")
+        st.markdown(
+            "- RPE 10 – Maximal effort (total failure)\n"
+            "- RPE 9 – Very hard effort\n"
+            "- RPE 8 – Hard effort\n"
+            "- RPE 7 – Moderate effort\n"
+            "- RPE 6 – Light effort\n"
+            "- RPE 5 – Very light effort\n"
+            "- RPE 1–4 – Minimal effort"
+        )
         st.markdown("**TL** (training load) — `RPE × session minutes`, Foster's sRPE method.")
         st.markdown("---")
         st.markdown(
